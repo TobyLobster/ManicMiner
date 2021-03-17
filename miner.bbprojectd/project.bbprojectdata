@@ -57,11 +57,11 @@
 				ABDQAAAEAAAAAAAAAA==
 				</data>
 				<key>FileURL</key>
-				<string>file:///Users/tobynelson/Code/6502/miner/miner1.sym</string>
+				<string>file:///Users/tobynelson/Code/6502/miner1.sym</string>
 				<key>HasSecurityScope</key>
 				<true/>
 				<key>RelativePath</key>
-				<string>./miner1.sym</string>
+				<string>../miner1.sym</string>
 				<key>TypeID</key>
 				<string>_CFileLocator</string>
 				<key>Version</key>
@@ -106,11 +106,11 @@
 				ABDQAAAEAAAAAAAAAA==
 				</data>
 				<key>FileURL</key>
-				<string>file:///Users/tobynelson/Code/6502/miner/miner3.txt</string>
+				<string>file:///Users/tobynelson/Code/6502/miner3.txt</string>
 				<key>HasSecurityScope</key>
 				<true/>
 				<key>RelativePath</key>
-				<string>./miner3.txt</string>
+				<string>../miner3.txt</string>
 				<key>TypeID</key>
 				<string>_CFileLocator</string>
 				<key>Version</key>
@@ -206,11 +206,11 @@
 				ABDQAAAEAAAAAAAAAA==
 				</data>
 				<key>FileURL</key>
-				<string>file:///Users/tobynelson/Code/6502/miner/miner4.sym</string>
+				<string>file:///Users/tobynelson/Code/6502/miner4.sym</string>
 				<key>HasSecurityScope</key>
 				<true/>
 				<key>RelativePath</key>
-				<string>./miner4.sym</string>
+				<string>../miner4.sym</string>
 				<key>TypeID</key>
 				<string>_CFileLocator</string>
 				<key>Version</key>
@@ -308,11 +308,11 @@
 				ABDQAAAEAAAAAAAAAA==
 				</data>
 				<key>FileURL</key>
-				<string>file:///Users/tobynelson/Code/6502/miner/miner3.sym</string>
+				<string>file:///Users/tobynelson/Code/6502/miner3.sym</string>
 				<key>HasSecurityScope</key>
 				<true/>
 				<key>RelativePath</key>
-				<string>./miner3.sym</string>
+				<string>../miner3.sym</string>
 				<key>TypeID</key>
 				<string>_CFileLocator</string>
 				<key>Version</key>
@@ -410,11 +410,11 @@
 				AgAAAAAAAA==
 				</data>
 				<key>FileURL</key>
-				<string>file:///Users/tobynelson/Code/6502/miner/miner4.txt</string>
+				<string>file:///Users/tobynelson/Code/6502/miner4.txt</string>
 				<key>HasSecurityScope</key>
 				<true/>
 				<key>RelativePath</key>
-				<string>./miner4.txt</string>
+				<string>../miner4.txt</string>
 				<key>TypeID</key>
 				<string>_CFileLocator</string>
 				<key>Version</key>
@@ -459,11 +459,11 @@
 				ABDQAAAEAAAAAAAAAA==
 				</data>
 				<key>FileURL</key>
-				<string>file:///Users/tobynelson/Code/6502/miner/miner2.txt</string>
+				<string>file:///Users/tobynelson/Code/6502/miner2.txt</string>
 				<key>HasSecurityScope</key>
 				<true/>
 				<key>RelativePath</key>
-				<string>./miner2.txt</string>
+				<string>../miner2.txt</string>
 				<key>TypeID</key>
 				<string>_CFileLocator</string>
 				<key>Version</key>
@@ -609,11 +609,11 @@
 				ABDQAAAEAAAAAAAAAA==
 				</data>
 				<key>FileURL</key>
-				<string>file:///Users/tobynelson/Code/6502/miner/miner1.txt</string>
+				<string>file:///Users/tobynelson/Code/6502/miner1.txt</string>
 				<key>HasSecurityScope</key>
 				<true/>
 				<key>RelativePath</key>
-				<string>./miner1.txt</string>
+				<string>../miner1.txt</string>
 				<key>TypeID</key>
 				<string>_CFileLocator</string>
 				<key>Version</key>
@@ -709,11 +709,11 @@
 				ABDQAAAEAAAAAAAAAA==
 				</data>
 				<key>FileURL</key>
-				<string>file:///Users/tobynelson/Code/6502/miner/miner2.sym</string>
+				<string>file:///Users/tobynelson/Code/6502/miner2.sym</string>
 				<key>HasSecurityScope</key>
 				<true/>
 				<key>RelativePath</key>
-				<string>./miner2.sym</string>
+				<string>../miner2.sym</string>
 				<key>TypeID</key>
 				<string>_CFileLocator</string>
 				<key>Version</key>
