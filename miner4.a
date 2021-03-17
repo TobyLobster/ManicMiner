@@ -1,0 +1,6738 @@
+;
+; miner4.a
+;
+
+; constants
+charSPACE                   = $20               ;
+willyPageRight              = $05               ;
+willyPageLeft               = $06               ;
+
+; memory locations
+OSWRCH                      = $ffee             ;
+OSBYTE                      = $fff4             ;
+OSWORD                      = $fff1             ;
+
+currentLevel                = $80               ;
+switchTriggered             = $9f               ;
+vduTextCursorXPosition      = $0318             ;
+
+readTwoCharactersFromScreen = $14a7             ;
+playerPixelX                = $183a             ;
+playerPixelY                = $183b             ;
+newPlayerPixelX             = $183c             ;
+newPlayerPixelY             = $183d             ;
+willyAnimationEOR           = $183f             ;
+willyGraphicsPage           = $1840             ;
+isInAir                     = $184b             ;
+readOrWriteCachedBackground = $1869             ;
+L1e0d                       = $1e0d             ;
+
+conveyorX                   = $25a4             ;
+showScoreLivesAndLevel      = $25c8             ;
+exitPositionX               = $25fe             ;
+exitPositionY               = $25ff             ;
+spriteMask                  = $109b             ;
+
+checkForChannel3Update      = $303b             ;
+
+S0f00                       = $0f00             ;
+L1fb5                       = $1fb5             ;
+numbers                     = $2680             ;
+roomNumberReached           = $2ff6             ;
+keysLeft                    = $2fff             ;
+screenStartAddress          = $3280             ; start of visible screen
+screenEndAddress            = $6000             ; end of visible screen
+
+L229b                       = $229b             ;
+initLevel                   = $28b8             ;
+mainEventRoutine            = $3000             ; See MINER3.a
+miner3EntryPoint            = $3190             ; See MINER3.a
+soundDirect                 = $3075             ;
+checkCheatCode              = $30fc             ;
+
+* = $5580
+
+; ***************************************************************************************
+;
+; start up
+;
+; ***************************************************************************************
+startUp
+    ; output 8 line feeds
+    ldx #8                                      ;
+    lda #$0a                                    ;
+-
+    jsr OSWRCH                                  ;
+    dex                                         ;
+    bne -                                       ;
+
+    ; wait for key press
+    lda #$81                                    ;
+    ldx #$ff                                    ;
+    ldy #$00                                    ;
+    jsr OSBYTE                                  ;
+    jmp continue                                ;
+
+    ; [copy protection, four digit code entry - unused]
+
+    !byte $60                                   ; RTS
+
+    ; $5597
+    ; VDU 19,3,3,0,0,0,0,0,0 - set palette colour 3 set to green
+    ldx #0                                      ; loop counter
+-
+    lda setPaletteMessage,x                     ;
+    jsr OSWRCH                                  ;
+    inx                                         ;
+    cpx #4                                      ;
+    bne -                                       ;
+
+    ; output 6 zeros
+    lda #0                                      ;
+    ldx #6                                      ;
+-
+    jsr OSWRCH                                  ;
+    dex                                         ;
+    bne -                                       ;
+
+    lda #$1f                                    ; }
+    jsr OSWRCH                                  ; }
+    lda #$0b                                    ; } VDU 31, 11, 7 i.e. TAB(11,7)
+    jsr OSWRCH                                  ; }
+    lda #$07                                    ; }
+    jsr OSWRCH                                  ; }
+
+    lda #charSPACE                              ;
+    ldx #$14                                    ; loop counter
+-
+    jsr OSWRCH                                  ;
+    dex                                         ; output 20 spaces
+    bne -                                       ;
+
+    ; press return to stop message
+    ldx #0                                      ;
+-
+    lda pressReturnToStopMessage,x              ;
+    inx                                         ;
+    jsr OSWRCH                                  ;
+    cpx #pressReturnToStopMessageEnd - pressReturnToStopMessage ;
+    bne -                                       ;
+
+showEnterCodeMessageAndWaitForReturn
+    jsr showEnterCodeAtCell                     ;
+    ldy #$ff                                    ;
+    ldx #$b6                                    ;
+    lda #$81                                    ;
+    jsr OSBYTE                                  ;
+    cpy #$ff                                    ;
+    bne showEnterCodeMessageAndWaitForReturn    ;
+
+showBoxes
+    lda #%11111111                              ;
+    ldx #8                                      ;
+-
+    sta $0bff,x                                 ; store 255 at $0c00-$0c07
+    dex                                         ;
+    bne -                                       ;
+
+    ; make a box character
+    sta $0c08                                   ; %11111111 at $0c08
+    sta $0c0f                                   ;          and $0c0f
+    lda #%10000001                              ;
+    ldx #6                                      ;
+-
+    sta $0c08,x                                 ;
+    dex                                         ;
+    bne -                                       ;
+
+    ; make a filled in box
+    lda #%00000000                              ;
+    sta $0c10                                   ;
+    sta $0c17                                   ;
+    lda #%01111110                              ;
+    ldx #6                                      ;
+-
+    sta $0c10,x                                 ;
+    dex                                         ;
+    bne -                                       ;
+
+    lda #$1f                                    ; VDU 31,8,10
+    jsr OSWRCH                                  ;
+    lda #$08                                    ;
+    jsr OSWRCH                                  ;
+    lda #$0a                                    ;
+    jsr OSWRCH                                  ;
+
+    ldx #0                                      ; loop counter
+-
+    lda #$20                                    ; VDU 32
+    jsr OSWRCH                                  ;
+    lda #$11                                    ; VDU 17,X = COLOUR X
+    jsr OSWRCH                                  ;
+    txa                                         ;
+    jsr OSWRCH                                  ;
+    lda #$80                                    ; Show box character
+    jsr OSWRCH                                  ;
+    inx                                         ;
+    cpx #4                                      ;
+    bne -                                       ;
+
+    ; show 7 spaces
+    lda #$20                                    ;
+    ldx #7                                      ; loop counter
+-
+    jsr OSWRCH                                  ;
+    dex                                         ;
+    bne -                                       ;
+
+    ; four copies of space and filled box
+    ldx #4                                      ; loop counter
+-
+    lda #charSPACE                              ;
+    jsr OSWRCH                                  ;
+    lda #$81                                    ; show filled in box
+    jsr OSWRCH                                  ;
+    dex                                         ;
+    bne -                                       ;
+
+    ; show 2 spaces
+    lda #$20                                    ;
+    jsr OSWRCH                                  ;
+    jsr OSWRCH                                  ;
+
+    ; TAB(9,12)
+    lda #$1f                                    ;
+    jsr OSWRCH                                  ;
+    lda #$09                                    ;
+    jsr OSWRCH                                  ;
+    lda #$0c                                    ;
+    jsr OSWRCH                                  ;
+
+    ; show '1 2 3 4 '
+    ldx #'1'                                    ;
+-
+    txa                                         ;
+    jsr OSWRCH                                  ;
+    inx                                         ;
+    lda #charSPACE                              ;
+    jsr OSWRCH                                  ;
+    cpx #'5'                                    ;
+    bne -                                       ;
+
+    ; Show 'Code' message
+    ldx #0                                      ;
+-
+    lda codeMessage,x                           ;
+    jsr OSWRCH                                  ;
+    inx                                         ;
+    cpx #codeMessageEnd - codeMessage           ;
+    bne -                                       ;
+
+    ; show four of: filled box and space
+    ldx #0                                      ;
+-
+    lda #$81                                    ;
+    jsr OSWRCH                                  ;
+    lda #charSPACE                              ;
+    jsr OSWRCH                                  ;
+    inx                                         ;
+    cpx #4                                      ;
+    bne -                                       ;
+
+    ; Show 7 spaces
+    lda #charSPACE                              ;
+    ldx #7                                      ;
+-
+    jsr OSWRCH                                  ;
+    dex                                         ;
+    bne -                                       ;
+
+    jsr waitForRETURN                           ;
+
+    lda #0                                      ;
+    sta $71                                     ;
+    ldx #0                                      ;
+-
+    lda positionShift,x                         ;
+    jsr OSWRCH                                  ;
+    inx                                         ;
+    cpx #positionShiftExtendedEnd - positionShift   ;
+    bne -                                       ;
+
+    lda #0                                      ;
+    ldx #4                                      ;
+-
+    sta data - 1,x                              ; store zeros in entry code
+    dex                                         ;
+    bne -                                       ;
+
+checkNumberKeys
+    lda #0                                      ;
+    sta $70                                     ;
+checkKeys
+    ldy #$ff                                    ; }
+    ldx $70                                     ; }
+    lda keyArray,x                              ; }
+    tax                                         ; } check if a number key 1-4 is pressed
+    lda #$81                                    ; }
+    jsr OSBYTE                                  ; }
+    cpy #$ff                                    ; }
+    beq numberKeyPressed                        ; if (number key pressed) then branch
+
+    ldy #$ff                                    ; }
+    ldx #$b6                                    ; }
+    lda #$81                                    ; } check if RETURN is pressed
+    jsr OSBYTE                                  ; }
+    cpy #$ff                                    ; }
+    beq returnPressed                           ; if (RETURN pressed) then branch forward
+
+    inc $70                                     ;
+    lda $70                                     ;
+    cmp #4                                      ;
+    beq checkNumberKeys                         ;
+    jmp checkKeys                               ;
+
+; ***************************************************************************************
+numberKeyPressed
+    lda #18                                     ; GCOL 0,number of key
+    jsr OSWRCH                                  ;
+    lda #0                                      ;
+    jsr OSWRCH                                  ;
+    lda $70                                     ;
+    jsr OSWRCH                                  ;
+    lda #$82                                    ; show character 130
+    jsr OSWRCH                                  ;
+
+    ; check for release of key pressed
+-
+    ldy #$ff                                    ;
+    ldx $70                                     ;
+    lda keyArray,x                              ;
+    tax                                         ;
+    lda #$81                                    ;
+    jsr OSBYTE                                  ; check for key pressed
+    cpy #$ff                                    ;
+    beq -                                       ; if (number key still pressed) then branch back
+
+    ldx $71                                     ;
+    lda $70                                     ;
+    sta $60aa,x                                 ;
+    jsr updateCursor                            ;
+    lda #charSPACE                              ;
+    jsr OSWRCH                                  ;
+    inc $71                                     ;
+    lda $71                                     ;
+    cmp #4                                      ;
+    bne checkNumberKeys                         ;
+
+    ; output eight backspaces
+    ldx #8                                      ;
+    lda #8                                      ;
+-
+    jsr OSWRCH                                  ;
+    dex                                         ;
+    bne -                                       ;
+    lda #0                                      ;
+    sta $71                                     ;
+    jmp checkNumberKeys                         ;
+
+    !byte $60                                   ; RTS
+
+; ***************************************************************************************
+returnPressed
+    lda #15                                     ; }
+    ldx #1                                      ; } *FX 15,1 - flush keyboard buffer
+    ldy #0                                      ; }
+    jsr OSBYTE                                  ; }
+    lda #4                                      ;
+    jsr OSWRCH                                  ; VDU 4
+    jmp continue                                ;
+
+; ***************************************************************************************
+updateCursor
+    ldx #0                                      ; loop counter
+-
+    lda positionShift,x                         ;
+    jsr OSWRCH                                  ; set cursor position
+    inx                                         ;
+    cpx #positionShiftEnd - positionShift       ;
+    bne -                                       ;
+
+    ; output seven spaces
+    lda #charSPACE                              ;
+    ldx #7                                      ;
+-
+    jsr OSWRCH                                  ;
+    dex                                         ;
+    bne -                                       ;
+
+    lda #31                                     ; TAB(24 + 2*(($71 + 1) & 3), 12)
+    jsr OSWRCH                                  ;
+    lda $71                                     ;
+    clc                                         ;
+    adc #$01                                    ;
+    and #$03                                    ;
+    asl                                         ;
+    clc                                         ;
+    adc #24                                     ;
+    jsr OSWRCH                                  ;
+    lda #12                                     ;
+    jsr OSWRCH                                  ;
+    lda #$5e                                    ; display the up arrow
+    jsr OSWRCH                                  ;
+    lda #$05                                    ; VDU 5
+    jmp OSWRCH                                  ;
+
+; ***************************************************************************************
+    ; Enter code at cell
+showEnterCodeAtCell
+    ldx #0
+-
+    lda enterCodeAtCell,x
+    jsr OSWRCH
+    inx
+    cpx #enterCodeAtCellEnd - enterCodeAtCell
+    bne -
+
+    ; get and show a random code
+    lda $029b                                   ; read byte of clock time
+    sta $60a0                                   ; as a source of randomness
+
+    lda $02a0                                   ; read byte of countdown interval timer
+    sta $60a1                                   ; as a second source of randomness
+
+    lda $60a0                                   ;
+-
+    cmp #19                                     ;
+    bcc +                                       ; if (less than 19) then branch
+    sec                                         ;
+    sbc #18                                     ; take off 18
+    jmp -                                       ; loop back
+
++
+    sta $60a0                                   ;
+    clc                                         ;
+    adc #'A'                                    ; add 'A' to get a character 'A' to 'R'
+    jsr OSWRCH                                  ;
+
+    lda $60a1                                   ;
+-
+    cmp #20                                     ;
+    bcc +                                       ; if (less than 20) then branch
+    sec                                         ;
+    sbc #20                                     ; take off 20
+    jmp -                                       ;
+
++
+    sta $60a1                                   ; store result
+    cmp #10                                     ;
+    bcs showTensDigit                           ; if (ten or more) then branch
+showDigitAndSpace
+    clc                                         ;
+    adc #'0'                                    ; add '0' to digit to get ASCII code
+    jsr OSWRCH                                  ; display digit
+    lda #charSPACE                              ;
+    jmp OSWRCH                                  ; display a space
+
+showTensDigit
+    tax                                         ;
+    lda #'1'                                    ;
+    jsr OSWRCH                                  ; display '1'
+    txa                                         ;
+    sec                                         ;
+    sbc #$0a                                    ; subtract 10 to get the units digit
+    jmp showDigitAndSpace                       ; show the units
+
+
+; ***************************************************************************************
+moveAndPrintSpaces
+    ; VDU 31,10,19 - move cursor position
+    lda #31                                     ; }
+    jsr OSWRCH                                  ; }
+    lda #10                                     ; } TAB(10, 19)
+    jsr OSWRCH                                  ; }
+    lda #19                                     ; }
+    jsr OSWRCH                                  ; }
+
+    ; print thirty spaces
+    lda #charSPACE                              ;
+    ldx #30                                     ;
+-
+    jsr OSWRCH                                  ;
+    dex                                         ;
+    bne -                                       ;
+    jmp miner3EntryPoint                        ;
+
+
+    !byte $00, $00, $00, $00, $00
+
+    ; initial values for locations $00 to $9F
+zeroPageDefaults
+    ; tune frequencies
+    !byte $23, $1f, $1d, $1a, $17, $1d, $17, $17, $16, $1a, $16, $16, $17, $1d, $17, $17
+    !byte $23, $1f, $1d, $1a, $17, $1d, $17, $17, $16, $1a, $16, $16, $17, $17, $17, $23
+    !byte $1f, $1d, $1a, $17, $1d, $17, $17, $16, $1a, $16, $16, $17, $1d, $17, $17, $23
+    !byte $1f, $1d, $1a, $17, $1d, $17, $11, $13, $17, $1d, $17, $13, $13, $13, $00, $00
+
+    ; $0040 - called when a switch is hit
+    lda #1                          ;
+    sta switchTriggered             ;
+    lda vduTextCursorXPosition      ;
+    rts                             ;
+
+    !byte $00, $00, $00, $08, $05, $ff, $09, $fd
+    !byte $1f, $13, $01, $20, $20, $0a, $08, $08, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $99, $1f, $15, $0c, $20, $0a, $08, $20, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $a9, $00, $aa, $9d, $ba, $67, $e8, $e0, $03, $d0, $f8, $4c, $90, $31, $ff, $00
+zeroPageDefaultsEnd
+
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+
+    ; 8 poses of willy: 4 walking right and four walking left
+    ; $0500
+minerWilly
+    ; right0
+    !byte $00, $33, $77, $33, $33, $33, $11, $33, $66, $ee, $cc, $44, $ee, $cc, $88, $cc
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $77, $77, $ff, $ff, $33, $77, $66, $77, $ee, $ee, $77, $bb, $cc, $66, $ee, $77
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+
+    ; right1
+    !byte $00, $00, $11, $00, $00, $00, $00, $00, $11, $ff, $ff, $dd, $ff, $ff, $66, $ff
+    !byte $88, $88, $00, $00, $88, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $11, $11, $11, $11, $00, $00, $00, $00, $bb, $bb, $bb, $dd, $ff, $66, $66, $77
+    !byte $88, $88, $88, $88, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+
+    ; right2
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $33, $77, $33, $33, $33, $11, $33
+    !byte $66, $ee, $cc, $44, $ee, $cc, $88, $cc, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $77, $77, $ff, $ff, $33, $77, $66, $77
+    !byte $ee, $ee, $77, $bb, $cc, $66, $ee, $77, $00, $00, $00, $00, $00, $00, $00, $00
+
+    ; right3
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $11, $00, $00, $00, $00, $00
+    !byte $11, $ff, $ff, $dd, $ff, $ff, $66, $ff, $88, $88, $00, $00, $88, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $11, $33, $77, $66, $00, $11, $33, $33
+    !byte $ff, $ff, $ff, $ff, $ff, $dd, $00, $88, $88, $cc, $ee, $66, $88, $aa, $ee, $44
+
+    ; $0600
+    ; left0
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $66, $77, $33, $22, $77, $33, $11, $33, $00, $cc, $ee, $cc, $cc, $cc, $88, $cc
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $77, $77, $ee, $dd, $33, $66, $77, $ee, $ee, $ee, $ff, $ff, $cc, $ee, $66, $ee
+
+    ; left1
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $11, $11, $00, $00, $11, $00, $00, $00
+    !byte $88, $ff, $ff, $bb, $ff, $ff, $66, $ff, $00, $00, $88, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $11, $11, $11, $11, $00, $00, $00, $00
+    !byte $dd, $dd, $dd, $bb, $ff, $66, $66, $ee, $88, $88, $88, $88, $00, $00, $00, $00
+
+    ; left2
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $66, $77, $33, $22, $77, $33, $11, $33
+    !byte $00, $cc, $ee, $cc, $cc, $cc, $88, $cc, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $77, $77, $ee, $dd, $33, $66, $77, $ee
+    !byte $ee, $ee, $ff, $ff, $cc, $ee, $66, $ee, $00, $00, $00, $00, $00, $00, $00, $00
+
+    ; left3
+    !byte $11, $11, $00, $00, $11, $00, $00, $00, $88, $ff, $ff, $bb, $ff, $ff, $66, $ff
+    !byte $00, $00, $88, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $11, $33, $77, $66, $11, $55, $77, $22, $ff, $ff, $ff, $ff, $ff, $bb, $00, $11
+    !byte $88, $cc, $ee, $66, $00, $88, $cc, $cc, $00, $00, $00, $00, $00, $00, $00, $00
+minerWillyEnd
+
+    ; Small caps flowery "MANIC MINER (C)" graphic
+titleStart
+    !byte $00, $00, $00, $03, $04, $04, $04, $03, $07, $03, $06, $0c, $98, $30, $60, $c0
+    !byte $8e, $9c, $bc, $ec, $cc, $0c, $0c, $1e, $00, $0e, $1b, $31, $31, $7f, $60, $f1
+    !byte $00, $0e, $07, $87, $86, $c6, $c6, $ef, $00, $3d, $18, $98, $d8, $78, $38, $19
+    !byte $00, $e1, $c3, $c6, $c6, $c6, $c3, $e1, $00, $f0, $18, $00, $00, $00, $18, $f0
+    !byte $00, $01, $01, $00, $00, $00, $00, $00, $fe, $0f, $2d, $cc, $0c, $0c, $0c, $1e
+    !byte $1e, $3c, $ec, $cc, $0c, $0c, $0c, $1e, $00, $f7, $63, $63, $63, $63, $63, $f7
+    !byte $00, $1e, $8c, $cc, $6c, $3c, $1c, $8c, $00, $ff, $63, $68, $78, $68, $63, $ff
+    !byte $00, $7f, $30, $30, $3f, $31, $30, $78, $00, $80, $c0, $c0, $80, $80, $c8, $70
+    !byte $3c, $42, $99, $a1, $a1, $99, $42, $3c, $00, $00, $00, $00, $00, $00, $00, $00
+titleEnd
+
+    ; A Penrose triangle encoded in PLOT statements
+trianglesLogo
+    !byte $fe, $01                      ; GCOL 0,1
+    !byte $04, $19, $a0                 ; MOVE  25, 160
+    !byte $05, $7d, $75                 ; DRAW 125, 117 [could be a MOVE]
+    !byte $55, $19, $ad                 ; TRI   25, 173
+    !byte $55, $70, $87                 ; TRI  112, 135
+    !byte $04, $7d, $75                 ; MOVE 125, 117
+    !byte $05, $70, $87                 ; DRAW 112, 135 [could be a MOVE]
+    !byte $55, $7d, $c6                 ; TRI  125, 198
+    !byte $55, $70, $c0                 ; TRI  112, 192
+    !byte $fe, $02                      ; GCOL 0,2
+    !byte $04, $7d, $75                 ; MOVE 125, 117
+    !byte $05, $89, $81                 ; DRAW 137, 129 [could be a MOVE]
+    !byte $55, $7d, $c6                 ; TRI  125, 198
+    !byte $55, $89, $d9                 ; TRI  137, 217
+    !byte $04, $89, $d9                 ; MOVE 137, 217 [redundant]
+    !byte $05, $7d, $c6                 ; DRAW 125, 198 [could be a MOVE]
+    !byte $55, $38, $ad                 ; TRI   56, 173
+    !byte $55, $44, $a7                 ; TRI   68, 167
+    !byte $fe, $03                      ; GCOL 0,3
+    !byte $04, $70, $bf                 ; MOVE 112, 191
+    !byte $05, $70, $94                 ; DRAW 112, 148
+    !byte $05, $44, $a7                 ; DRAW  68, 167
+    !byte $05, $7d, $c6                 ; DRAW 125, 198
+    !byte $05, $7d, $75                 ; DRAW 125, 117
+    !byte $05, $19, $a0                 ; DRAW  25, 160
+    !byte $05, $19, $ad                 ; DRAW  25, 173
+    !byte $05, $7d, $e5                 ; DRAW 125, 229
+    !byte $05, $89, $d9                 ; DRAW 137, 217
+    !byte $05, $89, $81                 ; DRAW 137, 129
+    !byte $05, $7d, $75                 ; DRAW 125, 117
+    !byte $04, $89, $d9                 ; MOVE 137, 217
+    !byte $05, $38, $ad                 ; DRAW  56, 173
+    !byte $05, $70, $94                 ; DRAW 112, 148 [partly overdraws existing line]
+    !byte $05, $70, $87                 ; DRAW 112, 135
+    !byte $05, $19, $ad                 ; DRAW  25, 173
+    !byte $ff                           ; TERMINATOR
+
+    lda #$ff
+    sta $6b7c
+    jmp $1ce8
+
+    !byte $00
+
+!pseudopc $2c98 {
+
+L2c98
+    lda $2a28
+    rts
+
+L2c9c
+    jsr $2500
+    jmp L2cb2
+
+L2ca2
+    lda #$00
+    sta $2e89
+    lda #$71
+    sta L2c98 + 2                       ;
+    lda currentLevel                    ;
+    cmp #18                             ;
+    beq L2c9c
+
+L2cb2
+    lda #$00
+    sta $2dfe
+    lda #$6f
+    sta L2c98 + 1                       ;
+
+L2cbc
+    jsr S2e18
+    jsr L2c98
+    cmp #$ff
+    beq L2cc9
+    jmp L2cbc
+
+L2cc9
+    inc $2dfe
+    lda $2dfe
+    cmp currentLevel
+    bne L2cbc
+    jsr S2e18
+    jsr L2c98
+    sta $2e02
+    lda $2e02
+    and #$3f
+    sta $2e03
+    lda $2e02
+    and #$c0
+    clc
+    rol
+    rol
+    rol
+    sta $2e02
+    inc $2e02
+    lda #$f0
+    sta $2dfd
+    jsr S2df7
+    ldx #$00
+    jmp L2d69
+
+    ; $2d00
+L2d00
+    lda currentLevel                        ;
+    cmp #8                                  ;
+    beq L2d0f                               ;
+    cmp #12                                 ;
+    beq L2d0f                               ;
+    ldx #0                                  ; swap characters
+    jmp swapPagesC00andA00                  ;
+
+L2d0f
+    lda #17                                 ; }
+    jsr OSWRCH                              ; }
+    lda #3                                  ; } COLOUR 3
+    jsr OSWRCH                              ; }
+
+    lda #31                                 ; }
+    jsr OSWRCH                              ; }
+    lda #6                                  ; }
+    jsr OSWRCH                              ; } TAB(6,1)
+    lda #1                                  ; }
+    jsr OSWRCH                              ; }
+
+    lda #$ec                                ; }
+    jsr OSWRCH                              ; } VDU &EC
+
+    lda #9                                  ;
+    ldx #0                                  ; loop counter
+-
+    inx                                     ;
+    jsr OSWRCH                              ; output seven backspaces
+    cpx #$07                                ;
+    bne -                                   ;
+
+    lda #$ec                                ; }
+    jsr OSWRCH                              ; } VDU &EC
+
+    ldx #0                                  ; swap characters back
+    jmp swapPagesC00andA00                  ;
+
+L2d43
+    jsr S2df1
+    jmp L2d69
+
+L2d49
+    jsr S2df7
+    lda $2dfd
+    sec
+    adc $2e03
+    sta $2dfd
+    jmp L2d69
+
+L2d59
+    jsr S2df7
+    ldx #0
+    jsr swapPagesC00andA00
+    lda #$eb
+    sta $2dfd
+    jmp L2d69
+
+L2d69
+    jsr S2e18
+    jsr L2c98
+    sta $2dfe
+    cmp #$ff
+    beq L2d00
+    cmp #$fe
+    beq L2d43
+    cmp #$fd
+    beq L2d49
+    dec $2e02
+    lda $2dfe
+    and #$f0
+    clc
+    ror
+    ror
+    ror
+    ror
+    sta $2dff
+    lda $2dfe
+    and #$0f
+    sta $2e00
+    lda #$1f
+    jsr OSWRCH
+    lda $2dff
+    clc
+    adc $2e01
+    jsr OSWRCH
+    lda $2e00
+    clc
+    adc #$01
+    jsr OSWRCH
+    lda #$11
+    jsr OSWRCH
+    lda #$02
+    jsr OSWRCH
+    lda $2dfd
+    cmp #$ee
+    beq L2e2a
+    cmp #$f0
+    beq L2dd7
+    cmp #$eb
+    bne L2de4
+L2dc7
+    lda $2dfd
+    jsr OSWRCH
+    lda $2e02
+    cmp #$ff
+    beq L2d59
+    jmp L2d69
+
+L2dd7
+    lda #$11
+    jsr OSWRCH
+    lda #$03
+    jsr OSWRCH
+    jmp L2e55
+
+L2de4
+    lda #$11
+    jsr OSWRCH
+    lda #$01
+    jsr OSWRCH
+    jmp L2dc7
+
+S2df1
+    lda #$15
+    sta $2e01
+    rts
+
+S2df7
+    lda #$05
+    sta $2e01
+    rts
+
+    !byte $ea, $ea, $ea, $ea, $ea, $ea, $ea
+
+swapPagesC00andA00
+    lda $0c00,x
+    tay
+    lda $0a00,x
+    sta $0c00,x
+    tya
+    sta $0a00,x
+    inx
+    cpx #$ff
+    bne swapPagesC00andA00
+    rts
+
+S2e18
+    lda L2c98 + 1
+    clc
+    adc #$01
+    sta L2c98 + 1
+    lda L2c98 + 2
+    adc #$00
+    sta L2c98 + 2
+    rts
+
+L2e2a
+    jsr S2e18
+    jsr L2c98
+    sta $2dfe
+    ldx #$00
+L2e35
+    cpx $2dfe
+    beq L2e4d
+    lda #$f5
+    jsr OSWRCH
+    lda #$0a
+    jsr OSWRCH
+    lda #$08
+    jsr OSWRCH
+    inx
+    jmp L2e35
+
+L2e4d
+    lda #$ee
+    jsr OSWRCH
+    jmp L2d69
+
+L2e55
+    lda $2e89
+    cmp #$0a
+    bcc L2e5f
+    jmp L2dc7
+
+L2e5f
+    lda $2dff
+    clc
+    adc $2e01
+    ldy $2e89
+    sta $2e7f,y
+    iny
+    lda $2e00
+    clc
+    adc #$01
+    sta $2e7f,y
+    inc $2e89
+    inc $2e89
+    jmp L2dc7
+
+perLevelPositions
+    !byte $ea
+    !byte $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $0f, $16
+    !byte $ea
+
+S2e8c
+    lda #$00
+    tax
+L2e8f
+    inc $2e8b                       ;
+    lda #31                         ;
+    jsr OSWRCH                      ;
+    lda perLevelPositions,x         ;
+    jsr OSWRCH                      ;
+    inx                             ;
+    lda perLevelPositions,x         ;
+    jsr OSWRCH                      ;
+    inx                             ;
+    stx $2e8a                       ;
+    lda #135                        ;
+    jsr OSBYTE                      ; read character from screen
+    cpx #$90                        ;
+    beq L2ece                       ;
+L2eb1
+    ldx $2e8a
+    txa
+    cmp $2e89
+    bcs L2ecd
+    lda $2e89
+    lsr
+    and #1
+    cmp #0
+    beq L2ec7
+    jmp L2e8f
+
+L2ec7
+    inc $2e8b
+    jmp L2e8f
+
+L2ecd
+    rts
+
+L2ece
+    lda #$11
+    jsr OSWRCH
+    lda $2e8b
+    and #$03
+    cmp #$00
+    beq L2ee7
+L2edc
+    jsr OSWRCH
+    lda #$90
+    jsr OSWRCH
+    jmp L2eb1
+
+L2ee7
+    lda #$03
+    jmp L2edc
+
+readRoomNameCharacter
+    lda $ffff,x
+    rts
+
+drawRoomName
+    lda #<numbers                   ;
+    sta readRoomNameCharacter + 1   ;
+    lda #>numbers                   ;
+    sta readRoomNameCharacter + 2   ;
+    lda #0                          ;
+    sta roomNumberReached           ;
+    lda #$1f                        ;
+    jsr OSWRCH                      ;
+    lda #$04                        ; TAB(4,17)
+    jsr OSWRCH                      ;
+    lda #$11                        ;
+    jsr OSWRCH                      ;
+
+    ; print 32 spaces
+    lda #charSPACE                  ;
+    ldx #0                          ;
+-
+    jsr OSWRCH                      ;
+    inx                             ;
+    cpx #$20                        ;
+    bne -                           ;
+
+    lda #$11                        ;
+    jsr OSWRCH                      ;
+    lda #$03                        ; COLOUR 3
+    jsr OSWRCH                      ;
+
+    ; scan for next control character
+    ldx #0                          ; loop counter
+scanForControl
+    jsr readRoomNameCharacter       ;
+    cmp #charSPACE                  ;
+    bcc foundControlCharacter       ;
+-
+    inx                             ;
+    cpx #0                          ;
+    bne scanForControl              ;
+    inc readRoomNameCharacter + 2   ;
+    jmp scanForControl              ;
+
+foundControlCharacter
+    inc roomNumberReached           ; }
+    lda currentLevel                ; }
+    cmp roomNumberReached           ; }
+    bne -                           ; } if (room not reached) then branch back
+
+    ; tab to correct position
+    lda #31                         ;
+    jsr OSWRCH                      ;
+    jsr readRoomNameCharacter       ; TAB(31, 4+char, 17)
+    clc                             ;
+    adc #4                          ;
+    jsr OSWRCH                      ;
+    lda #17                         ;
+    jsr OSWRCH                      ;
+
+    ; print room title
+-
+    inx                             ;
+    jsr readRoomNameCharacter       ; read next character
+    cmp #charSPACE                  ;
+    bcc +                           ; if (control character) then branch
+    jsr OSWRCH                      ;
+    jmp -
+
+    ; EOR each byte with $ff in the range $5ac0-$5cc0 (inverting the room title)
++
+    lda #$00                        ;
+    sta readOrWriteAddrLow          ;
+    lda #$5a                        ; store $5a00 as address to read / write to
+    sta readOrWriteAddrHigh         ;
+    ldy #$c0                        ;
+eorLoop
+    lda #$b9                        ; } set to read a byte (store $B9 = opcode for LDA abs,Y)
+    sta readOrWriteByte             ; }
+    jsr readOrWriteByte             ; read byte
+    eor #$ff                        ; eor with 255
+    tax                             ; remember A
+    lda #$99                        ; } set to write a byte (store $99 = opcode for STA abs,Y)
+    sta readOrWriteByte             ; }
+    txa                             ; recall A
+    jsr readOrWriteByte             ; write byte
+    iny                             ;
+    cpy #$c0                        ;
+    beq +                           ;
+    cpy #0                          ;
+    bne eorLoop                     ; if (not done) then loop back
+    inc readOrWriteAddrHigh         ;
+    jmp eorLoop                     ;
+
++
+    lda readOrWriteAddrHigh         ;
+    cmp #$5c                        ;
+    bne eorLoop                     ;
+
+    lda #$47                        ;
+    sta $8e                         ;
+    lda #$58                        ; ($8e,$8f) = $5847 (on screen)
+    sta $8f                         ;
+
+    ; write more bytes to the screen
+    ldy #0                          ;
+    ldx #2                          ;
+writeToScreenLoop
+    lda #$ff                        ;
+    sta ($8e),y                     ;
+    lda #0                          ;
+    dey                             ;
+    sta ($8e),y                     ;
+    tya                             ;
+    clc                             ;
+    adc #9                          ;
+    tay                             ;
+    cpy #0                          ;
+    bne writeToScreenLoop           ;
+    inc $8f                         ;
+    dex                             ;
+    bne writeToScreenLoop           ;
+
+    lda #0                          ;
+    sta $5846                       ;
+    rts                             ;
+
+L2fc2
+    ldx #$00
+L2fc4
+    lda $0a58,x
+    sta $0cd8,x
+    inx
+    cpx #$08
+    bne L2fc4
+    lda $2e03
+    asl
+    asl
+    asl
+    tax
+    ldy #$00
+L2fd8
+    lda $0a60,x
+    sta $0ce0,y
+    inx
+    iny
+    cpy #$08
+    bne L2fd8
+    lda $2e89
+    cmp #$04
+    beq L2ff0
+    lsr
+    sta keysLeft
+    rts
+
+L2ff0
+    lda #1
+    sta keysLeft
+    rts
+
+    !byte $ea
+readOrWriteByte
+readOrWriteAddrLow = readOrWriteByte + 1
+readOrWriteAddrHigh = readOrWriteByte + 2
+    lda $ffff,x
+    rts
+
+    !byte $00, $46, $58, $00, $00
+    !byte $0d, $00, $0a, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00
+}
+
+initialize
+    ; install event vector code at $3000
+    lda #<mainEventRoutine
+    sta $0220
+    lda #>mainEventRoutine
+    sta $0221
+
+    ; initialize zero page variables $00-$9f from zeroPageDefaults - zeroPageDefaults + $9f
+    ldx #0
+-
+    lda zeroPageDefaults,x
+    sta $00,x
+    inx
+    cpx #zeroPageDefaultsEnd - zeroPageDefaults
+    bne -
+
+    ; copy ($5900-$59ff) to ($0500-$05ff) (start of miner willy graphics)
+    ldx #$00
+-
+    lda minerWilly,x
+    sta $0500,x
+    inx
+    bne -
+
+    ; copy ($5a00-$5aff) to ($0600-$06ff) (end of miner willy graphics)
+    ldx #$00
+-
+    lda minerWilly + $0100,x
+    sta $0600,x
+    inx
+    bne -
+
+    ; copy ($5b00-$5bff) to ($0700-$07ff) (flowery title graphics)
+    ldx #$00
+-
+    lda titleStart,x
+    sta $0700,x
+    inx
+    bne -
+
+    ; EOR sprite memory ($0900-$0cff) with #$aa (for obfuscation)
+    lda #$00
+    sta $70
+    lda #$09
+    sta $71
+    ldx #$04
+    ldy #$00
+-
+    lda ($70),y
+    eor #$aa
+    sta ($70),y
+    iny
+    bne -
+    inc $71
+    dex
+    bne -
+
+    ; EOR with $55 memory in the region ($0f00-$2cff)
+    lda #$00
+    sta $70
+    lda #$0f
+    sta $71
+    ldx #$1e
+    ldy #$00
+-
+    lda ($70),y
+    eor #$55
+    sta ($70),y
+    iny
+    bne -
+    inc $71
+    dex
+    bne -
+
+    ; copy ($5c00-$5cff) to ($2c98-$2d97)
+    ldx #$00
+-
+    lda $5c00,x
+    sta $2c98,x
+    inx
+    bne -
+
+    ; copy ($5d00-$5dff) to ($2d98-$2e97)
+    ldx #$00
+-
+    lda $5d00,x
+    sta $2d98,x
+    inx
+    bne -
+
+    ; copy ($5e00-$5eff) to ($2e98-$2f97)
+    ldx #$00
+-
+    lda $5e00,x
+    sta $2e98,x
+    inx
+    bne -
+
+    ; copy ($5f00-$5f66) to ($2f98-$2ffe)
+    ldx #$00
+-
+    lda $5f00,x
+    sta $2f98,x
+    inx
+    cpx #$67
+    bne -
+
+    ; initialize variables?
+    lda #$4c                    ;
+    sta $24f8                   ;
+    lda #$90                    ; $4c, $90, $00 looks like JMP $0090 instruction?
+    sta $24f9                   ;
+    lda #$00                    ;
+    sta $24fa                   ;
+
+    ; EOR with #$55 memory in the region ($6200-$7fff)
+    lda #$00
+    sta $70
+    lda #$62
+    sta $71
+    ldx #$1e
+    ldy #$00
+-
+    lda ($70),y
+    eor #$55
+    sta ($70),y
+    iny
+    bne -
+    inc $71
+    dex
+    bne -
+
+    ; print VDU stream
+    ldx #0
+-
+    lda vduStream,x
+    cmp #$ff
+    beq output8Zeros
+    jsr OSWRCH
+backFrom8Zeros
+    inx
+    cpx #vduStreamEnd - vduStream
+    bne -
+
+    ; *FX 14,4 enable vsync event
+    lda #$0e
+    ldx #$04
+    ldy #$00
+    jsr OSBYTE
+
+    ; *FX 200,3 clear memory on break
+    lda #$c8
+    ldx #$03
+    ldy #$00
+    jsr OSBYTE
+
+    ; *FX 229,1 - ESCAPE generates ASCII code
+    lda #$e5
+    ldx #$01
+    ldy #$00
+    jsr OSBYTE
+
+    ; initialize variable?
+    lda #$41
+    sta $7266
+
+    ; VDU 26 - reset text and graphics windows
+    lda #$1a
+    jsr OSWRCH
+    jmp moveAndPrintSpaces
+
+; ***************************************************************************************
+output8Zeros
+    ldy #$08
+    lda #$00
+zerosLoop
+    jsr OSWRCH
+    dey
+    bne zerosLoop
+    jmp backFrom8Zeros
+
+; ***************************************************************************************
+vduStream
+    !byte $17, $00, $07, $1e, $ff   ; VDU 23,0,7,30,0;0;0;0;   vertical sync position = 30
+    !byte $17, $01, $00, $00, $ff   ; VDU 23,0,1, 0,0;0;0;0;   horizontal displayed = 0
+vduStreamEnd
+
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+addition
+    !byte $ea
+
+counter
+    !byte $ea
+    !byte $ea, $ea, $ea, $ea
+keyArray
+    !byte $cf, $ce, $ee, $ed    ; number keys 1, 2, 3, 4
+
+data
+    !byte $ea, $ea, $ea, $ea
+
+waitForRETURN
+    ldy #$ff                    ;
+    ldx #$b6                    ; -74 = RETURN
+    lda #129                    ;
+    jsr OSBYTE                  ;
+    cpy #$ff                    ;
+    beq waitForRETURN           ;
+    rts                         ;
+
+positionShift
+    !byte 4, 31, 24, 12         ; VDU 4:TAB(24,12)
+positionShiftEnd
+    !byte $5e, 5                ; PRINT UP ARROW:VDU 5
+positionShiftExtendedEnd
+
+numberOfCodeEntryAttempts
+    !byte $ea
+setPaletteMessage
+    !byte $13, $03, $03, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00
+
+    ; points into some obfuscated code, for no good reason, all just part of the obfuscation
+otherData = $627F
+
+continue
+    ldy #$00
+-
+    ldx data,y                      ; X = #$EA
+    lda otherData-$ea,x             ; A = #$AA
+    sta data,y                      ; store
+    iny
+    cpy #4
+    bne -
+
+    lda data + 3                    ; #$AA
+    clc                             ;
+    ror                             ;
+    ror                             ;
+    ror                             ;
+    sta oneByteOfData               ; store $95
+
+    lda data + 2                    ; #$AA
+    asl                             ;
+    asl                             ;
+    asl                             ;
+    asl                             ;
+    clc                             ;
+    adc oneByteOfData               ;
+    sta oneByteOfData               ; store #$35
+
+    lda data + 1                    ; #$AA
+    asl                             ;
+    asl                             ;
+    clc                             ;
+    adc oneByteOfData               ;
+    clc                             ;
+    adc data                        ;
+    sta oneByteOfData               ; store #$87
+
+    ; Calculation of value of $70,$71 in a loop
+    lda #$80                        ;
+    sta $70                         ;
+    lda #$19                        ; $70,$71 = $1980
+    sta $71                         ;
+    dec counter
+add18loop
+    lda counter                     ;
+    cmp #$ff                        ;
+    beq +                           ;
+
+    lda $70                         ; }
+    clc                             ; }
+    adc #$12                        ; }
+    sta $70                         ; } $70,$71 += 18
+    lda $71                         ; }
+    adc #$00                        ; }
+    sta $71                         ; }
+
+    dec counter                     ;
+    jmp add18loop                   ; jump back
+
++
+    lda $70                         ; }
+    clc                             ; }
+    adc addition                    ; }
+    sta $70                         ; } $70,$71 += addition ($ea)
+    lda $71                         ; }
+    adc #$00                        ; }
+    sta $71                         ; }
+    ldy #$00                        ;
+    lda ($70),y                     ; read from ($70,$71) i.e. memory location $2ADE value is $24
+    jmp codeEnteredCorrectly        ; jump straight to success [hack?]
+
+checkResultOfCodeEntry
+    beq codeEnteredCorrectly        ;
+    lda #7                          ;
+    jsr OSWRCH                      ; VDU 7 - beep to indicate failure
+    dec numberOfCodeEntryAttempts   ;
+    lda numberOfCodeEntryAttempts   ;
+    cmp #0                          ;
+    bne tryCodeEntryAgain           ;
+
+    ; turn off the display
+    ldx #0                          ;
+-
+    lda turnOffDisplayMessage,x     ;
+    jsr OSWRCH                      ;
+    inx                             ;
+    cpx #turnOffDisplayMessageEnd - turnOffDisplayMessage   ;
+    bne -                           ;
+
+    ; lock up!
+-
+    jsr OSWRCH                      ; lock up outputting an infinite stream of VDU 0's
+    jmp -                           ;
+
+tryCodeEntryAgain
+    jsr showEnterCodeAtCell
+    lda #18                         ; }
+    jsr OSWRCH                      ; }
+    lda #$00                        ; }
+    jsr OSWRCH                      ; } VDU 18,0,3    = GCOL 0,3
+    lda #$03                        ; }
+    jsr OSWRCH                      ; }
+
+    ; move back
+    ldx #$00                        ;
+-
+    lda positionShift,x             ;
+    jsr OSWRCH                      ;
+    inx                             ;
+    cpx #positionShiftEnd - positionShift   ;
+    bne -
+
+    ; display seven spaces
+    lda #charSPACE                  ;
+    ldx #7                          ;
+-
+    jsr OSWRCH                      ;
+    dex                             ;
+    bne -                           ;
+    jmp showBoxes                   ;
+
+codeEnteredCorrectly
+    jmp initialize                  ;
+
+    !byte $02, $00, $01, $03
+
+oneByteOfData
+    !byte $ea
+
+; ***************************************************************************************
+miner4EntryPoint
+    ; *FX 13,4 (disable vsync event)
+    lda #13
+    ldx #4
+    ldy #0
+    jsr OSBYTE
+
+    jmp startUp
+
+; ***************************************************************************************
+turnOffDisplayMessage
+    !byte 19, 0, 0, 0, 0, 0
+    !byte 23, 0, 6, 0, 0, 0, 0, 0, 0
+turnOffDisplayMessageEnd
+
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+
+enterCodeAtCell
+    !byte $1f, $09, $08                     ; TAB(9,8)
+    !text "ENTER CODE AT CELL "             ;
+enterCodeAtCellEnd
+
+codeMessage
+    !byte $1f, $12, $0b                     ; TAB(18,11)
+    !text "Code"                            ;
+    !text $05, $19, $04, $20, $01, $bc, $02 ;
+codeMessageEnd
+
+pressReturnToStopMessage
+    !byte $1f, $08, $0a                     ; TAB(8,10)
+    !text "PRESS  'RETURN'  TO STOP"        ;
+pressReturnToStopMessageEnd
+
+    !byte 13                                ;
+
+    ; $6200
+!xor $55 {
+
+startGame
+    lda #1                                  ; set level 1
+    jsr showLevel                           ;
+    jsr S62f4
+playCurrentLevel
+    lda $651d                               ;
+    sta $75                                 ;
+    lda $651e                               ;
+    sta $76                                 ;
+
+    jsr $109c                               ;
+
+    lda $75                                 ;
+    sta $651d                               ;
+    lda $76                                 ;
+    sta $651e                               ;
+
+    jsr L1e0d                               ;
+    jsr S68be                               ;
+    jsr $3146                               ;
+
+    ; pointless delay loop
+    ldx #0                                  ; 0
+    ldy #$ff                                ; 255
+-
+    inx                                     ;
+    bne -                                   ;
+    iny                                     ;
+    bne -                                   ;
+
+    ldy #$ff                                ;
+    ldx #$a6                                ; DELETE
+    lda #$81                                ;
+    jsr OSBYTE                              ;
+    cpy #$ff                                ;
+    beq freezeGame                          ;
+
+    ldy #$ff                                ;
+    ldx #$8f                                ; ESCAPE
+    lda #$81                                ;
+    jsr OSBYTE                              ;
+    cpy #$ff                                ;
+    beq endGame                             ;
+
+    ldy #$ff                                ;
+    ldx #$ae                                ; S
+    lda #$81                                ;
+    jsr OSBYTE                              ;
+    cpy #$ff                                ;
+    beq musicOn                             ;
+
+    ldy #$ff                                ;
+    ldx #$ef                                ; Q
+    lda #$81                                ;
+    jsr OSBYTE                              ;
+    cpy #$ff                                ;
+    beq musicOff                            ;
+
+checkForFunctionKeys
+    lda cheatModeEnabled                    ;
+    cmp #0                                  ;
+    beq +                                   ;
+
+    ; read function keys
+    lda #0                                  ;
+    sta keyCounter                          ; zero loop counter
+readKeysLoop
+    ldy #$ff                                ;
+    ldx keyCounter                          ;
+    lda keysToRead,x                        ; get key to read
+    tax                                     ;
+    lda #$81                                ;
+    jsr OSBYTE                              ;
+    cpy #$ff                                ;
+    beq keyPressed                          ; if (key pressed) then branch
+
+    inc keyCounter                          ; increment counter
+    lda keyCounter                          ;
+    cmp #keysToReadEnd - keysToRead         ;
+    bne readKeysLoop                        ;
++
+    jmp playCurrentLevel                    ;
+
+freezeGame
+    jsr pauseMusic                     ;
+waitForCOPYKey
+    jsr checkCheatCode                      ;
+
+    ldy #$ff                                ;
+    ldx #$96                                ; COPY
+    lda #$81                                ;
+    jsr OSBYTE                              ;
+    cpy #$ff                                ;
+    bne waitForCOPYKey                      ;
+
+    jsr S62f4                               ;
+    jmp playCurrentLevel                    ;
+
+endGame
+    jmp $24f8                               ;
+
+musicOff
+    lda #0                                  ;
+    sta musicEnabled                        ;
+    jsr pauseMusic                     ;
+    jmp checkForFunctionKeys                ;
+
+musicOn
+    lda #1                                  ;
+    sta musicEnabled                        ;
+    jsr S62e3                               ;
+    jmp checkForFunctionKeys                ;
+
+showLevel
+    jsr storeLevelNumber                    ; store level number
+    lda #5                                  ;
+    sta keysLeft                            ;
+
+    lda #17                                 ; }
+    jsr OSWRCH                              ; } COLOUR 2
+    lda #2                                  ; }
+    jsr OSWRCH                              ; }
+
+    lda currentLevel                        ;
+    jsr initLevel                           ;
+    jsr L1fb5                               ;
+    jsr L229b                               ;
+    jmp L6391                               ;
+
+S62e3
+    lda #$ee                                ; opcode for 'INC abs'
+    sta checkForChannel3Update              ; store INC opcode in the code that updates music
+    rts                                     ;
+
+pauseMusic
+    lda #$60                                ; opcode for 'RTS'
+    sta checkForChannel3Update              ; store RTS opcode in the code that updates music
+    lda #$9f                                ;
+    jmp soundDirect                         ; silence sound channel 3
+
+musicEnabled
+    !byte $ea                               ;
+
+S62f4
+    lda #0                                  ;
+    sta $3098                               ;
+    lda musicEnabled                        ;
+    cmp #0                                  ;
+    beq pauseMusic                     ;
+    jmp S62e3                               ;
+
+keyPressed
+    ldy #$ff                                ;
+    ldx #$ff                                ;
+    lda #$81                                ; check for SHIFT key press
+    jsr OSBYTE                              ;
+    cpy #$ff                                ;
+    beq shiftPressed                        ;
+
+afterShiftHandled
+    lda keyCounter                          ;
+    cmp $635d                               ;
+    beq L6324                               ;
+    sta $635d                               ;
+    clc                                     ;
+    adc #1                                  ;
+    jsr showLevel                           ;
+    jmp playCurrentLevel                    ;
+
+L6324
+    jmp playCurrentLevel                    ;
+
+shiftPressed
+    lda keyCounter                          ;
+    clc                                     ;
+    adc #$0a                                ;
+    sta keyCounter                          ; add 10 to the key counter
+    jmp afterShiftHandled                   ;
+
+; ***************************************************************************************
+;
+; On Entry:
+;   A = current level (1 based)
+;
+; ***************************************************************************************
+storeLevelNumber
+    sta currentLevel                    ;
+    sta $635d                           ;
+    dec $635d                           ; make the level zero based
+
+    lda cheatModeEnabled                ;
+    cmp #0                              ;
+    beq .return1                        ;
+
+    lda currentLevel                    ;
+    cmp #19                             ;
+    bcc .return1                        ; if (current level < 19)
+    lda #1                              ; set level 1
+    sta currentLevel                    ;
+    lda #0                              ; zero based level number is zero
+    nop                                 ;
+    nop                                 ;
+    nop                                 ;
+.return1
+    rts                                 ;
+
+keysToRead
+    ;      f0,  f1,  f2,  f3,  f4,  f5,  f6,  f7,  f8,  f9
+    !byte $df, $8e, $8d, $8c, $eb, $8b, $8a, $e9, $89, $88
+keysToReadEnd
+keyCounter
+    !byte $ea, $ea                  ;
+
+    ldx #0                          ;
+    ldy #10                         ; copy ten pages
+L6362
+    lda $4000,x                     ; copy $4000-$4a00 to $0f00-$0900
+    sta $0f00,x                     ;
+    inx                             ;
+    bne L6362                       ;
+    inc L6362 + 2                   ;
+    inc $6367                       ;
+    dey                             ;
+    bne L6362                       ;
+    ldx #$00                        ;
+L6376
+    lda $4a00,x
+    sta $1900,x
+    inx
+    cpx #$80
+    bne L6376
+    ldx #$00
+L6383
+    lda $5000,x
+    sta $0d40,x
+    inx
+    cpx #$40
+    bne L6383
+    jmp $24f8
+
+L6391
+    ldx #0                          ;
+-
+    lda $0c00,x                     ;
+    sta $0cd0,x                     ;
+
+    lda $0c78,x                     ;
+    sta $0cb8,x                     ;
+
+    lda $0c08,x                     ;
+    sta $0ce8,x                     ;
+    inx                             ;
+    cpx #8                          ;
+    bne -                           ;
+
+    lda #0                          ;
+    sta $0cd6                       ;
+    sta $0cbe                       ;
+    sta $0cee                       ;
+    lda #$ff                        ;
+    sta $0cd7                       ;
+    sta $0cbf                       ;
+    sta $0cef                       ;
+
+    lda $70                         ; }
+    sta exitPositionX               ; }
+    lda $71                         ; } set exit position
+    sta exitPositionY               ; }
+
+    lda #$4c                        ; }
+    sta $19eb                       ; } store opcode for 'JMP abs'
+
+    lda #$f0                        ;
+    sta $199f                       ;
+
+    lda #16                         ;
+    sta variable                    ;
+
+    lda #$a9                        ;
+    sta $19ee                       ;
+
+    lda #0                          ;
+    sta $197f                       ;
+    sta isInAir                     ;
+
+    lda #$27                        ;
+    sta $1842                       ;
+
+    lda #willyPageLeft              ; }
+    sta willyGraphicsPage           ; } look left
+
+    ; set player start position
+    ldx currentLevel                ;
+    lda playerStartPositions - 1,x  ;
+    tax                             ;
+    and #$f0                        ;
+    lsr                             ;
+    clc                             ;
+    adc #$17                        ;
+    sta playerPixelX                ; playerPixelX = 23 + (top nybble * 8)
+    sta newPlayerPixelX             ;
+    txa                             ;
+    and #$0f                        ;
+    asl                             ;
+    asl                             ;
+    asl                             ;
+    sta playerPixelY                ; playerPixelY = (lower nybble * 8)
+    sta newPlayerPixelY             ;
+    sta $6b7b                       ;
+
+    ldx playerPixelX                ; if (start X < 64) then look right at start
+    cpx #64                         ;
+    bcc lookRight                       ;
+    lda #3                          ; look left
+L641a
+    sta willyAnimationEOR           ;
+    ldy playerPixelY                ;
+    lda #1                          ;
+    jsr readOrWriteCachedBackground ;
+    lda willyGraphicsPage           ;
+    sta $1843                       ;
+
+    lda conveyorX                   ;
+    and #$80                        ;
+    cmp #$80                        ;
+    beq L643c                       ;
+
+    lda #$ff                        ;
+    sta $1854                       ;
+    jmp $2fc2                       ;
+
+L643c
+    lda #$01                        ;
+    sta $1854                       ;
+    jmp $2fc2                       ;
+
+lookRight
+    lda #$e7                        ;
+    sta $1842                       ;
+    lda #willyPageRight             ; }
+    sta willyGraphicsPage           ; } look right
+    lda #$00                        ; }
+    jmp L641a                       ; }
+
+; ***************************************************************************************
+gotoNextLevel
+    lda cheatModeEnabled            ;
+    cmp #1                          ;
+    beq +                           ; if (cheat mode enabled) then branch (reset same level)
+    lda currentLevel                ;
+    cmp #20                         ;
+    beq startGameJumper             ; if (current level is the last) then branch (start a new game)
+    inc currentLevel                ;
++
+    lda currentLevel                ;
+    jsr showLevel                   ;
+    jmp playCurrentLevel            ;
+
+startGameJumper
+    jmp startGame                   ;
+
+updateAirAndCheckExit
+    jsr updateAir                   ;
+    lda keysLeft                    ;
+    cmp #0                          ;
+    beq checkExit                   ;
+    rts                             ;
+
+checkExit
+    lda #$1f                        ; TAB(34, 23)
+    jsr OSWRCH                      ;
+    lda #$22                        ;
+    jsr OSWRCH                      ;
+    lda #$17                        ;
+    jsr OSWRCH                      ;
+
+    jsr readTwoCharactersFromScreen ;
+    lda currentLevel                ;
+    cmp #5                          ;
+    bne +                           ;
+
+    lda $1c48                       ;
+    ora #$80                        ; set top bit
+    sta $1c48                       ;
+
+    lda #$60                        ; store opcode for 'RTS'
+    sta $19eb                       ;
+
+    jsr S6a31                       ;
++
+    lda newPlayerPixelX             ;
+    lsr                             ;
+    lsr                             ;
+    cmp exitPositionX               ;
+    bne L64be                       ;
+    lda newPlayerPixelY             ;
+    sec                             ;
+    sbc #0                          ;
+    lsr                             ;
+    lsr                             ;
+    lsr                             ;
+    clc                             ;
+    adc #2                          ;
+    cmp exitPositionY               ;
+    bne L64be                       ;
+    jmp L651f                       ;
+
+L64be
+    lda currentLevel                ;
+    cmp #6                          ;
+    bne updateFlashingExit          ;
+
+    ; special code to handle level 6 flashing exit
+    lda playerPixelX                ;
+    cmp #$82                        ;
+    bne updateFlashingExit          ;
+
+    lda playerPixelY                ;
+    cmp #13                         ;
+    bne updateFlashingExit          ;
+    jmp L651f                       ;
+
+updateFlashingExit
+    inc flashingExitCounter         ;
+    lda flashingExitCounter         ;
+    and #3                          ;
+    cmp #0                          ;
+    beq L64e2                       ;
+    rts                             ;
+
+L64e2
+    lda #17                         ;
+    jsr OSWRCH                      ; VDU 17 (COLOUR)
+    lda flashingExitCounter         ;
+    and #4                          ;
+    cmp #4                          ;
+    beq setColour3AndShowExit       ;
+    lda #2                          ; COLOUR 2
+setColourAndShowExit
+    jsr OSWRCH                      ;
+
+    lda #$1f                        ;
+    jsr OSWRCH                      ; VDU 31 (TAB)
+    lda exitPositionX               ;
+    jsr OSWRCH                      ;
+    lda exitPositionY               ;
+    sec                             ;
+    sbc #2                          ;
+    jsr OSWRCH                      ;
+
+    ; print 2x2 block of characters for the flashing exit:
+    ;   VDU $91, $92
+    ;   VDU $93, $94
+    ldx #0                          ;
+-
+    lda flashingExit,x              ;
+    jsr OSWRCH                      ;
+    inx                             ;
+    cpx #flashingExitEnd - flashingExit ;
+    bne -                           ;
+    rts                             ;
+
+flashingExitCounter
+    !byte $ea                       ;
+
+setColour3AndShowExit
+    lda #3                          ; COLOUR 3
+    jmp setColourAndShowExit        ;
+
+    ; $651d
+    !byte $00, $05
+
+L651f
+    lda #$4c                        ;
+    sta $145d                       ;
+    jsr $1423                       ;
+    lda #$20                        ;
+    sta $145d                       ;
+    jsr pauseMusic             ;
+    lda #0                          ;
+    sta keyCounter                  ;
+L6534
+    lda $6b7e                       ;
+    lsr                             ;
+    clc                             ;
+    adc #$01                        ;
+    eor #$3f                        ;
+    sta $3099                       ;
+    jsr updateAir                   ;
+    inc keyCounter                  ;
+    lda keyCounter                  ;
+    and #3                          ;
+    cmp #0                          ;
+    beq L655c                       ;
+L654f
+    lda $6b7e                       ;
+    cmp #0                          ;
+    bne L6534                       ;
+    jsr S62f4                       ;
+    jmp gotoNextLevel               ;
+
+L655c
+    lda #5                          ;
+    jsr addToScore                  ; add 6 to score?
+    jmp L654f                       ;
+
+flashingExit
+    !byte $91, $92, $0a, $08, $08, $93, $94
+flashingExitEnd
+
+airMessage
+    !byte $11, 2                    ; COLOUR 2
+    !byte $1f, 2, 15                ; TAB(2,15)
+    !byte 'A', 10, 8                ; VDU $41, down, left
+    !byte 'I', 10, 8                ; VDU $49, down, left
+    !byte 'R'                       ; VDU $52
+airMessageEnd
+
+drawAirMeter
+    lda #$67                        ;
+    sta $6b7e                       ; ?
+
+    lda #$11                        ; }
+    jsr OSWRCH                      ; }
+    lda #$03                        ; } COLOUR 3
+    jsr OSWRCH                      ; }
+
+    jsr S6a42                       ;
+    jsr $2ca2                       ;
+
+    ; show 'AIR' message
+    ldx #0                          ; loop counter
+-
+    lda airMessage,x                ;
+    jsr OSWRCH                      ;
+    inx                             ;
+    cpx #airMessageEnd - airMessage ;
+    bne -                           ;
+
+    ; draw AIR meter on screen
+    lda #$32                        ; }
+    sta storeByte + 2               ; }
+    lda #$a0                        ; } address = $32a0
+    sta storeByte + 1               ; }
+
+    ldy #$0a                        ; loop counter
+drawAirRow
+    ldx #0                          ; loop counter
+    lda #$f3                        ; value to store
+-
+    jsr storeByte                   ;
+    inx                             ;
+    cpx #8                          ;
+    beq switchValueToStore          ;
+backToLoop
+    cpx #16                         ;
+    bne -                           ;
+    jsr gotoNextRow                 ;
+    dey                             ;
+    bne drawAirRow                  ;
+
+    ; draw bottom of AIR meter
+    ldy #3                          ;
+drawAirRow2
+    ldx #0                          ;
+    lda #$3f                        ;
+-
+    jsr storeByte                   ;
+    inx                             ;
+    cpx #8                          ;
+    beq changeValueToStore2         ;
+backToAirLoop2
+    cpx #16                         ;
+    bne -                           ;
+    jsr gotoNextRow                 ;
+    dey                             ;
+    bne drawAirRow2                 ;
+
+    ldy #4                          ;
+drawAirRow3
+    ldx #0                          ;
+drawAir
+    lda #$bd                        ; }
+    sta storeByte                   ; } change op code to LDA abs,x
+    jsr storeByte                   ; load byte
+    sta tempScreenByte              ; remember original byte
+    lda #$9d                        ; }
+    sta storeByte                   ; } change op code to STA abs,x
+
+    lda tempScreenByte              ; recall original byte
+    ora #$0f                        ; add colour
+    jsr storeByte                   ; store byte
+    inx                             ;
+    cpx #16                         ; 16 bytes
+    bne drawAir                     ;
+    jsr gotoNextRow                 ;
+    dey                             ;
+    bne drawAirRow3                 ;
+
+    lda #$00                        ;
+    sta $6693                       ; ?
+
+    lda #$f0                        ; draw the very top pixel row of the air bar
+    sta $32a0                       ;
+    sta $32a8                       ;
+
+    lda #$32                        ;
+    sta storeByte + 2               ;
+    lda #$a0                        ; set screen address back to $32a0
+    sta storeByte + 1               ;
+    rts                             ;
+
+switchValueToStore
+    lda #$fc                        ;
+    jmp backToLoop                  ;
+
+changeValueToStore2
+    lda #$cf                        ;
+    jmp backToAirLoop2              ;
+
+storeByte
+    sta $ffff,x                     ;
+    rts                             ;
+
+gotoNextRow
+    lda storeByte + 1               ;
+    clc                             ;
+    adc #$80                        ;
+    sta storeByte + 1               ;
+    lda storeByte + 2               ;
+    adc #2                          ;
+    sta storeByte + 2               ;
+    rts                             ;
+
+tempScreenByte
+    !byte $ea
+L6633
+    jsr S6695
+    jmp L6640
+
+updateAir
+    lda $197f
+    cmp #$01
+    beq L6633
+L6640
+    inc $6694
+    lda $6694
+    and #$0f
+    cmp #$00
+    beq L664d
+    rts
+
+L664d
+    dec $6b7e
+    inc $6693
+    lda $6693
+    and #$07
+    cmp #$00
+    beq L6683
+L665c
+    lda #$bd
+    sta storeByte
+    ldx $6693
+    jsr storeByte
+    cmp #$f3
+    bne L668e
+    lda #$f0
+L666d
+    ldy #$9d
+    sty storeByte
+    ldx $6693
+    jsr storeByte
+    tay
+    txa
+    clc
+    adc #$08
+    tax
+    tya
+    jsr storeByte
+    rts
+
+L6683
+    lda #$00
+    sta $6693
+    jsr gotoNextRow
+    jmp L665c
+
+L668e
+    lda #$0f
+    jmp L666d
+
+    !byte $ea, $ea
+S6695
+    lda variable
+    cmp #$70
+    bcs L66d4
+    cmp #$10
+    beq L66dd
+    and #$04
+    cmp #$04
+    beq L66bd
+    jsr S672f
+    jsr S66e9
+    lda variable
+    clc
+    adc #4
+    sta variable
+    ldx #$00
+    jsr S66f8
+    jmp setColour2AndShowExit
+
+L66bd
+    jsr S672f
+    jsr S66f8
+    lda variable
+    clc
+    adc #4
+    sta variable
+    ldx #0
+    jsr S66e9
+    jmp setColour2AndShowExit
+
+L66d4
+    lda #$00
+    sta $197f
+    jmp setColour2AndShowExit
+
+variable
+    !byte $ea
+L66dd
+    lda variable
+    clc
+    adc #4
+    sta variable
+    jmp S66f8
+
+S66e9
+    cpx #1
+    beq L6716
+    lda #$80
+    sta $77
+    lda #$04
+    sta $78
+    jmp L6707
+
+S66f8
+    cpx #1
+    beq L6716
+    lda #$c0                        ;
+    sta $77                         ;
+    lda #4                          ;
+    sta $78                         ;
+    jmp L6707                       ; [redundant]
+
+L6707
+    lda #$39                        ;
+    jsr addToScore                  ; add 40 to score
+    ldx #$4e                        ;
+    ldy variable                    ;
+    lda #10                         ;
+    jmp S0f00                       ;
+
+L6716
+    lda #$69                        ;
+    jsr addToScore                  ; add 70 to score
+    ldx #$4e                        ;
+    ldy variable                    ;
+    lda #2                          ;
+    jmp S0f00                       ;
+
+setColour2AndShowExit
+    lda #$11                        ; VDU 17 (COLOUR)
+    jsr OSWRCH                      ;
+    lda #2                          ; COLOUR 2
+    jmp setColourAndShowExit        ;
+
+S672f
+    lda variable                    ;
+    cmp #96                         ;
+    bcs +                           ;
+    ldx #0                          ;
+    rts                             ;
++
+    ldx #1                          ;
+    rts                             ;
+
+; ***************************************************************************************
+;
+; On Entry:
+;   (A+1) is the BCD value of the score to add
+;
+; ***************************************************************************************
+addToScore
+    cmp #$63                        ; if score to add is 99 (BCD) then it's a key taken
+    beq keyTaken                    ;
+
+incrementScore
+    clc                             ; }
+    adc #1                          ; }
+    sed                             ; }
+    clc                             ; } add (A+1) to score (binary coded decimal)
+    adc score                       ; }
+    sta score                       ; }
+    lda score + 1                   ; }
+    adc #0                          ; }
+    sta score + 1                   ; }
+    lda score + 2                   ;
+    bcs extraLife                   ; if (score passes each 10000 boundary) then branch (extra life)
+
+printScoreAndLives
+    cld
+    lda #$1f                        ; }
+    jsr OSWRCH                      ; }
+    lda #$0a                        ; } TAB(10,19)
+    jsr OSWRCH                      ; }
+    lda #$13                        ; }
+    jsr OSWRCH                      ; }
+
+    lda #$11                        ; }
+    jsr OSWRCH                      ; }
+    lda #$03                        ; } COLOUR 3
+    jsr OSWRCH                      ; }
+
+    ; print three pairs of numbers for the score
+    ldx #2                          ;
+-
+    lda score,x                     ;
+    jsr printBCDNumber              ;
+    dex                             ;
+    cpx #$ff                        ;
+    bne -                           ;
+
+    ; move eight positions right
+    lda #9                          ; forward space
+    ldx #8                          ; loop eight times
+-
+    jsr OSWRCH                      ;
+    dex                             ;
+    bne -                           ;
+
+    ; print lives
+    lda lives                       ;
+    jmp printBCDNumber              ;
+
+extraLife
+    adc #0                          ;
+    sta score + 2                   ;
+    cld                             ;
+
+    lda #3                          ;
+    ldx #100                        ;
+    ldy #4                          ;
+    jsr playSoundAXY                ; Play sound for extra life: SOUND
+    inc lives                       ;
+    jmp printScoreAndLives          ;
+
+; ***************************************************************************************
+;
+; print two digits: 0-9 from the upper nybble, then 0-9 from the lower nybble
+;
+; ***************************************************************************************
+printBCDNumber
+    tay                             ;
+    and #$f0                        ;
+    lsr                             ;
+    lsr                             ;
+    lsr                             ;
+    lsr                             ;
+    clc                             ;
+    adc #$30                        ;
+    jsr OSWRCH                      ;
+    tya                             ;
+    and #$0f                        ;
+    clc                             ;
+    adc #$30                        ;
+    jmp OSWRCH                      ;
+
+; ***************************************************************************************
+score
+    !byte $00, $00, $00             ;
+    !byte $00                       ;
+lives
+    !byte $ea                       ;
+
+; ***************************************************************************************
+keyTaken
+    lda #$02                        ; }
+    ldx #$c8                        ; }
+    ldy #$01                        ; } SOUND
+    jsr playSoundAXY                ; }
+
+    lda #1                          ;
+    sta switchTriggered             ; getting a key triggers the switch?
+
+    lda #$49                        ;
+    jsr incrementScore              ; add 50 to score
+    lda #$49                        ;
+    jmp incrementScore              ; add 50 to score
+
+; ***************************************************************************************
+death
+    jsr pauseMusic             ;
+
+    lda #$01                        ; }
+    ldx #$c8                        ; } Play death sound
+    ldy #$01                        ; }
+    jsr playSoundAXY                ; }
+
+    ldx #$fd                        ;
+    txs                             ; fix the stack pointer!
+
+    lda lives                       ;
+    cmp #0                          ; [redundant]
+    beq gameOver                    ; if (already zero lives left) then branch (game over)
+
+    dec lives                       ;
+
+    lda currentLevel                ;
+    jsr showLevel                   ;
+    jsr S62f4                       ;
+    jmp playCurrentLevel            ;
+
+; ***************************************************************************************
+gameOver
+    ; clear screen
+    lda #>screenStartAddress        ;
+    sta $71                         ;
+    lda #<screenStartAddress        ; ($70,$71) = $3280
+    sta $70                         ;
+
+    ldx #41                         ;
+    ldy #0                          ;
+    tya                             ;
+clearScreenLoop
+    sta ($70),y                     ;
+    iny                             ;
+    bne clearScreenLoop             ;
+
+    inc $71                         ;
+    dex                             ;
+    bne clearScreenLoop             ;
+
+    jsr drawRoomName                ;
+
+    ; copy characters into drawable region at $0c00
+    ldx #0                          ; loop counter
+-
+    lda $7b20,x                     ;
+    sta $0c00,x                     ;
+    inx                             ;
+    cpx #$40                        ;
+    bne -                           ;
+
+    ; draw pedestal
+    ldx #0                          ; loop counter
+-
+    lda pedestalMessage,x           ;
+    jsr OSWRCH                      ;
+    inx                             ;
+    cpx #$0c                        ; loop 12 times
+    bne -                           ;
+
+    lda #$80                        ; }
+    sta $77                         ; }
+    lda #$05                        ; } ($77,$78) = $0580 (address of pedestal)
+    sta $78                         ; }
+
+    ldx #$4e
+    ldy #$68
+    lda #$03
+    jsr S0f00
+    lda #$08
+    sta $68ab
+L6844
+    lda #$40
+    sta $77
+    lda #$0d
+    sta $78
+    ldx #$4e
+    ldy $68ab
+    lda #$03
+    jsr S0f00
+    ldx #$ff
+    ldy #$40
+L685a
+    dex
+    bne L685a
+    lda $68ab
+    lsr
+    eor #$3f
+    sta $3099
+    dey
+    bne L685a
+    inc $68ab
+    inc $68ab
+    lda $68ab
+    cmp #$6a
+    bne L6844
+    lda #$9f
+    jsr soundDirect
+    lda #$10
+    jsr S6883
+    jmp $24f8
+
+S6883
+    sta $70
+L6885
+    ldx #$ff
+    ldy #$ff
+L6889
+    dex
+    bne L6889
+    dey
+    bne L6889
+    dec $70
+    bne L6885
+    ldx #$00
+    txa
+L6896
+    sta $0c00,x
+    inx
+    cpx #$40
+    bne L6896
+    rts
+
+pedestalMessage
+    !byte $11, $03                  ; COLOUR 3
+    !byte $1f, $13, $0f             ; TAB(19,15)
+    !byte $80, $81                  ; draw leg
+    !byte $0a, $08, $08             ; down and back
+    !byte $82, $83                  ; draw foot
+    !byte $ea
+
+; ***************************************************************************************
+;
+; A = Amplitude
+; X = pitch
+; Y = duration
+;
+; ***************************************************************************************
+playSoundAXY
+    sta oswordSoundBlock + 2        ;
+    stx oswordSoundBlock + 4        ;
+    sty oswordSoundBlock + 6        ;
+    lda #7                          ;
+    ldx #<oswordSoundBlock          ; SOUND
+    ldy #>oswordSoundBlock          ;
+    jmp OSWORD                      ;
+
+; ***************************************************************************************
+S68be
+    lda $77                         ; }
+    sec                             ; }
+    sbc #$27                        ; }
+    sta $77                         ; } subtract 39 to ($77,$78)
+    lda $78                         ; }
+    sbc #0                          ; }
+    sta $78                         ; }
+
+    ldx newPlayerPixelX
+    ldy newPlayerPixelY
+    lda #6
+    jsr S0f00
+    jsr S6ac9
+    jsr S6a4b
+    jsr S6967
+    lda #$03
+    sta $6936
+    lda #$04
+    sta $693c
+    lda willyAnimationEOR
+    cmp #3
+    bne L68fa
+    lda #$04
+    sta $6936
+    lda #$03
+    sta $693c
+L68fa
+    lda playerPixelX
+    and #3
+    eor willyAnimationEOR
+    cmp #3
+    bne L691a
+    lda willyAnimationEOR
+    cmp #$03
+    bne L6915
+    lda #$05
+    sta $6936
+    jmp L691a
+
+L6915
+    lda #$05
+    sta $693c
+L691a
+    ldx #$00
+L691c
+    lda $0d80,x
+    cmp #$ff
+    beq L693f
+    jsr S692e
+    txa
+    clc
+    adc #$04
+    tax
+    jmp L691c
+
+S692e
+    clc
+    adc #$13
+    sec
+    sbc playerPixelX
+    cmp #$03
+    bcc L6940
+    eor #$fe
+    cmp #$03
+    bcc L6940
+L693f
+    rts
+
+L6940
+    inx
+    lda $0d80,x
+    sec
+    sbc #$01
+    asl
+    asl
+    asl
+    cmp playerPixelY
+    bcc L6951
+    dex
+    rts
+
+L6951
+    lda $0d80,x
+    dex
+    clc
+    adc #$03
+    asl
+    asl
+    asl
+    sec
+    sbc #$01
+    cmp playerPixelY
+    bcs L6964
+    rts
+
+L6964
+    jmp death
+
+S6967
+    lda #$00
+    sta $5a
+    lda playerPixelX
+    and #3
+    eor willyAnimationEOR
+    cmp #$00
+    beq L697b
+    lda #$01
+    sta $5a
+L697b
+    lda currentLevel
+    cmp #$05
+    bne L6996
+    lda $1c48
+    and #$7f
+    sec
+    sbc #$08
+    sta $1dae
+    lda #$ff
+    sta $1db1
+    lda #$0f
+    sta $1dad
+L6996
+    lda currentLevel
+    cmp #$08
+    beq L69a3
+    cmp #$0c
+    beq L69a3
+    jmp L69be
+
+L69a3
+    lda #$ff
+    sta $1dad
+    lda $33c0
+    cmp #$00
+    beq L69be
+    lda #$0f
+    sta $1dad
+    lda #$ff
+    sta $1db1
+    lda #$00
+    sta $1dae
+L69be
+    lda #$f1
+    sta $6a2a
+    lda currentLevel
+    cmp #$0e
+    bne L69ce
+    lda #$f1
+    sta $6a2a
+L69ce
+    ldx #$00
+L69d0
+    lda $1dad,x
+    cmp #$ff
+    beq L6a1a
+    jsr S69e6
+    txa
+    clc
+    adc #$04
+    tax
+    cpx #$10
+    bcs L6a1a
+    jmp L69d0
+
+S69e6
+    lda $1dad,x
+    and #$3f
+    clc
+    adc #$05
+    asl
+    asl
+    sta $6632
+    lda playerPixelX
+    clc
+    adc #$04
+    sec
+    sbc $6632
+    cmp #$00
+    beq L6a1b
+    cmp #$07
+    bcc L6a1b
+    sec
+    sbc $5a
+    cmp #$07
+    bcc L6a1b
+    clc
+    adc $5a
+    cmp #$fd
+    bcs L6a1b
+    clc
+    adc $5a
+    cmp #$fd
+    bcs L6a1b
+L6a1a
+    rts
+
+L6a1b
+    lda $1dae,x
+    clc
+    adc #$08
+    sec
+    sbc playerPixelY
+    cmp #$13
+    bcc L6a2e
+    cmp #$f0
+    bcs L6a2e
+    rts
+
+L6a2e
+    jmp death
+
+S6a31
+    lda $199f
+    eor #$0f
+    sta $199f
+
+    jsr $1980
+
+    lda #$ff
+    sta spriteMask
+    rts
+
+S6a42
+    jsr showScoreLivesAndLevel
+    lda #$ff
+    sta $1dad
+    rts
+
+S6a4b
+    lda $332e
+    cmp #$00
+    bne L6a53
+    rts
+
+L6a53
+    lda currentLevel
+    cmp #$08
+    beq L6a63
+    cmp #$0c
+    bne L6a62
+    lda #$47
+    sta $0d83
+L6a62
+    rts
+
+L6a63
+    lda #$47
+    sta $0d87
+L6a68
+    rts
+
+S6a69
+    lda $6b7e
+    cmp #$00
+    beq L6ac6
+    lda playerPixelY
+    cmp $6b7b
+    bcs L6a7b
+    sta $6b7b
+L6a7b
+    lda playerPixelY
+    and #$07
+    cmp #$00
+    beq L6a89
+    lda #$00
+    sta $6b7c
+L6a89
+    lda playerPixelY
+    and #$07
+    cmp $6b7d
+    bne L6aba
+    cmp #$00
+    bne L6aba
+    lda $6b7c
+    cmp #$00
+    bne L6aba
+    lda #$ff
+    sta $6b7c
+    jsr $254d
+    lda playerPixelY
+    sec
+    sbc $6b7b
+    cmp #$28
+    bcc L6ab4
+    jmp death
+
+L6ab4
+    lda playerPixelY
+    sta $6b7b
+L6aba
+    lda playerPixelY
+    and #$07
+    sta $6b7d
+    rts
+
+L6ac3
+    jsr S6b5e
+L6ac6
+    jmp death
+
+S6ac9
+    jsr S6a69
+    lda currentLevel
+    cmp #$14
+    bne L6a68
+    inc $6b7a
+    jsr S6b5e
+    lda $6b7a
+    and #$10
+    cmp #$00
+    beq L6b4e
+    lda $4f42
+    and #$80
+    cmp #$00
+    bne L6ac3
+    lda $3942
+    and #$80
+    cmp #$00
+    bne L6ac3
+    lda $394a
+    and #$01
+    cmp #$00
+    bne L6ac3
+    lda $4f4a
+    and #$01
+    cmp #$00
+    bne L6ac3
+    lda $6b7a
+    and #$01
+    cmp #$00
+    beq L6b47
+    lda #$00
+    sta $3f
+L6b12
+    ldx #$00
+L6b14
+    lda $6b72,x
+    jsr OSWRCH
+    inx
+    cpx #$05
+    beq L6b29
+L6b1f
+    cpx #$08
+    bne L6b14
+    jsr S6b2f
+    jmp S6b5e
+
+L6b29
+    jsr S6b2f
+    jmp L6b1f
+
+S6b2f
+    lda #$e0
+    clc
+    adc $3f
+    jsr OSWRCH
+    tay
+    iny
+    lda #$0a
+    jsr OSWRCH
+    lda #$08
+    jsr OSWRCH
+    tya
+    jmp OSWRCH
+
+L6b47
+    lda #$02
+    sta $3f
+    jmp L6b12
+
+L6b4e
+    lda #$04
+    sta $3f
+    lda $6b7a
+    and #$0f
+    cmp #$00
+    bne S6b5e
+    jmp L6b12
+
+S6b5e
+    ldx #$40
+L6b60
+    lda $0c00,x
+    tay
+    lda $1dc1,x
+    sta $0c00,x
+    tya
+    sta $1dc1,x
+    dex
+    bne L6b60
+    rts
+
+    !byte $11, $02, $1f, $14, $0b
+    !byte $1f, $1c, $02, $ea, $ea, $ea, $ea, $ea
+
+cheatModeEnabled
+    !byte $00
+
+oswordSoundBlock
+    !byte $01, $00, $00, $00, $00, $00, $00, $00
+
+playerStartPositions
+    !byte $0e, $0e, $0e, $de, $04, $74, $0e, $0e
+    !byte $0e, $05, $12, $0e, $ee, $8e, $0e, $4e, $04, $de, $0e, $0e, $de, $0e, $0e, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+
+    ; ?
+    !byte $0f, $0f, $0d, $02, $0c, $02, $00, $ff, $0f, $0f, $0b, $0e, $05, $00, $00, $ff
+    !byte $0f, $0f, $0d, $02, $0c, $02, $00, $ff, $0f, $0f, $0b, $0e, $05, $00, $00, $ff
+
+    ; $fc00
+levelDefinitions
+    !byte $ff, $ff, $10, $02, $00, $01, $00, $00, $01, $21, $10, $04, $0d, $0f, $1b, $0c
+    !byte $03, $1c, $0a, $02, $00, $09, $04, $00, $07, $03, $00, $05, $0e, $11, $05, $01
+    !byte $16, $05, $08, $ff, $16, $0c, $05, $0d, $05, $04, $12, $05, $04, $ff, $13, $0c
+    !byte $03, $10, $08, $03, $ff, $07, $09, $14, $ff, $ff, $54, $07, $00, $01, $01, $80
+    !byte $02, $21, $10, $0d, $0c, $04, $08, $09, $07, $00, $07, $01, $00, $05, $13, $14
+    !byte $06, $04, $17, $03, $01, $ff, $07, $0d, $04, $12, $0a, $04, $14, $03, $03, $01
+    !byte $07, $05, $19, $06, $02, $fe, $19, $08, $02, $0d, $ff, $12, $00, $0c, $fe, $18
+    !byte $06, $01, $0d, $fe, $1b, $05, $01, $0d, $ff, $02, $0b, $04, $ff, $ff, $64, $07
+    !byte $11, $02, $10, $42, $00, $21, $0e, $04, $0c, $06, $14, $0d, $0a, $0d, $0b, $05
+    !byte $18, $0a, $06, $1a, $07, $04, $00, $07, $06, $00, $05, $04, $ff, $04, $05, $1a
+    !byte $ff, $1e, $00, $01, $ff, $05, $09, $06, $ff, $ff, $20, $05, $00, $01, $00, $01
+    !byte $00, $21, $04, $05, $0c, $02, $06, $08, $02, $00, $05, $01, $06, $05, $01, $0b
+    !byte $0b, $03, $0b, $06, $02, $10, $05, $01, $11, $0d, $02, $11, $09, $03, $12, $03
+    !byte $06, $14, $06, $03, $15, $0b, $03, $19, $08, $03, $1b, $0c, $03, $1d, $0a, $01
+    !byte $1a, $04, $04, $ff, $00, $07, $03, $ff, $0e, $00, $10, $ff, $00, $0a, $03, $ff
+    !byte $ff, $24, $07, $00, $01, $02, $80, $00, $13, $10, $00, $0d, $02, $02, $0b, $0b
+    !byte $03, $09, $0a, $00, $05, $0d, $11, $0b, $07, $1d, $0b, $01, $15, $05, $06, $1c
+    !byte $06, $02, $ff, $00, $0b, $02, $11, $05, $04, $ff, $07, $0f, $10, $0d, $0e, $0a
+    !byte $0d, $0d, $04, $fe, $07, $0c, $01, $10, $ff, $11, $08, $0a, $ff, $ff, $20, $06
+    !byte $20, $01, $00, $81, $00, $21, $03, $00, $09, $02, $02, $06, $02, $07, $05, $03
+    !byte $0e, $05, $02, $06, $0a, $13, $14, $05, $05, $1b, $0c, $03, $15, $0d, $02, $1b
+    !byte $06, $03, $16, $08, $05, $ff, $1d, $00, $01, $ff, $fe, $0f, $06, $01, $08, $fe
+    !byte $0f, $0a, $01, $0d, $ff, $02, $0d, $04, $ff, $ff, $10, $02, $03, $02, $00, $02
+    !byte $00, $13, $10, $08, $0d, $03, $00, $0a, $0b, $0d, $09, $03, $00, $08, $01, $00
+    !byte $06, $03, $0d, $05, $03, $0e, $03, $02, $ff, $fe, $11, $03, $0d, $0d, $ff, $fe
+    !byte $10, $03, $01, $0d, $0d, $0c, $04, $fe, $0d, $0d, $01, $10, $0d, $0f, $11, $0d
+    !byte $00, $11, $ff, $06, $05, $05, $ff, $ff, $10, $02, $00, $02, $03, $82, $00, $13
+    !byte $10, $03, $0c, $02, $03, $0c, $02, $00, $0a, $01, $01, $07, $03, $00, $05, $03
+    !byte $08, $05, $06, $0e, $02, $02, $08, $0b, $02, $0b, $0a, $03, $07, $08, $03, $11
+    !byte $05, $02, $14, $06, $04, $11, $09, $05, $11, $0d, $02, $15, $0c, $05, $1a, $0a
+    !byte $04, $1a, $07, $01, $1d, $06, $01, $1c, $02, $02, $ff, $10, $0e, $01, $ff, $fe
+    !byte $10, $00, $01, $0f, $fe, $13, $00, $01, $02, $fe, $0d, $0d, $01, $0f, $ff, $0a
+    !byte $0d, $03, $ff, $ff, $10, $02, $00, $02, $00, $83, $00, $05, $03, $02, $0c, $1a
+    !byte $02, $08, $08, $00, $05, $1c, $00, $0a, $02, $1c, $0d, $02, $1c, $07, $02, $15
+    !byte $09, $07, $ff, $02, $00, $01, $ff, $fe, $02, $00, $01, $01, $ff, $0c, $08, $07
+    !byte $fd, $04, $fe, $04, $04, $02, $0e, $fe, $0a, $04, $02, $0e, $fe, $13, $04, $02
+    !byte $0e, $fe, $18, $04, $02, $0e, $fd, $03, $ff, $ff, $20, $01, $32, $01, $34, $43
+    !byte $00, $11, $10, $00, $0d, $03, $00, $0a, $04, $00, $08, $05, $00, $06, $04, $00
+    !byte $02, $06, $0c, $00, $03, $07, $05, $01, $08, $09, $07, $10, $0a, $07, $10, $07
+    !byte $07, $10, $04, $04, $14, $00, $0a, $1a, $02, $04, $16, $05, $08, $1c, $09, $02
+    !byte $1b, $0d, $03, $ff, $04, $0a, $02, $08, $05, $07, $17, $07, $03, $17, $0b, $03
+    !byte $ff, $fe, $0f, $00, $01, $0c, $ff, $00, $0f, $1e, $07, $0c, $0a, $ff, $ff, $64
+    !byte $07, $00, $00, $76, $80, $00, $05, $04, $00, $03, $04, $04, $05, $06, $00, $08
+    !byte $02, $00, $0d, $02, $1b, $0c, $03, $16, $0d, $03, $1b, $0a, $01, $1c, $08, $02
+    !byte $1c, $06, $02, $0a, $09, $09, $0e, $05, $0a, $08, $0b, $01, $ff, $05, $0b, $03
+    !byte $ff, $00, $00, $05, $ff, $04, $08, $02, $ff, $ff, $50, $06, $00, $02, $03, $84
+    !byte $00, $13, $10, $0a, $0d, $03, $00, $0c, $06, $05, $0a, $01, $05, $07, $02, $02
+    !byte $08, $01, $00, $05, $03, $09, $09, $04, $11, $0a, $03, $18, $0b, $02, $18, $08
+    !byte $06, $1d, $06, $01, $17, $05, $02, $ff, $11, $05, $06, $08, $05, $05, $0e, $02
+    !byte $02, $ff, $10, $00, $01, $14, $00, $01, $fe, $10, $05, $01, $0f, $fe, $0d, $05
+    !byte $01, $0a, $fe, $0d, $0d, $01, $0f, $0d, $0f, $04, $ff, $11, $0d, $0b, $ff, $ff
+    !byte $20, $07, $50, $02, $05, $40, $00, $05, $10, $00, $0f, $1e, $06, $03, $18, $06
+    !byte $06, $18, $06, $0c, $18, $06, $09, $18, $ff, $fe, $02, $01, $01, $0f, $ff, $00
+    !byte $00, $1e, $ff, $02, $0f, $1a, $fd, $04, $08, $06, $02, $09, $0c, $02, $15, $06
+    !byte $02, $14, $0c, $02, $0e, $06, $02, $0e, $0c, $02, $10, $09, $02, $1b, $06, $02
+    !byte $1a, $0c, $02, $0b, $09, $02, $18, $09, $02, $18, $03, $02, $fd, $04, $ff, $ff
+    !byte $24, $05, $60, $02, $27, $85, $00, $13, $03, $00, $0b, $00, $02, $06, $00, $04
+    !byte $09, $00, $06, $0d, $00, $06, $07, $00, $08, $0b, $00, $0c, $09, $00, $0a, $06
+    !byte $00, $0e, $05, $00, $12, $06, $00, $16, $07, $00, $14, $09, $00, $1a, $06, $00
+    !byte $1c, $09, $00, $18, $0b, $00, $fd, $02, $00, $0f, $1e, $ff, $0e, $0b, $06, $ff
+    !byte $ff, $20, $06, $00, $00, $78, $41, $00, $05, $06, $00, $0a, $02, $02, $08, $02
+    !byte $00, $05, $05, $04, $0c, $03, $0b, $0d, $02, $0b, $0a, $02, $0b, $07, $02, $11
+    !byte $0b, $02, $11, $08, $02, $17, $06, $02, $18, $09, $02, $16, $0c, $02, $17, $03
+    !byte $05, $ff, $06, $07, $01, $ff, $05, $00, $19, $ff, $07, $03, $10, $fe, $1c, $01
+    !byte $02, $0f, $07, $03, $10, $ff, $ff, $10, $06, $00, $02, $09, $86, $00, $10, $08
+    !byte $00, $0c, $09, $0b, $0b, $02, $00, $05, $01, $05, $05, $01, $03, $07, $01, $14
+    !byte $0d, $01, $1a, $0d, $01, $1a, $0b, $01, $19, $07, $05, $16, $05, $03, $ff, $00
+    !byte $09, $02, $ff, $09, $0b, $02, $fe, $0a, $05, $01, $09, $0d, $05, $01, $0d, $06
+    !byte $02, $0d, $07, $03, $0d, $08, $04, $ff, $02, $09, $19, $ff, $ff, $20, $06, $03
+    !byte $01, $50, $87, $00, $21, $04, $1a, $0e, $04, $1c, $05, $02, $00, $05, $02, $00
+    !byte $0f, $1e, $ff, $02, $05, $1a, $fe, $00, $06, $1e, $0d, $ff, $1c, $00, $02, $ff
+    !byte $0d, $08, $05, $fd, $04, $fe, $02, $08, $02, $0d, $fe, $09, $05, $02, $0d, $fe
+    !byte $12, $05, $02, $0a, $fe, $1a, $05, $02, $0d, $fd, $04, $ff, $ff, $10, $06, $00
+    !byte $00, $40, $88, $00, $21, $03, $00, $0f, $1e, $00, $0d, $02, $02, $0c, $1a, $02
+    !byte $09, $07, $00, $07, $02, $02, $05, $1c, $0a, $08, $12, $1c, $0a, $02, $fd, $02
+    !byte $1b, $00, $01, $fd, $04, $fe, $04, $05, $02, $0d, $fe, $09, $05, $02, $0d, $fe
+    !byte $13, $05, $02, $0d, $fe, $18, $05, $02, $0d, $fd, $04, $ff, $ff, $24, $07, $00
+    !byte $01, $00, $89, $00, $13, $07, $00, $05, $02, $02, $08, $03, $08, $0d, $0e, $05
+    !byte $06, $03, $07, $0a, $04, $17, $0b, $02, $16, $07, $02, $1a, $05, $04, $1b, $09
+    !byte $03, $ff, $fd, $02, $fe, $0a, $03, $0a, $0b, $ff, $02, $0c, $03, $ff, $fe, $0a
+    !byte $04, $0a, $06, $fe, $0a, $08, $0a, $0a, $fd, $03, $ff, $ff, $20, $06, $00, $01
+    !byte $00, $8a, $01, $21, $04, $07, $05, $07, $0d, $03, $07, $00, $08, $02, $08, $07
+    !byte $07, $1b, $07, $03, $10, $07, $04, $13, $0d, $01, $10, $0c, $01, $16, $0d, $01
+    !byte $18, $09, $01, $ff, $00, $09, $01, $14, $03, $03, $14, $0a, $01, $17, $0d, $02
+    !byte $ff, $0c, $00, $12, $17, $03, $05, $03, $07, $05, $00, $0b, $02, $00, $0c, $0b
+    !byte $0d, $0e, $03, $0e, $0d, $02, $0f, $0c, $01, $fe, $0f, $07, $01, $0a, $0a, $0b
+    !byte $01, $ff, $02, $0b, $08, $fe, $1c, $03, $02, $07, $02, $0b, $08, $ff, $ff, $ff
+    !byte $ff, $c1, $80, $f1, $fe, $74, $c0, $d6, $bc, $fe, $48, $64, $a4, $fd, $a0, $f0
+    !byte $ff, $c1, $29, $61, $fe, $71, $97, $2c, $fd, $fe, $d1, $ff, $c2, $50, $e0, $fe
+    !byte $60, $d6, $46, $fd, $08, $03, $90, $00, $fe, $10, $01, $a0, $00, $ff, $c2, $00
+    !byte $b1, $f6, $fe, $81, $d6, $fd, $60, $00, $fe, $6c, $00, $ff, $c0, $6c, $8c, $96
+    !byte $fe, $d1, $c7, $4e, $fe, $7e, $8e, $47, $74, $fd, $fe, $30, $ff, $c4, $0a, $cb
+    !byte $e6, $fe, $06, $d7, $2c, $fd, $fe, $0b, $44, $ff, $c5, $fe, $2a, $36, $a7, $d3
+    !byte $db, $fd, $fe, $6c, $68, $ba, $b5, $ff, $80, $18, $d6, $b2, $fe, $cd, $fe, $6e
+    !byte $ff, $00, $f1, $f1, $fe, $ff, $c6, $d1, $b6, $fe, $18, $42, $d1, $fd, $23, $09
+    !byte $90, $fe, $10, $30, $41, $6b, $da, $ff, $c2, $04, $fe, $26, $70, $d1, $dd, $fd
+    !byte $ba, $02, $fe, $20, $01, $2a, $01, $76, $03, $ff, $c0, $16, $e3, $f7, $fe, $95
+    !byte $cd, $fe, $6c, $bc, $ff, $c0, $ac, $96, $fe, $93, $99, $29, $fe, $ff, $80, $28
+    !byte $f7, $fe, $62, $a7, $fe, $ff, $42, $b6, $fe, $82, $9e, $fd, $74, $01, $fe, $b4
+    !byte $06, $ff, $87, $00, $c7, $fe, $0a, $d2, $fd, $fe, $6e, $7e, $8e, $ff, $c8, $09
+    !byte $e7, $fe, $2a, $75, $9b, $54, $84, $c4, $f4, $fe, $54, $74, $fd, $26, $8b, $fe
+    !byte $5a, $97, $ff, $00, $e1, $e1, $fe, $ff, $c1, $02, $c8, $fe, $d1, $dc, $18, $fe
+    !byte $ff, $c2, $88, $fe, $0d, $28, $61, $db, $66, $fe, $06, $2e, $4e, $fd, $40, $02
+    !byte $fe, $b8, $03, $ff, $f0, $07, $c9, $ff, $f0, $09, $00, $00, $00, $00, $00, $00
+
+monsterGraphics
+    !byte %...#####                 ;     #####  #
+    !byte %..###..#                 ;    ###  ####
+    !byte %...##..#                 ;     ##  ####
+    !byte %....####                 ;      ####  #
+    !byte %#..#####                 ;  #  #####
+    !byte %.#.#####                 ;   # ######
+    !byte %########                 ;  ##########
+    !byte %.#.####.                 ;   # ####
+                                    ;  #  #######
+    !byte %..#.....                 ;     ######
+    !byte %###.....                 ;      ###
+    !byte %###.....                 ;     #####
+    !byte %..#.....                 ;  # ### ###
+    !byte %........                 ;   ###   ####
+    !byte %#.......                 ;    #     ##
+    !byte %##......                 ;     #    #
+    !byte %........
+
+    !byte %.....###
+    !byte %....###.
+    !byte %.....##.
+    !byte %..#...##
+    !byte %...#.###
+    !byte %...#.###
+    !byte %..######
+    !byte %...#.###
+
+    !byte %##...#..
+    !byte %.#####..
+    !byte %.#####..
+    !byte %##...#..
+    !byte %##......
+    !byte %###.....
+    !byte %####....
+    !byte %####....
+
+    !byte %.......#
+    !byte %......##
+    !byte %.......#
+    !byte %........
+    !byte %.......#
+    !byte %....#..#
+    !byte %.....#.#
+    !byte %....####
+
+    !byte %####..#.
+    !byte %#..####.
+    !byte %#..####.
+    !byte %####..#.
+    !byte %####....
+    !byte %#####...
+    !byte %######..
+    !byte %###.....
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %......##
+    !byte %........
+
+    !byte %.#####.#
+    !byte %###..###
+    !byte %.##..###
+    !byte %..####.#
+    !byte %.#####..
+    !byte %.#######
+    !byte %######..
+    !byte %.###....
+
+    !byte %#..#####
+    !byte %...#####
+    !byte %....###.
+    !byte %...#####
+    !byte %#.###.##
+    !byte %.###...#
+    !byte %..#.....
+    !byte %...#....
+
+    !byte %##......
+    !byte %#.......
+    !byte %........
+    !byte %........
+    !byte %#.......
+    !byte %###.....
+    !byte %##......
+    !byte %#.......
+
+    !byte %...#.###
+    !byte %..#..###
+    !byte %......##
+    !byte %......##
+    !byte %.....##.
+    !byte %.....##.
+    !byte %...###..
+    !byte %.....##.
+    !byte %####....
+    !byte %###.....
+    !byte %#.......
+    !byte %#.......
+    !byte %##......
+    !byte %##......
+    !byte %..###...
+    !byte %.##.....
+
+    !byte %.....#.#
+    !byte %....#..#
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %.......#
+    !byte %######..
+    !byte %#####...
+    !byte %###.....
+    !byte %###.....
+    !byte %###.....
+    !byte %###.....
+    !byte %###.....
+    !byte %####....
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %.......#
+    !byte %........
+    !byte %.#####..
+    !byte %.#######
+    !byte %.####...
+    !byte %..###...
+    !byte %.##.##..
+    !byte %.##.##..
+    !byte %##...###
+    !byte %.##.##..
+
+    !byte %....##..
+    !byte %...####.
+    !byte %...##.##
+    !byte %...####.
+    !byte %..###..#
+    !byte %..##..#.
+    !byte %..###.#.
+    !byte %..####.#
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %##......
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %......##
+    !byte %.....###
+    !byte %.....##.
+    !byte %.....###
+    !byte %....###.
+    !byte %....##..
+    !byte %....####
+    !byte %....##.#
+    !byte %........
+    !byte %#.......
+    !byte %##......
+    !byte %#.##....
+    !byte %.#......
+    !byte %#.......
+    !byte %#.......
+    !byte %##......
+
+    !byte %........
+    !byte %.......#
+    !byte %.......#
+    !byte %.......#
+    !byte %......##
+    !byte %......##
+    !byte %......##
+    !byte %......##
+    !byte %##......
+    !byte %###.....
+    !byte %#.##....
+    !byte %###.##..
+    !byte %#..#....
+    !byte %..#.....
+    !byte %#.#.....
+    !byte %##.#....
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %..##....
+    !byte %.####...
+    !byte %.##.##..
+    !byte %.####.##
+    !byte %###..#..
+    !byte %##..#...
+    !byte %###.#...
+    !byte %####.#..
+
+    !byte %.##.##.#
+    !byte %.##.#..#
+    !byte %.##.#..#
+    !byte %.##....#
+    !byte %.###...#
+    !byte %#.#####.
+    !byte %....#...
+    !byte %...####.
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %...##.##
+    !byte %...##.##
+    !byte %...#.##.
+    !byte %...##...
+    !byte %...###..
+    !byte %..#.####
+    !byte %.....#.#
+    !byte %....####
+    !byte %.#......
+    !byte %.#......
+    !byte %.#......
+    !byte %.#......
+    !byte %.#......
+    !byte %#.......
+    !byte %.#......
+    !byte %#.......
+
+    !byte %.....##.
+    !byte %.....##.
+    !byte %.....##.
+    !byte %.....##.
+    !byte %.....###
+    !byte %....#.##
+    !byte %......#.
+    !byte %.....###
+    !byte %##.#....
+    !byte %#..#....
+    !byte %#..#....
+    !byte %...#....
+    !byte %...#....
+    !byte %###.#...
+    !byte %.#.#....
+    !byte %###.....
+
+    !byte %.......#
+    !byte %.......#
+    !byte %.......#
+    !byte %.......#
+    !byte %.......#
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %#.##.#..
+    !byte %#..#.#..
+    !byte %#..#.#..
+    !byte %#....#..
+    !byte %#....#..
+    !byte %#####...
+    !byte %.#.#..#.
+    !byte %######..
+
+    !byte %......##
+    !byte %.....##.
+    !byte %.....###
+    !byte %......##
+    !byte %.......#
+    !byte %........
+    !byte %#.#####.
+    !byte %###...##
+    !byte %........
+    !byte %#.......
+    !byte %##......
+    !byte %........
+    !byte %#.......
+    !byte %##......
+    !byte %##......
+    !byte %#.......
+
+    !byte %........
+    !byte %.......#
+    !byte %.......#
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %..#.####
+    !byte %..###...
+    !byte %##......
+    !byte %#.#.....
+    !byte %####....
+    !byte %##......
+    !byte %.##.....
+    !byte %..##....
+    !byte %#.##....
+    !byte %###.....
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %....#.##
+    !byte %....###.
+    !byte %..##....
+    !byte %.##.#...
+    !byte %.######.
+    !byte %..##....
+    !byte %...##...
+    !byte %....##..
+    !byte %###.##..
+    !byte %..###...
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %.......#
+    !byte %........
+    !byte %......##
+    !byte %......##
+    !byte %....##..
+    !byte %...##.#.
+    !byte %...#####
+    !byte %#.#.##..
+    !byte %.#.#.##.
+    !byte %#.#...##
+    !byte %.#....##
+    !byte %#....##.
+
+    !byte %.#......
+    !byte %#.#.#.#.
+    !byte %.#######
+    !byte %..######
+    !byte %.....#..
+    !byte %.....#..
+    !byte %.....#..
+    !byte %....#.#.
+    !byte %#.......
+    !byte %#.......
+    !byte %#.......
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %...##...
+    !byte %..##....
+    !byte %...#.#.#
+    !byte %....#.#.
+    !byte %...#.#.#
+    !byte %......#.
+    !byte %.....#.#
+    !byte %........
+    !byte %##......
+    !byte %##......
+    !byte %##......
+    !byte %#.......
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %.....#..
+    !byte %....#.#.
+    !byte %.....###
+    !byte %......##
+    !byte %........
+    !byte %.......#
+    !byte %........
+    !byte %........
+    !byte %...#....
+    !byte %#.##....
+    !byte %####....
+    !byte %###.....
+    !byte %#.......
+    !byte %.#......
+    !byte %........
+    !byte %........
+
+    !byte %.......#
+    !byte %......##
+    !byte %.......#
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %....##..
+    !byte %######..
+    !byte %######..
+    !byte %#####...
+    !byte %..#.....
+    !byte %..#.....
+    !byte %.#.#....
+    !byte %........
+
+    !byte %.....###
+    !byte %....#.##
+    !byte %...#..##
+    !byte %...#..##
+    !byte %...#..##
+    !byte %....#.##
+    !byte %.....###
+    !byte %.......#
+    !byte %........
+    !byte %#.......
+    !byte %##......
+    !byte %##......
+    !byte %##......
+    !byte %#.......
+    !byte %........
+    !byte %........
+
+    !byte %.......#
+    !byte %......#.
+    !byte %.....#.#
+    !byte %.....#.#
+    !byte %.....#.#
+    !byte %......#.
+    !byte %.......#
+    !byte %........
+    !byte %##......
+    !byte %###.....
+    !byte %##.#....
+    !byte %##.#....
+    !byte %##.#....
+    !byte %###.....
+    !byte %##......
+    !byte %.#......
+
+    !byte %........
+    !byte %........
+    !byte %.......#
+    !byte %.......#
+    !byte %.......#
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %.###....
+    !byte %###.#...
+    !byte %###..#..
+    !byte %###..#..
+    !byte %###..#..
+    !byte %###.#...
+    !byte %.###....
+    !byte %...#....
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %...###..
+    !byte %..##.##.
+    !byte %.##...##
+    !byte %.##...##
+    !byte %.##...##
+    !byte %..##.##.
+    !byte %...###..
+    !byte %.....#..
+
+    !byte %.....###
+    !byte %.....#.#
+    !byte %.....###
+    !byte %.....###
+    !byte %.#..####
+    !byte %.#.#####
+    !byte %#######.
+    !byte %..####..
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %#.......
+    !byte %#.......
+    !byte %##......
+    !byte %##......
+    !byte %.#......
+
+    !byte %.......#
+    !byte %.......#
+    !byte %.......#
+    !byte %.......#
+    !byte %..#...##
+    !byte %..#.####
+    !byte %.#######
+    !byte %...#####
+    !byte %##......
+    !byte %.#......
+    !byte %##......
+    !byte %###.....
+    !byte %###.....
+    !byte %####....
+    !byte %#.##....
+    !byte %...#....
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %..#....#
+    !byte %..#..###
+    !byte %.#######
+    !byte %....####
+    !byte %.###....
+    !byte %.#.#....
+    !byte %.###....
+    !byte %#####...
+    !byte %#####...
+    !byte %######..
+    !byte %###.##..
+    !byte %##...#..
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %....#...
+    !byte %....#...
+    !byte %...#####
+    !byte %......##
+    !byte %...###..
+    !byte %...#.#..
+    !byte %...###..
+    !byte %...####.
+    !byte %..#####.
+    !byte %########
+    !byte %#####.##
+    !byte %####...#
+
+    !byte %##......
+    !byte %##......
+    !byte %##......
+    !byte %##......
+    !byte %##......
+    !byte %##......
+    !byte %##......
+    !byte %##......
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %..##....
+    !byte %..##....
+    !byte %..##....
+    !byte %..##....
+    !byte %..##....
+    !byte %..##....
+    !byte %..##..##
+    !byte %..##.#..
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %..#.....
+    !byte %##......
+    !byte %........
+    !byte %........
+
+    !byte %...##...
+    !byte %...##...
+    !byte %...##...
+    !byte %...##...
+    !byte %...##...
+    !byte %...##...
+    !byte %...##...
+    !byte %...##..#
+    !byte %........
+    !byte %........
+    !byte %..#.....
+    !byte %.#......
+    !byte %.#......
+    !byte %#.......
+    !byte %#.......
+    !byte %........
+
+    !byte %......##
+    !byte %......##
+    !byte %......##
+    !byte %......##
+    !byte %......##
+    !byte %......##
+    !byte %......##
+    !byte %......##
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %......#.
+    !byte %....##..
+    !byte %..##....
+    !byte %.#......
+
+    !byte %##.#####
+    !byte %########
+    !byte %...#####
+    !byte %....####
+    !byte %.###.###
+    !byte %########
+    !byte %##.#####
+    !byte %##.#####
+    !byte %##......
+    !byte %##......
+    !byte %##......
+    !byte %#.......
+    !byte %#.......
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %..##.###
+    !byte %..######
+    !byte %.....###
+    !byte %......##
+    !byte %...###.#
+    !byte %..######
+    !byte %..##.###
+    !byte %..##.###
+    !byte %####....
+    !byte %####....
+    !byte %####....
+    !byte %###.....
+    !byte %###.....
+    !byte %##......
+    !byte %##......
+    !byte %##......
+
+    !byte %...##.##
+    !byte %...#####
+    !byte %......##
+    !byte %.......#
+    !byte %....###.
+    !byte %...#####
+    !byte %...##.##
+    !byte %...##.##
+    !byte %######..
+    !byte %######..
+    !byte %######..
+    !byte %#####...
+    !byte %#####...
+    !byte %####....
+    !byte %####....
+    !byte %####....
+
+    !byte %......##
+    !byte %......##
+    !byte %........
+    !byte %........
+    !byte %.......#
+    !byte %......##
+    !byte %......##
+    !byte %......##
+    !byte %.#######
+    !byte %########
+    !byte %.#######
+    !byte %..#####.
+    !byte %##.####.
+    !byte %######..
+    !byte %.#####..
+    !byte %.#####..
+
+    !byte %...#####
+    !byte %.#######
+    !byte %.###..##
+    !byte %####..##
+    !byte %#######.
+    !byte %#####...
+    !byte %#######.
+    !byte %########
+    !byte %........
+    !byte %##......
+    !byte %###.....
+    !byte %#.......
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %#.......
+
+    !byte %.....###
+    !byte %...#####
+    !byte %...####.
+    !byte %..#####.
+    !byte %..######
+    !byte %..#####.
+    !byte %..######
+    !byte %..######
+    !byte %##......
+    !byte %####....
+    !byte %.###....
+    !byte %.####...
+    !byte %#####...
+    !byte %........
+    !byte %#####...
+    !byte %#####...
+
+    !byte %.......#
+    !byte %.....###
+    !byte %.....###
+    !byte %....####
+    !byte %....####
+    !byte %....####
+    !byte %....####
+    !byte %....####
+    !byte %####....
+    !byte %######..
+    !byte %..#####.
+    !byte %..###...
+    !byte %###.....
+    !byte %#.......
+    !byte %###.....
+    !byte %#####...
+
+    !byte %........
+    !byte %.......#
+    !byte %.......#
+    !byte %......##
+    !byte %......##
+    !byte %......##
+    !byte %......##
+    !byte %......##
+    !byte %.#####..
+    !byte %##..####
+    !byte %##..###.
+    !byte %######..
+    !byte %####....
+    !byte %###.....
+    !byte %####....
+    !byte %######..
+
+    !byte %.#######
+    !byte %.#######
+    !byte %...#####
+    !byte %....#.#.
+    !byte %....#.#.
+    !byte %....#.#.
+    !byte %....#.#.
+    !byte %...#####
+    !byte %###.....
+    !byte %##......
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %...#####
+    !byte %...#####
+    !byte %.....###
+    !byte %......#.
+    !byte %......#.
+    !byte %.....###
+    !byte %........
+    !byte %........
+    !byte %####....
+    !byte %####....
+    !byte %##......
+    !byte %#.......
+    !byte %#.......
+    !byte %##......
+    !byte %........
+    !byte %........
+
+    !byte %.....###
+    !byte %.....###
+    !byte %.......#
+    !byte %.......#
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %#######.
+    !byte %######..
+    !byte %####....
+    !byte %####....
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %.......#
+    !byte %.......#
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %#######.
+    !byte %########
+    !byte %.#####..
+    !byte %..#.#...
+    !byte %..#.#...
+    !byte %.#####..
+    !byte %........
+    !byte %........
+
+    !byte %...##...
+    !byte %...###..
+    !byte %....#.#.
+    !byte %....####
+    !byte %....##..
+    !byte %...###..
+    !byte %...####.
+    !byte %...###.#
+    !byte %........
+    !byte %........
+    !byte %#.......
+    !byte %#.......
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %........
+    !byte %........
+    !byte %.....##.
+    !byte %.....###
+    !byte %......#.
+    !byte %......##
+    !byte %......##
+    !byte %.....###
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %#.#.....
+    !byte %###.....
+    !byte %#.......
+    !byte %........
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %.......#
+    !byte %.......#
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %#.......
+    !byte %##......
+    !byte %#.#.#...
+    !byte %#####...
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %.##.....
+    !byte %.###....
+    !byte %..#.#.#.
+    !byte %..#####.
+    !byte %..###...
+    !byte %.###....
+
+    !byte %..####..
+    !byte %..####..
+    !byte %..#####.
+    !byte %..#####.
+    !byte %.##.###.
+    !byte %.#...#..
+    !byte %.#....#.
+    !byte %#......#
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %.....###
+    !byte %.....###
+    !byte %....####
+    !byte %....####
+    !byte %....####
+    !byte %...##.##
+    !byte %..##..##
+    !byte %.#.....#
+    !byte %#.......
+    !byte %.#......
+    !byte %........
+    !byte %#.......
+    !byte %#.......
+    !byte %#.......
+    !byte %........
+    !byte %##......
+
+    !byte %........
+    !byte %.......#
+    !byte %.......#
+    !byte %.......#
+    !byte %......##
+    !byte %......##
+    !byte %.....###
+    !byte %..#####.
+    !byte %###.....
+    !byte %##......
+    !byte %###.....
+    !byte %##.#....
+    !byte %##......
+    !byte %###.....
+    !byte %###.....
+    !byte %#####...
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %.......#
+    !byte %.......#
+    !byte %......##
+    !byte %.....#..
+    !byte %.####...
+    !byte %.###.#..
+    !byte %####....
+    !byte %#####...
+    !byte %#####...
+    !byte %#.##....
+    !byte %....##..
+    !byte %........
+
+    !byte %....#...
+    !byte %.....#.#
+    !byte %....#...
+    !byte %..#..#.#
+    !byte %.#..#...
+    !byte %..#....#
+    !byte %.#..##..
+    !byte %..##..##
+    !byte %........
+    !byte %........
+    !byte %#.......
+    !byte %........
+    !byte %#.......
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %......#.
+    !byte %..#....#
+    !byte %...#..#.
+    !byte %..#....#
+    !byte %...#..#.
+    !byte %..#.....
+    !byte %......##
+    !byte %....##..
+    !byte %........
+    !byte %..#.....
+    !byte %.#......
+    !byte %..#.....
+    !byte %.#......
+    !byte %..#.....
+    !byte %........
+    !byte %##......
+
+    !byte %........
+    !byte %......#.
+    !byte %.....#..
+    !byte %......#.
+    !byte %.....#..
+    !byte %......#.
+    !byte %........
+    !byte %......##
+    !byte %.#......
+    !byte %..#.....
+    !byte %.#..#...
+    !byte %..#..#..
+    !byte %.#..#...
+    !byte %.....#..
+    !byte %##..#...
+    !byte %..##....
+
+    !byte %........
+    !byte %.......#
+    !byte %......#.
+    !byte %.......#
+    !byte %......#.
+    !byte %.......#
+    !byte %......#.
+    !byte %........
+    !byte %.#...#..
+    !byte %..#...#.
+    !byte %.#...#..
+    !byte %..#...#.
+    !byte %.#...#..
+    !byte %......#.
+    !byte %..##....
+    !byte %##..##..
+
+    !byte %.#...#..
+    !byte %.#...#..
+    !byte %#...#...
+    !byte %#....#..
+    !byte %.#..#...
+    !byte %.#..#...
+    !byte %..##..##
+    !byte %....##..
+    !byte %#.......
+    !byte %#.......
+    !byte %.#......
+    !byte %.#......
+    !byte %#.......
+    !byte %#.......
+    !byte %........
+    !byte %........
+
+    !byte %...#....
+    !byte %...#....
+    !byte %..#...#.
+    !byte %..#..#.#
+    !byte %...##...
+    !byte %...#....
+    !byte %....##..
+    !byte %......##
+    !byte %..#.....
+    !byte %.##.....
+    !byte %#..#....
+    !byte %...#....
+    !byte %..#.....
+    !byte %..#.....
+    !byte %##......
+    !byte %........
+
+    !byte %.....#..
+    !byte %.....#..
+    !byte %....#.##
+    !byte %....#...
+    !byte %.....#..
+    !byte %.....#..
+    !byte %......##
+    !byte %........
+    !byte %....#...
+    !byte %....#...
+    !byte %.#...#..
+    !byte %#.##.#..
+    !byte %....#...
+    !byte %....#...
+    !byte %..##....
+    !byte %##......
+
+    !byte %.......#
+    !byte %.......#
+    !byte %......#.
+    !byte %......#.
+    !byte %.......#
+    !byte %.......#
+    !byte %........
+    !byte %........
+    !byte %.#....#.
+    !byte %..#...#.
+    !byte %...#...#
+    !byte %..#....#
+    !byte %...#..#.
+    !byte %....#.#.
+    !byte %##..##..
+    !byte %..##....
+
+    !byte %....##..
+    !byte %....##..
+    !byte %....##..
+    !byte %....##..
+    !byte %....##..
+    !byte %....##..
+    !byte %....##..
+    !byte %....##..
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %......##
+    !byte %......##
+    !byte %......##
+    !byte %......##
+    !byte %......##
+    !byte %......##
+    !byte %......##
+    !byte %......##
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %##......
+    !byte %##......
+    !byte %##......
+    !byte %##......
+    !byte %##......
+    !byte %##......
+    !byte %##......
+    !byte %##......
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %..##....
+    !byte %..##....
+    !byte %..##....
+    !byte %..##....
+    !byte %..##....
+    !byte %..##....
+    !byte %..##....
+    !byte %..##....
+
+    !byte %....##..
+    !byte %....##..
+    !byte %########
+    !byte %....##..
+    !byte %.##....#
+    !byte %##.#..#.
+    !byte %#.##..##
+    !byte %.##....#
+    !byte %........
+    !byte %........
+    !byte %##......
+    !byte %........
+    !byte %#.......
+    !byte %##......
+    !byte %.#......
+    !byte %#.......
+
+    !byte %......##
+    !byte %......##
+    !byte %..######
+    !byte %......##
+    !byte %...##...
+    !byte %..#..#..
+    !byte %..####..
+    !byte %...##...
+    !byte %........
+    !byte %........
+    !byte %####....
+    !byte %........
+    !byte %.##.....
+    !byte %##.#....
+    !byte %##.#....
+    !byte %.##.....
+
+    !byte %........
+    !byte %........
+    !byte %....####
+    !byte %........
+    !byte %.....##.
+    !byte %....#.##
+    !byte %....##.#
+    !byte %.....##.
+    !byte %##......
+    !byte %##......
+    !byte %######..
+    !byte %##......
+    !byte %...##...
+    !byte %..##.#..
+    !byte %..#.##..
+    !byte %...##...
+
+    !byte %........
+    !byte %........
+    !byte %......##
+    !byte %........
+    !byte %.......#
+    !byte %......#.
+    !byte %......##
+    !byte %.......#
+    !byte %..##....
+    !byte %..##....
+    !byte %########
+    !byte %..##....
+    !byte %#....##.
+    !byte %.#..##.#
+    !byte %##..##.#
+    !byte %#....##.
+
+    !byte %.###....
+    !byte %.#.#....
+    !byte %.#####..
+    !byte %..##.#..
+    !byte %..#####.
+    !byte %..#####.
+    !byte %...##...
+    !byte %..####..
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %...###..
+    !byte %...#.#..
+    !byte %...#####
+    !byte %....##.#
+    !byte %....####
+    !byte %....####
+    !byte %.....##.
+    !byte %....####
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %#.......
+    !byte %#.......
+    !byte %........
+    !byte %........
+
+    !byte %.....###
+    !byte %.....#.#
+    !byte %.....###
+    !byte %......##
+    !byte %......##
+    !byte %......##
+    !byte %.......#
+    !byte %......##
+    !byte %........
+    !byte %........
+    !byte %##......
+    !byte %.#......
+    !byte %###.....
+    !byte %###.....
+    !byte %#.......
+    !byte %##......
+
+    !byte %.......#
+    !byte %.......#
+    !byte %.......#
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %##......
+    !byte %.#......
+    !byte %####....
+    !byte %##.#....
+    !byte %#####...
+    !byte %#####...
+    !byte %.##.....
+    !byte %####....
+
+    !byte %.######.
+    !byte %.######.
+    !byte %####.###
+    !byte %#####.##
+    !byte %..####..
+    !byte %.###.##.
+    !byte %.##.###.
+    !byte %.###.###
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %...##.##
+    !byte %...##.##
+    !byte %...##.##
+    !byte %...###.#
+    !byte %....####
+    !byte %.....##.
+    !byte %.....##.
+    !byte %.....###
+    !byte %#.......
+    !byte %#.......
+    !byte %#.......
+    !byte %#.......
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %.....###
+    !byte %.....###
+    !byte %....####
+    !byte %....####
+    !byte %......##
+    !byte %.....###
+    !byte %.....##.
+    !byte %.....###
+    !byte %###.....
+    !byte %###.....
+    !byte %.###....
+    !byte %#.##....
+    !byte %##......
+    !byte %.##.....
+    !byte %###.....
+    !byte %.###....
+
+    !byte %.......#
+    !byte %......##
+    !byte %.....###
+    !byte %.....##.
+    !byte %........
+    !byte %.......#
+    !byte %......##
+    !byte %......##
+    !byte %#####...
+    !byte %######..
+    !byte %#######.
+    !byte %####.##.
+    !byte %#####...
+    !byte %##.##.#.
+    !byte %....###.
+    !byte %#....#..
+
+    !byte %....##..
+    !byte %...#.##.
+    !byte %..#.##.#
+    !byte %.#..##..
+    !byte %#...##..
+    !byte %#...##..
+    !byte %.#..##..
+    !byte %..#.##.#
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %#.......
+    !byte %.#......
+    !byte %.#......
+    !byte %#.......
+    !byte %........
+
+    !byte %......##
+    !byte %......##
+    !byte %.....#.#
+    !byte %.....###
+    !byte %....#.##
+    !byte %....#.##
+    !byte %.....###
+    !byte %.....#.#
+    !byte %........
+    !byte %........
+    !byte %#.......
+    !byte %#.......
+    !byte %.#......
+    !byte %.#......
+    !byte %#.......
+    !byte %#.......
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %##......
+    !byte %##......
+    !byte %##......
+    !byte %##......
+    !byte %#.......
+    !byte %#.......
+    !byte %##......
+    !byte %##......
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %.......#
+    !byte %.......#
+    !byte %........
+    !byte %........
+    !byte %..##....
+    !byte %.##.#...
+    !byte %#.##.#..
+    !byte %#.##.#..
+    !byte %..##..#.
+    !byte %..##..#.
+    !byte %#.##.#..
+    !byte %#.##.#..
+
+    !byte %...#.##.
+    !byte %....##..
+    !byte %..##.###
+    !byte %.#..##..
+    !byte %.#######
+    !byte %.#######
+    !byte %..#.....
+    !byte %...#.###
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %###.....
+    !byte %###.....
+    !byte %.#......
+    !byte %........
+
+    !byte %......##
+    !byte %......##
+    !byte %....###.
+    !byte %......##
+    !byte %..######
+    !byte %..######
+    !byte %...#....
+    !byte %.....###
+    !byte %........
+    !byte %........
+    !byte %##......
+    !byte %..#.....
+    !byte %###.....
+    !byte %####....
+    !byte %..#.....
+    !byte %.#......
+
+    !byte %........
+    !byte %........
+    !byte %.......#
+    !byte %.....#..
+    !byte %....####
+    !byte %....####
+    !byte %........
+    !byte %......##
+    !byte %##......
+    !byte %##......
+    !byte %##.#....
+    !byte %##..#...
+    !byte %######..
+    !byte %#####...
+    !byte %....#...
+    !byte %#.##....
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %.......#
+    !byte %......##
+    !byte %.......#
+    !byte %.......#
+    !byte %........
+    !byte %.##.#...
+    !byte %..##....
+    !byte %#.###...
+    !byte %..##..#.
+    !byte %########
+    !byte %########
+    !byte %........
+    !byte %##.###..
+
+    !byte %.##....#
+    !byte %#.##..#.
+    !byte %#.##..##
+    !byte %.##....#
+    !byte %....##..
+    !byte %########
+    !byte %.#.#..#.
+    !byte %...#..#.
+    !byte %#.......
+    !byte %.#......
+    !byte %##......
+    !byte %#.......
+    !byte %........
+    !byte %##......
+    !byte %#.......
+    !byte %........
+
+    !byte %...##...
+    !byte %..#..#..
+    !byte %..####..
+    !byte %...##...
+    !byte %......##
+    !byte %..######
+    !byte %...#.#..
+    !byte %.....#..
+    !byte %.##.....
+    !byte %##.#....
+    !byte %##.#....
+    !byte %.##.....
+    !byte %........
+    !byte %####....
+    !byte %#.#.....
+    !byte %#.......
+
+    !byte %.....##.
+    !byte %....##.#
+    !byte %....##.#
+    !byte %.....##.
+    !byte %........
+    !byte %....####
+    !byte %.....#.#
+    !byte %.......#
+    !byte %...##...
+    !byte %..####..
+    !byte %..#..#..
+    !byte %...##...
+    !byte %##......
+    !byte %######..
+    !byte %..#.#...
+    !byte %..#.....
+
+    !byte %.......#
+    !byte %......##
+    !byte %......#.
+    !byte %.......#
+    !byte %........
+    !byte %......##
+    !byte %.......#
+    !byte %........
+    !byte %#....##.
+    !byte %##..#.##
+    !byte %.#..#.##
+    !byte %#....##.
+    !byte %..##....
+    !byte %########
+    !byte %.#..#.#.
+    !byte %.#..#...
+
+    !byte %...#..#.
+    !byte %...####.
+    !byte %....##..
+    !byte %....##..
+    !byte %....##..
+    !byte %....##..
+    !byte %...####.
+    !byte %..######
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %.....#..
+    !byte %.....###
+    !byte %......##
+    !byte %......##
+    !byte %.....###
+    !byte %....####
+    !byte %........
+    !byte %........
+    !byte %#.......
+    !byte %#.......
+    !byte %........
+    !byte %........
+    !byte %#.......
+    !byte %##......
+    !byte %........
+    !byte %........
+
+    !byte %.......#
+    !byte %.......#
+    !byte %.......#
+    !byte %......##
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %..#.....
+    !byte %###.....
+    !byte %###.....
+    !byte %####....
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %.#..#...
+    !byte %.####...
+    !byte %..##....
+    !byte %..##....
+    !byte %.####...
+    !byte %######..
+    !byte %........
+    !byte %........
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %..######
+    !byte %..#.....
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %####....
+    !byte %.###....
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %....####
+    !byte %....#...
+    !byte %....####
+    !byte %....#...
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %######..
+    !byte %...###..
+    !byte %######..
+    !byte %..#..#..
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %......##
+    !byte %......#.
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %########
+    !byte %.....###
+
+    !byte %........
+    !byte %........
+    !byte %########
+    !byte %#......#
+    !byte %########
+    !byte %#.....#.
+    !byte %#######.
+    !byte %########
+    !byte %........
+    !byte %........
+    !byte %##......
+    !byte %##......
+    !byte %##......
+    !byte %.#......
+    !byte %.#......
+    !byte %##......
+
+    !byte %..######
+    !byte %..#.....
+    !byte %..######
+    !byte %..######
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %####....
+    !byte %#..#....
+    !byte %#..#....
+    !byte %####....
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %....####
+    !byte %....####
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %###..#..
+    !byte %######..
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %......##
+    !byte %......#.
+    !byte %......##
+    !byte %......##
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %########
+    !byte %....#..#
+    !byte %#####..#
+    !byte %########
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %........
+    !byte %....#...
+    !byte %...#.#..
+    !byte %..#.#.#.
+    !byte %.#.#.#.#
+    !byte %.#..#.#.
+    !byte %#....#..
+    !byte %#.......
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %##......
+
+    !byte %..#.#.#.
+    !byte %...#.#.#
+    !byte %..#.#.#.
+    !byte %...#.#.#
+    !byte %..#.....
+    !byte %..#.....
+    !byte %..#.....
+    !byte %..#.....
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %...##...
+
+    !byte %........
+    !byte %...#....
+    !byte %..#.#...
+    !byte %.#.#.#..
+    !byte %#.#.#.#.
+    !byte %.#.#...#
+    !byte %..#....#
+    !byte %.......#
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %....##..
+
+    !byte %...#.#.#
+    !byte %..#.#.#.
+    !byte %...#.#.#
+    !byte %..#.#.#.
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %.#......
+    !byte %#.......
+    !byte %.#......
+    !byte %#.......
+    !byte %.#......
+    !byte %.#......
+    !byte %.#......
+    !byte %.#....##
+
+    !byte %#.......
+    !byte %.#.....#
+    !byte %.#######
+    !byte %..######
+    !byte %...#####
+    !byte %....####
+    !byte %....#.#.
+    !byte %...#..#.
+    !byte %##......
+    !byte %........
+    !byte %#.......
+    !byte %##......
+    !byte %#.......
+    !byte %........
+    !byte %#.......
+    !byte %.#......
+
+    !byte %..#.....
+    !byte %...#....
+    !byte %...#####
+    !byte %....####
+    !byte %.....###
+    !byte %......##
+    !byte %......#.
+    !byte %.....#..
+    !byte %...##...
+    !byte %..#.....
+    !byte %####....
+    !byte %#####...
+    !byte %####....
+    !byte %###.....
+    !byte %#..#....
+    !byte %#...#...
+
+    !byte %......#.
+    !byte %......#.
+    !byte %......##
+    !byte %......##
+    !byte %.......#
+    !byte %........
+    !byte %........
+    !byte %.......#
+    !byte %....##..
+    !byte %...#....
+    !byte %#####...
+    !byte %######..
+    !byte %#####...
+    !byte %####....
+    !byte %#.#.#...
+    !byte %..#..#..
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %#.....##
+    !byte %#....#..
+    !byte %#######.
+    !byte %########
+    !byte %.######.
+    !byte %..####..
+    !byte %..#.#.#.
+    !byte %.#..#..#
+
+    !byte %.######.
+    !byte %#..##..#
+    !byte %########
+    !byte %##.##.##
+    !byte %###..###
+    !byte %.######.
+    !byte %..#..#..
+    !byte %..#..#..
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %........
+    !byte %....####
+    !byte %...#..##
+    !byte %...#####
+    !byte %...##.##
+    !byte %...###..
+    !byte %....####
+    !byte %....#...
+    !byte %........
+    !byte %##......
+    !byte %..#.....
+    !byte %###.....
+    !byte %.##.....
+    !byte %###.....
+    !byte %##......
+    !byte %.#......
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %.....###
+    !byte %....#..#
+    !byte %....####
+    !byte %....##.#
+    !byte %....###.
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %###.....
+    !byte %#..#....
+    !byte %####....
+    !byte %#.##....
+    !byte %.###....
+
+    !byte %........
+    !byte %.......#
+    !byte %......#.
+    !byte %......##
+    !byte %......##
+    !byte %......##
+    !byte %.......#
+    !byte %.......#
+    !byte %........
+    !byte %#####...
+    !byte %.##..#..
+    !byte %######..
+    !byte %.##.##..
+    !byte %#..###..
+    !byte %#####...
+    !byte %....#...
+
+    !byte %..#..#..
+    !byte %.#....#.
+    !byte %.#....#.
+    !byte %.#....#.
+    !byte %#......#
+    !byte %#......#
+    !byte %##....##
+    !byte %##....##
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %...#....
+    !byte %...#....
+    !byte %..#.....
+    !byte %..#.....
+    !byte %.#......
+    !byte %.#......
+    !byte %.##.....
+    !byte %.##.....
+    !byte %..#.....
+    !byte %..#.....
+    !byte %...#....
+    !byte %...#....
+    !byte %....#...
+    !byte %...##...
+    !byte %...##...
+    !byte %........
+
+    !byte %.....###
+    !byte %....#...
+    !byte %...#....
+    !byte %..#.....
+    !byte %.#......
+    !byte %#.......
+    !byte %##......
+    !byte %##......
+    !byte %###.....
+    !byte %...#....
+    !byte %....#...
+    !byte %.....#..
+    !byte %......#.
+    !byte %.......#
+    !byte %......##
+    !byte %......##
+
+    !byte %......#.
+    !byte %......#.
+    !byte %.....#..
+    !byte %.....#..
+    !byte %....#...
+    !byte %....##..
+    !byte %....##..
+    !byte %........
+    !byte %.....#..
+    !byte %.....#..
+    !byte %......#.
+    !byte %......#.
+    !byte %.......#
+    !byte %.......#
+    !byte %......##
+    !byte %......##
+
+    !byte %.....##.
+    !byte %....##..
+    !byte %...##...
+    !byte %..###...
+    !byte %.###.#..
+    !byte %##..#.#.
+    !byte %#....#.#
+    !byte %......##
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %.#......
+    !byte %###.....
+    !byte %###.....
+
+    !byte %.......#
+    !byte %......##
+    !byte %.....##.
+    !byte %....###.
+    !byte %...###.#
+    !byte %..##..#.
+    !byte %..#....#
+    !byte %........
+    !byte %#.......
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %#.#.....
+    !byte %.###....
+    !byte %####....
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %.......#
+    !byte %......##
+    !byte %.....##.
+    !byte %.....#..
+    !byte %........
+    !byte %..##....
+    !byte %.##.....
+    !byte %##......
+    !byte %##......
+    !byte %#.#.....
+    !byte %.#.#.#..
+    !byte %..#.###.
+    !byte %...####.
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %.......#
+    !byte %.......#
+    !byte %........
+    !byte %....##..
+    !byte %...##...
+    !byte %..##....
+    !byte %.##.....
+    !byte %####....
+    !byte %#.#.#.#.
+    !byte %...#.###
+    !byte %....####
+
+    !byte %.....###
+    !byte %##..####
+    !byte %##.###..
+    !byte %########
+    !byte %###...#.
+    !byte %##..#...
+    !byte %##.#.#.#
+    !byte %....#...
+    !byte %..#.....
+    !byte %.##.....
+    !byte %..#.....
+    !byte %###.....
+    !byte %........
+    !byte %#.......
+    !byte %.#......
+    !byte %#.......
+
+    !byte %.##....#
+    !byte %.##...##
+    !byte %.##..##.
+    !byte %.#######
+    !byte %.####...
+    !byte %.##...#.
+    !byte %.##..#.#
+    !byte %......#.
+    !byte %#..#....
+    !byte %#.##....
+    !byte %...#....
+    !byte %####....
+    !byte %#.......
+    !byte %..#.....
+    !byte %.#.#....
+    !byte %..#.....
+
+    !byte %..##....
+    !byte %..##....
+    !byte %..##....
+    !byte %..######
+    !byte %..#####.
+    !byte %..##....
+    !byte %..##....
+    !byte %........
+    !byte %..##..#.
+    !byte %.###.##.
+    !byte %##....#.
+    !byte %#######.
+    !byte %...#....
+    !byte %.#...#..
+    !byte %#.#.#.#.
+    !byte %.#...#..
+
+    !byte %........
+    !byte %.....##.
+    !byte %.....##.
+    !byte %.....###
+    !byte %.....###
+    !byte %.....##.
+    !byte %.....##.
+    !byte %........
+    !byte %...##..#
+    !byte %..###.##
+    !byte %.#.....#
+    !byte %########
+    !byte %#...#...
+    !byte %..#...#.
+    !byte %.#.#.#.#
+    !byte %..#...#.
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %..#...#.
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %#...#...
+    !byte %...#...#
+    !byte %........
+    !byte %........
+    !byte %..#...#.
+    !byte %........
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %#...#...
+    !byte %........
+    !byte %........
+    !byte %..#...#.
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %.#...#..
+    !byte %..#...#.
+
+    !byte %........
+    !byte %...#...#
+    !byte %#..##..#
+    !byte %.##..##.
+    !byte %##..##..
+    !byte %.##..##.
+    !byte %........
+    !byte %##..##..
+    !byte %.###.###
+    !byte %##.###.#
+    !byte %.###.###
+    !byte %.#...#..
+    !byte %###.###.
+    !byte %.#...#..
+    !byte %#..##..#
+    !byte %.#...#..
+
+    !byte %...#...#
+    !byte %..#...#.
+    !byte %#...#...
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %#...#...
+    !byte %.#...#..
+    !byte %.#...#..
+    !byte %........
+    !byte %........
+    !byte %.#...#..
+    !byte %........
+    !byte %..#...#.
+    !byte %.#...#..
+    !byte %#...#...
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %...#...#
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %..#...#.
+    !byte %........
+    !byte %........
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %#...#...
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %..#...#.
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %...#...#
+    !byte %#..##..#
+    !byte %.##..##.
+    !byte %........
+    !byte %........
+    !byte %..#...#.
+    !byte %........
+    !byte %.###.###
+    !byte %##.###.#
+    !byte %.###.###
+    !byte %.#...#..
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %..#...#.
+    !byte %...#...#
+    !byte %..#...#.
+    !byte %#...#...
+    !byte %###.###.
+    !byte %........
+    !byte %........
+    !byte %.#...#..
+    !byte %..#...#.
+    !byte %.#...#..
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %........
+    !byte %......##
+    !byte %....####
+    !byte %...#####
+    !byte %..##...#
+    !byte %....###.
+    !byte %.##.####
+    !byte %#.#.###.
+    !byte %........
+    !byte %##......
+    !byte %####....
+    !byte %#####...
+    !byte %#...##..
+    !byte %.###....
+    !byte %####.##.
+    !byte %.###.#.#
+
+    !byte %#.##...#
+    !byte %#..#####
+    !byte %#..##.##
+    !byte %#...##..
+    !byte %.#...###
+    !byte %......#.
+    !byte %....###.
+    !byte %........
+    !byte %#...##.#
+    !byte %#####..#
+    !byte %##.##..#
+    !byte %..##...#
+    !byte %###...#.
+    !byte %.#......
+    !byte %.###....
+    !byte %........
+
+    !byte %########
+    !byte %.###..#.
+    !byte %#...#.#.
+    !byte %#.#.#.#.
+    !byte %.#..#.#.
+    !byte %...#..#.
+    !byte %..#...#.
+    !byte %..#.#.#.
+    !byte %########
+    !byte %.#..###.
+    !byte %.#.#...#
+    !byte %.#.#.#.#
+    !byte %.#.#..#.
+    !byte %.#..#...
+    !byte %.#...#..
+    !byte %.#.#.#..
+
+    !byte %..#.#.#.
+    !byte %..#.#.#.
+    !byte %..#.#.#.
+    !byte %..#.#.#.
+    !byte %..#.#.#.
+    !byte %..#.#.#.
+    !byte %..#.#.#.
+    !byte %########
+    !byte %.#.#.#..
+    !byte %.#.#.#..
+    !byte %.#.#.#..
+    !byte %.#.#.#..
+    !byte %.#.#.#..
+    !byte %.#.#.#..
+    !byte %.#.#.#..
+    !byte %########
+
+    !byte %........
+    !byte %........
+    !byte %....#...
+    !byte %.......#
+    !byte %........
+    !byte %..#.....
+    !byte %......#.
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %#.......
+    !byte %........
+    !byte %.....#..
+    !byte %..#...#.
+
+    !byte %.....###
+    !byte %...###.#
+    !byte %#..#.###
+    !byte %.##..#..
+    !byte %##..###.
+    !byte %.##..#..
+    !byte %....#..#
+    !byte %##...#..
+    !byte %...#.#..
+    !byte %..#.....
+    !byte %#.......
+    !byte %.....#..
+    !byte %........
+    !byte %......#.
+    !byte %#....#..
+    !byte %.#..#...
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %......#.
+    !byte %...#....
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %#.......
+
+    !byte %..#.....
+    !byte %........
+    !byte %......#.
+    !byte %........
+    !byte %.....###
+    !byte %...###.#
+    !byte %#..#.###
+    !byte %.##..#..
+    !byte %........
+    !byte %........
+    !byte %.....#..
+    !byte %..#...#.
+    !byte %...#.#..
+    !byte %..#.....
+    !byte %#.......
+    !byte %###.....
+
+    !byte %...#..##
+    !byte %...###.#
+    !byte %....####
+    !byte %.....##.
+    !byte %.....#.#
+    !byte %......#.
+    !byte %.....###
+    !byte %....####
+    !byte %##..#...
+    !byte %#.###...
+    !byte %####....
+    !byte %.##.....
+    !byte %#.#.....
+    !byte %.#......
+    !byte %###.....
+    !byte %####....
+
+    !byte %...#####
+    !byte %..##..##
+    !byte %.##...##
+    !byte %.#...##.
+    !byte %..#.##..
+    !byte %.....##.
+    !byte %......#.
+    !byte %....###.
+    !byte %#####...
+    !byte %##..##..
+    !byte %##...##.
+    !byte %.##...#.
+    !byte %..##.#..
+    !byte %.##.....
+    !byte %.#......
+    !byte %.###....
+
+    !byte %....#.##
+    !byte %....##.#
+    !byte %....####
+    !byte %.....##.
+    !byte %.....#.#
+    !byte %......#.
+    !byte %......##
+    !byte %...#####
+    !byte %##.#....
+    !byte %#.##....
+    !byte %####....
+    !byte %.##.....
+    !byte %#.#.....
+    !byte %.#......
+    !byte %##......
+    !byte %#####...
+
+    !byte %.#######
+    !byte %###..###
+    !byte %#.....##
+    !byte %##...###
+    !byte %.....##.
+    !byte %....##..
+    !byte %....#...
+    !byte %..###...
+    !byte %#######.
+    !byte %###..###
+    !byte %##.....#
+    !byte %###...##
+    !byte %.##.....
+    !byte %..##....
+    !byte %...#....
+    !byte %...###..
+
+    !byte %...###..
+    !byte %.....##.
+    !byte %....##..
+    !byte %.....##.
+    !byte %.##...##
+    !byte %..#..###
+    !byte %.##..###
+    !byte %..##.###
+    !byte %..###...
+    !byte %.##.....
+    !byte %..##....
+    !byte %.##.....
+    !byte %##...##.
+    !byte %###..#..
+    !byte %###..##.
+    !byte %###.##..
+
+    !byte %...#####
+    !byte %....####
+    !byte %......#.
+    !byte %.....#.#
+    !byte %.....##.
+    !byte %....####
+    !byte %....##.#
+    !byte %....#.##
+    !byte %#####...
+    !byte %####....
+    !byte %.#......
+    !byte %#.#.....
+    !byte %.##.....
+    !byte %####....
+    !byte %#.##....
+    !byte %##.#....
+
+    !byte %.###....
+    !byte %...##...
+    !byte %....##..
+    !byte %.....##.
+    !byte %.##...##
+    !byte %..#..###
+    !byte %.##..###
+    !byte %..##.###
+    !byte %....###.
+    !byte %...##...
+    !byte %..##....
+    !byte %.##.....
+    !byte %##...##.
+    !byte %###..#..
+    !byte %###..##.
+    !byte %###.##..
+
+    !byte %...#####
+    !byte %....####
+    !byte %......#.
+    !byte %.....#.#
+    !byte %...#.##.
+    !byte %....####
+    !byte %....##.#
+    !byte %.....###
+    !byte %#####...
+    !byte %####....
+    !byte %.#......
+    !byte %#.#.....
+    !byte %.##.#...
+    !byte %####....
+    !byte %#.##....
+    !byte %###.....
+
+    !byte %........
+    !byte %........
+    !byte %..######
+    !byte %.##...##
+    !byte %###.#.##
+    !byte %###.#...
+    !byte %....####
+    !byte %.....###
+    !byte %........
+    !byte %........
+    !byte %######..
+    !byte %##...##.
+    !byte %##.#.###
+    !byte %...#.###
+    !byte %####....
+    !byte %###.....
+
+    !byte %....##..
+    !byte %....#.##
+    !byte %...##.##
+    !byte %...###..
+    !byte %..######
+    !byte %..######
+    !byte %..######
+    !byte %........
+    !byte %..##....
+    !byte %##.#....
+    !byte %##.##...
+    !byte %..###...
+    !byte %######..
+    !byte %######..
+    !byte %######..
+    !byte %........
+
+    !byte %..####..
+    !byte %.#######
+    !byte %.#######
+    !byte %.##...##
+    !byte %....#...
+    !byte %....#...
+    !byte %....####
+    !byte %.....###
+    !byte %........
+    !byte %##......
+    !byte %#####...
+    !byte %##...##.
+    !byte %.#.#.###
+    !byte %...#.###
+    !byte %####.###
+    !byte %###.....
+
+    !byte %....##..
+    !byte %....#.##
+    !byte %...##.##
+    !byte %...###..
+    !byte %..######
+    !byte %..######
+    !byte %..######
+    !byte %........
+    !byte %..##....
+    !byte %##.#....
+    !byte %##.##...
+    !byte %..###...
+    !byte %######..
+    !byte %######..
+    !byte %######..
+    !byte %........
+
+    !byte %........
+    !byte %........
+    !byte %..######
+    !byte %.##...##
+    !byte %###.#...
+    !byte %###.#...
+    !byte %....####
+    !byte %.....###
+    !byte %........
+    !byte %........
+    !byte %######..
+    !byte %##...##.
+    !byte %...#.###
+    !byte %...#.###
+    !byte %####....
+    !byte %###.....
+
+    !byte %....##..
+    !byte %....#.##
+    !byte %...##.##
+    !byte %...###..
+    !byte %..######
+    !byte %..######
+    !byte %..######
+    !byte %........
+    !byte %..##....
+    !byte %##.#....
+    !byte %##.##...
+    !byte %..###...
+    !byte %######..
+    !byte %######..
+    !byte %######..
+    !byte %........
+
+    !byte %........
+    !byte %......##
+    !byte %...#####
+    !byte %.##...##
+    !byte %###.#...
+    !byte %###.#...
+    !byte %###.####
+    !byte %.....###
+    !byte %..####..
+    !byte %#######.
+    !byte %#######.
+    !byte %##...##.
+    !byte %...#....
+    !byte %...#....
+    !byte %####....
+    !byte %###.....
+
+    !byte %....##..
+    !byte %....#.##
+    !byte %...##.##
+    !byte %...###..
+    !byte %..######
+    !byte %..######
+    !byte %..######
+    !byte %........
+    !byte %..##....
+    !byte %##.#....
+    !byte %##.##...
+    !byte %..###...
+    !byte %######..
+    !byte %######..
+    !byte %######..
+    !byte %........
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %......##
+    !byte %....##..
+    !byte %...#....
+    !byte %..#.....
+    !byte %.#......
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %##......
+    !byte %..##....
+    !byte %....#...
+    !byte %.....#..
+    !byte %......#.
+
+    !byte %#.......
+    !byte %.#......
+    !byte %..#.....
+    !byte %##.#....
+    !byte %..#.##..
+    !byte %.#..#.##
+    !byte %...#..#.
+    !byte %......#.
+    !byte %.......#
+    !byte %......#.
+    !byte %.....#..
+    !byte %....#.##
+    !byte %..##.#..
+    !byte %##.#..#.
+    !byte %.#..#...
+    !byte %.#......
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %......##
+    !byte %....##..
+    !byte %...#....
+    !byte %..#.....
+    !byte %.#......
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %##......
+    !byte %..##....
+    !byte %....#...
+    !byte %.....#..
+    !byte %......#.
+
+    !byte %#####...
+    !byte %.#.#.###
+    !byte %..#.#.##
+    !byte %...#..#.
+    !byte %....##..
+    !byte %......##
+    !byte %........
+    !byte %........
+    !byte %...#####
+    !byte %###.#.#.
+    !byte %##.#.#..
+    !byte %.#..#...
+    !byte %..##....
+    !byte %##......
+    !byte %........
+    !byte %........
+
+    !byte %.....#..
+    !byte %.....#..
+    !byte %...#..#.
+    !byte %.#..#.##
+    !byte %..#.##..
+    !byte %#..#..##
+    !byte %#.#..###
+    !byte %.#...##.
+    !byte %..#.....
+    !byte %..#.....
+    !byte %.#..#...
+    !byte %##.#..#.
+    !byte %..##.#..
+    !byte %##..#..#
+    !byte %###..#.#
+    !byte %.##...#.
+
+    !byte %#....##.
+    !byte %.#...###
+    !byte %..#...##
+    !byte %...#....
+    !byte %....##..
+    !byte %......##
+    !byte %........
+    !byte %........
+    !byte %.##....#
+    !byte %###...#.
+    !byte %##...#..
+    !byte %....#...
+    !byte %..##....
+    !byte %##......
+    !byte %........
+    !byte %........
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %......##
+    !byte %....##..
+    !byte %...#..#.
+    !byte %..#.#.#.
+    !byte %.#.#####
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %##......
+    !byte %..##....
+    !byte %.#..#...
+    !byte %.#.#.#..
+    !byte %#####.#.
+
+    !byte %####.##.
+    !byte %.#...###
+    !byte %..#...##
+    !byte %...#....
+    !byte %....##..
+    !byte %......##
+    !byte %........
+    !byte %........
+    !byte %.#######
+    !byte %###...#.
+    !byte %##...#..
+    !byte %....#...
+    !byte %..##....
+    !byte %##......
+    !byte %........
+    !byte %........
+
+    !byte %......##
+    !byte %########
+    !byte %#.#.#.##
+    !byte %########
+    !byte %...#..##
+    !byte %..#.#..#
+    !byte %...#.#.#
+    !byte %....#.##
+    !byte %##......
+    !byte %########
+    !byte %##.#.#.#
+    !byte %########
+    !byte %##..#...
+    !byte %#..#.#..
+    !byte %#.#.#...
+    !byte %##.#....
+
+    !byte %.....#.#
+    !byte %......##
+    !byte %......##
+    !byte %.....#.#
+    !byte %....#.#.
+    !byte %...#.#..
+    !byte %..#.#...
+    !byte %...#....
+    !byte %#.#.....
+    !byte %##......
+    !byte %##......
+    !byte %#.#.....
+    !byte %.#.#....
+    !byte %..#.#...
+    !byte %...#.#..
+    !byte %....#...
+
+    !byte %........
+    !byte %........
+    !byte %......##
+    !byte %########
+    !byte %#.#.#.##
+    !byte %########
+    !byte %...#..##
+    !byte %..#.#..#
+    !byte %........
+    !byte %........
+    !byte %##......
+    !byte %########
+    !byte %##.#.#.#
+    !byte %########
+    !byte %##..#...
+    !byte %#..#.#..
+
+    !byte %...#.#.#
+    !byte %....#.##
+    !byte %.....#.#
+    !byte %......##
+    !byte %..#...##
+    !byte %.#...#.#
+    !byte %....#.#.
+    !byte %...#.#..
+    !byte %#.#.#...
+    !byte %##.#....
+    !byte %#.#.....
+    !byte %##......
+    !byte %##......
+    !byte %#.#.#...
+    !byte %.#.#.#..
+    !byte %..#.#...
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %......##
+    !byte %########
+    !byte %#.#.#.##
+    !byte %########
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %.....###
+    !byte %######.#
+    !byte %##.#.###
+    !byte %#####...
+    !byte %##......
+
+    !byte %......##
+    !byte %.......#
+    !byte %...#.#.#
+    !byte %.#..#.##
+    !byte %.....#.#
+    !byte %..#...##
+    !byte %....#.##
+    !byte %..#..#.#
+    !byte %##......
+    !byte %#.......
+    !byte %#.#..#..
+    !byte %##.#..#.
+    !byte %#.#..#..
+    !byte %##....#.
+    !byte %##.#....
+    !byte %#.#.#...
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %......##
+    !byte %...#####
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %##...###
+    !byte %######.#
+
+    !byte %##..#.##
+    !byte %#.#..###
+    !byte %###...##
+    !byte %.......#
+    !byte %..#..#.#
+    !byte %.#..#.##
+    !byte %.....#.#
+    !byte %.#.#..##
+    !byte %##.#.###
+    !byte %#####...
+    !byte %##......
+    !byte %#.....#.
+    !byte %#.#..#.#
+    !byte %##.#....
+    !byte %#.#...#.
+    !byte %##...#..
+
+    !byte %.##....#
+    !byte %#..#####
+    !byte %#..#####
+    !byte %.##....#
+    !byte %.....###
+    !byte %########
+    !byte %#.......
+    !byte %#.#.#.#.
+    !byte %#....##.
+    !byte %#####..#
+    !byte %#####..#
+    !byte %#....##.
+    !byte %###.....
+    !byte %########
+    !byte %.......#
+    !byte %#.#.#..#
+
+    !byte %#..#####
+    !byte %#.##.#.#
+    !byte %#..#....
+    !byte %#.##.#.#
+    !byte %#..#####
+    !byte %#.#.#.#.
+    !byte %#.......
+    !byte %########
+    !byte %######.#
+    !byte %.#.##..#
+    !byte %....##.#
+    !byte %.#.##..#
+    !byte %######.#
+    !byte %#.#.#..#
+    !byte %.......#
+    !byte %########
+
+    !byte %...###.#
+    !byte %..#...#.
+    !byte %..#...#.
+    !byte %...###.#
+    !byte %......##
+    !byte %########
+    !byte %##.#.#.#
+    !byte %#.######
+    !byte %#.###...
+    !byte %###..#..
+    !byte %###..#..
+    !byte %#.###...
+    !byte %##......
+    !byte %########
+    !byte %.#.#.#.#
+    !byte %########
+
+    !byte %###.#.#.
+    !byte %#.##....
+    !byte %###..#.#
+    !byte %#.##....
+    !byte %###.#.#.
+    !byte %#.######
+    !byte %##.#.#.#
+    !byte %########
+    !byte %#.#.##.#
+    !byte %.....###
+    !byte %.#..##.#
+    !byte %.....###
+    !byte %#.#.##.#
+    !byte %########
+    !byte %.#.#.#.#
+    !byte %########
+
+    !byte %.....###
+    !byte %....#...
+    !byte %....#...
+    !byte %.....###
+    !byte %......##
+    !byte %########
+    !byte %########
+    !byte %##.#.#.#
+    !byte %###.....
+    !byte %...#....
+    !byte %...#....
+    !byte %###.....
+    !byte %##......
+    !byte %########
+    !byte %########
+    !byte %.#.#.###
+
+    !byte %###.....
+    !byte %##..#.#.
+    !byte %###..###
+    !byte %##..#.#.
+    !byte %###.....
+    !byte %##.#.#.#
+    !byte %########
+    !byte %########
+    !byte %......##
+    !byte %#.#..###
+    !byte %####..##
+    !byte %..#..###
+    !byte %......##
+    !byte %.#.#.###
+    !byte %########
+    !byte %########
+
+    !byte %...###.#
+    !byte %..#.####
+    !byte %..#.####
+    !byte %...###.#
+    !byte %......##
+    !byte %########
+    !byte %#.#.#.#.
+    !byte %##......
+    !byte %#.###...
+    !byte %.#...#..
+    !byte %.#...#..
+    !byte %#.###...
+    !byte %##......
+    !byte %########
+    !byte %#.#.#.##
+    !byte %.......#
+
+    !byte %#..#.#.#
+    !byte %##..####
+    !byte %#..##...
+    !byte %##..####
+    !byte %#..#.#.#
+    !byte %##......
+    !byte %#.#.#.#.
+    !byte %########
+    !byte %.#.#..##
+    !byte %#####..#
+    !byte %...#..##
+    !byte %#####..#
+    !byte %.#.#..##
+    !byte %.......#
+    !byte %#.#.#.##
+    !byte %########
+
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %......##
+    !byte %....##..
+    !byte %..##...#
+    !byte %##...##.
+    !byte %#..##..#
+    !byte %....###.
+    !byte %..##..##
+    !byte %##...#.#
+    !byte %...##..#
+    !byte %.##..#.#
+    !byte %#..###.#
+    !byte %.#####.#
+    !byte %#..###.#
+
+    !byte %##...##.
+    !byte %####...#
+    !byte %.#####..
+    !byte %...#####
+    !byte %.....###
+    !byte %.......#
+    !byte %........
+    !byte %........
+    !byte %...###.#
+    !byte %#..###.#
+    !byte %.#####.#
+    !byte %...###.#
+    !byte %##.###.#
+    !byte %######.#
+    !byte %.#######
+    !byte %...####.
+
+    !byte %......##
+    !byte %.....###
+    !byte %.....##.
+    !byte %....###.
+    !byte %....##..
+    !byte %...###.#
+    !byte %...##..#
+    !byte %..###.#.
+    !byte %##......
+    !byte %.#......
+    !byte %..#.....
+    !byte %#.#.....
+    !byte %#..#....
+    !byte %.#.#....
+    !byte %.#..#...
+    !byte %..#.#...
+
+    !byte %..##..#.
+    !byte %.###.#..
+    !byte %.##..#..
+    !byte %########
+    !byte %########
+    !byte %########
+    !byte %.#......
+    !byte %.#######
+    !byte %..#..#..
+    !byte %...#.#..
+    !byte %...#..#.
+    !byte %###.#.#.
+    !byte %###.#..#
+    !byte %####.#.#
+    !byte %......##
+    !byte %#######.
+
+    !byte %..###...
+    !byte %#######.
+    !byte %#.######
+    !byte %#.###.##
+    !byte %#.###...
+    !byte %#.#####.
+    !byte %#.###..#
+    !byte %#.###...
+    !byte %........
+    !byte %........
+    !byte %#.......
+    !byte %###.....
+    !byte %#####...
+    !byte %..#####.
+    !byte %#...####
+    !byte %.##...##
+
+    !byte %#.###..#
+    !byte %#.#####.
+    !byte %#.###..#
+    !byte %#.#..##.
+    !byte %#..##...
+    !byte %#.#...##
+    !byte %##..##..
+    !byte %.###....
+    !byte %#..##..#
+    !byte %.##...##
+    !byte %#...##..
+    !byte %..##....
+    !byte %##......
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %.#######
+    !byte %#.......
+    !byte %#.#.####
+    !byte %#..#.###
+    !byte %.#.#.###
+    !byte %.#..#.#.
+    !byte %..#.#.#.
+    !byte %..#..#.#
+    !byte %#######.
+    !byte %......#.
+    !byte %########
+    !byte %########
+    !byte %########
+    !byte %..#..##.
+    !byte %..#.###.
+    !byte %.#..##..
+
+    !byte %...#.#.#
+    !byte %...#..#.
+    !byte %....#.#.
+    !byte %....#..#
+    !byte %.....#.#
+    !byte %.....#..
+    !byte %......#.
+    !byte %......##
+    !byte %.#.###..
+    !byte %#..##...
+    !byte %#.###...
+    !byte %..##....
+    !byte %.###....
+    !byte %.##.....
+    !byte %###.....
+    !byte %##......
+
+    !byte %#.#..#.#
+    !byte %#.......
+    !byte %##..#..#
+    !byte %...#..##
+    !byte %####....
+    !byte %.......#
+    !byte %.##.....
+    !byte %###.###.
+    !byte %###.##.#
+    !byte %.######.
+    !byte %..#.....
+    !byte %.#.####.
+    !byte %.##.#.##
+    !byte %#.#.##.#
+    !byte %###.##.#
+    !byte %.######.
+
+    !byte %..#.#..#
+    !byte %...#....
+    !byte %##..#..#
+    !byte %........
+    !byte %####....
+    !byte %.#...###
+    !byte %#.#.#..#
+    !byte %........
+    !byte %#....#.#
+    !byte %..######
+    !byte %#.#.##.#
+    !byte %###.##.#
+    !byte %.######.
+    !byte %..#.#..#
+    !byte %.......#
+    !byte %##..#..#
+
+    !byte %........
+    !byte %####....
+    !byte %.....#..
+    !byte %#.#.#..#
+    !byte %......#.
+    !byte %#....#.#
+    !byte %..######
+    !byte %#.#.#..#
+    !byte %...#...#
+    !byte %..#.....
+    !byte %###.###.
+    !byte %########
+    !byte %#.#.#..#
+    !byte %......#.
+    !byte %..#.....
+    !byte %###.###.
+
+    !byte %########
+    !byte %#.#...#.
+    !byte %........
+    !byte %#.####.#
+    !byte %###.###.
+    !byte %.######.
+    !byte %##..#..#
+    !byte %..#.#.#.
+    !byte %####....
+    !byte %....#.##
+    !byte %..#.....
+    !byte %###.###.
+    !byte %########
+    !byte %###.#...
+    !byte %###.....
+    !byte %...#....
+
+    !byte %##.#....
+    !byte %####...#
+    !byte %.#..##..
+    !byte %.#.####.
+    !byte %.##.#.##
+    !byte %#.#.#..#
+    !byte %###.....
+    !byte %...##...
+    !byte %.##..#.#
+    !byte %..######
+    !byte %#.#.#...
+    !byte %##..#...
+    !byte %..#.....
+    !byte %###.###.
+    !byte %########
+    !byte %#.#.#..#
+
+    !byte %....#.#.
+    !byte %..#.....
+    !byte %###.###.
+    !byte %########
+    !byte %#.#.#..#
+    !byte %....#...
+    !byte %..#.....
+    !byte %###.###.
+    !byte %########
+    !byte %#..##...
+    !byte %.#..##..
+    !byte %#.###.#.
+    !byte %.######.
+    !byte %#.#.#..#
+    !byte %.....#..
+    !byte %#....#.#
+
+    !byte %..######
+    !byte %#.#.##.#
+    !byte %###.##.#
+    !byte %.######.
+    !byte %..#.#..#
+    !byte %....####
+    !byte %##..#..#
+    !byte %........
+    !byte %####....
+    !byte %#.####.#
+    !byte %.#..##..
+    !byte %.#.####.
+    !byte %.##.#.##
+    !byte %###.#.#.
+    !byte %...#####
+    !byte %....####
+
+    !byte %.....#.#
+    !byte %..#.#.#.
+    !byte %...#####
+    !byte %....####
+    !byte %....#..#
+    !byte %..#.#.#.
+    !byte %...#####
+    !byte %...##...
+    !byte %.....#.#
+    !byte %..#.#.#.
+    !byte %...#####
+    !byte %...##...
+    !byte %....#..#
+    !byte %..#.#.#.
+    !byte %...#....
+    !byte %##......
+
+    !byte %....#.#.
+    !byte %...#.##.
+    !byte %.......#
+    !byte %..###..#
+    !byte %.##..#.#
+    !byte %......##
+    !byte %########
+    !byte %#....###
+    !byte %..#.....
+    !byte %.##.#...
+    !byte %.#.#....
+    !byte %.##...#.
+    !byte %##..###.
+    !byte %##.#....
+    !byte %###.###.
+    !byte %####...#
+
+    !byte %.###.###
+    !byte %##...###
+    !byte %#...#.##
+    !byte %..##..#.
+    !byte %.##..#..
+    !byte %.#..#..#
+    !byte %...#..#.
+    !byte %..##.##.
+    !byte %####.#..
+    !byte %########
+    !byte %####...#
+    !byte %#.#.##..
+    !byte %#.#..##.
+    !byte %#.#...#.
+    !byte %#..#....
+    !byte %#..##...
+
+    !byte %........
+    !byte %.....#.#
+    !byte %......##
+    !byte %..##...#
+    !byte %...###.#
+    !byte %......##
+    !byte %..######
+    !byte %......##
+    !byte %........
+    !byte %..#.....
+    !byte %.#......
+    !byte %.###.#..
+    !byte %##..##..
+    !byte %##.#....
+    !byte %###.##..
+    !byte %####.#..
+
+    !byte %..######
+    !byte %.##..###
+    !byte %....#.##
+    !byte %..##..#.
+    !byte %..#..#..
+    !byte %....#.##
+    !byte %...##.#.
+    !byte %........
+    !byte %###.....
+    !byte %######..
+    !byte %####..#.
+    !byte %#.#.##..
+    !byte %#.#..#..
+    !byte %#..#....
+    !byte %##.##...
+    !byte %##......
+
+    !byte %........
+    !byte %........
+    !byte %......#.
+    !byte %....#..#
+    !byte %.....#.#
+    !byte %......##
+    !byte %...#####
+    !byte %.....###
+    !byte %........
+    !byte %........
+    !byte %..#.....
+    !byte %.##.....
+    !byte %##..#...
+    !byte %##.#....
+    !byte %###.....
+    !byte %#####...
+
+    !byte %...#####
+    !byte %...#.###
+    !byte %....####
+    !byte %...#..#.
+    !byte %.....#.#
+    !byte %....#.#.
+    !byte %........
+    !byte %........
+    !byte %###.....
+    !byte %#####...
+    !byte %####....
+    !byte %#.#.#...
+    !byte %#.#.....
+    !byte %#.##....
+    !byte %##......
+    !byte %........
+
+    !byte %........
+    !byte %.....#.#
+    !byte %......##
+    !byte %..##...#
+    !byte %...###.#
+    !byte %......##
+    !byte %..######
+    !byte %......##
+    !byte %........
+    !byte %..#.....
+    !byte %.#......
+    !byte %.###.#..
+    !byte %##..##..
+    !byte %##.#....
+    !byte %###.##..
+    !byte %####.#..
+
+    !byte %..######
+    !byte %.##..###
+    !byte %....#.##
+    !byte %..##..#.
+    !byte %..#..#..
+    !byte %....#.##
+    !byte %...##.#.
+    !byte %........
+    !byte %###.....
+    !byte %######..
+    !byte %####..#.
+    !byte %#.#.##..
+    !byte %#.#..#..
+    !byte %#..#....
+    !byte %##.##...
+    !byte %##......
+
+    !byte %........
+    !byte %....##..
+    !byte %......#.
+    !byte %.......#
+    !byte %.....###
+    !byte %.##.####
+    !byte %...##..#
+    !byte %....#.#.
+    !byte %........
+    !byte %..##....
+    !byte %.#......
+    !byte %#.......
+    !byte %###.....
+    !byte %####.##.
+    !byte %#..##...
+    !byte %.#.#....
+
+    !byte %#####..#
+    !byte %...####.
+    !byte %...###..
+    !byte %.#####..
+    !byte %#..##.##
+    !byte %....##..
+    !byte %.....###
+    !byte %.......#
+    !byte %#..#####
+    !byte %.####...
+    !byte %..###...
+    !byte %..#.###.
+    !byte %##.##..#
+    !byte %#.##....
+    !byte %###.....
+    !byte %#.......
+
+    !byte %........
+    !byte %........
+    !byte %....###.
+    !byte %.#.....#
+    !byte %..#..###
+    !byte %...#####
+    !byte %#...#..#
+    !byte %.####.#.
+    !byte %........
+    !byte %........
+    !byte %.###....
+    !byte %#.....#.
+    !byte %###..#..
+    !byte %#####...
+    !byte %#..#...#
+    !byte %.#.####.
+
+    !byte %...##..#
+    !byte %...####.
+    !byte %######..
+    !byte %...#.#..
+    !byte %...#####
+    !byte %....##..
+    !byte %.....###
+    !byte %.......#
+    !byte %#..##...
+    !byte %.####...
+    !byte %..######
+    !byte %..#.#...
+    !byte %##.##...
+    !byte %.###....
+    !byte %###.....
+    !byte %#.......
+
+    !byte %........
+    !byte %....##..
+    !byte %......#.
+    !byte %.......#
+    !byte %.....###
+    !byte %.#..####
+    !byte %..######
+    !byte %....###.
+    !byte %........
+    !byte %..##....
+    !byte %.#......
+    !byte %#.......
+    !byte %###.....
+    !byte %####..#.
+    !byte %######..
+    !byte %.###....
+
+    !byte %##.##..#
+    !byte %..#####.
+    !byte %...###..
+    !byte %.###.#..
+    !byte %#..##.##
+    !byte %....###.
+    !byte %.....###
+    !byte %.......#
+    !byte %#..##.##
+    !byte %.#####..
+    !byte %..###...
+    !byte %..#.###.
+    !byte %#####.##
+    !byte %..##....
+    !byte %###.....
+    !byte %#.......
+
+    !byte %.....#..
+    !byte %.....#..
+    !byte %......#.
+    !byte %.......#
+    !byte %.....###
+    !byte %....####
+    !byte %.#######
+    !byte %....#.#.
+    !byte %..#.....
+    !byte %..#.....
+    !byte %.#......
+    !byte %#.......
+    !byte %###.....
+    !byte %####....
+    !byte %#######.
+    !byte %.#.#...#
+
+    !byte %....#..#
+    !byte %.######.
+    !byte %#..###..
+    !byte %...#.#..
+    !byte %..###.##
+    !byte %.#..##.#
+    !byte %.#...###
+    !byte %.......#
+    !byte %#..##...
+    !byte %.######.
+    !byte %..###..#
+    !byte %..#.#...
+    !byte %##.###..
+    !byte %..##..#.
+    !byte %###...#.
+    !byte %#.......
+}

@@ -1,0 +1,5959 @@
+;
+; MINER2.bin ($4c00)
+;
+
+; constants
+charSPACE                   = $20
+willyPageRight              = $05
+willyPageLeft               = $06
+
+; memory locations
+levelDataOffset             = $70
+levelFeatureIndex           = $79
+currentLevel                = $80
+levelColours                = $81
+levelColours2               = $82
+switchTriggered             = $9f
+
+vduTextCursorXPosition      = $0318
+vduTextCursorYPosition      = $0319
+
+OSWRCH                      = $ffee
+OSBYTE                      = $fff4
+OSWORD                      = $fff7
+
+screenStartAddress          = $3280                             ; start of visible screen
+screenEndAddress            = $6000                             ; end of visible screen
+levelDefinitions            = $6c00                             ; start of level definitions
+
+miner4EntryPoint            = $619a                             ; See miner4.a
+lives                       = $67be                             ; See miner4.a
+fromMiner2                  = $7475                             ; See miner1.a
+eventVLow                   = $74a7                             ; See miner1.a
+eventVHigh                  = $74ac                             ; See miner1.a
+setModeString               = $74d4                             ; See miner1.a
+setModeStringEnd            = setModeString + 7                 ; See miner1.a
+whiteBackgroundString       = $74db                             ; See miner1.a
+whiteBackgroundStringEnd    = whiteBackgroundString + $1e       ; See miner1.a
+
+L2e03 = $2e03
+S2e18 = $2e18
+L2d69 = $2d69
+S2df7 = $2df7
+S2e8c = $2e8c
+drawRoomName = $2ef0
+L3000 = $3000
+playGame = $309a
+startGame = $6200
+S62e3 = $62e3
+drawAirBar = $6577
+addToScore = $673c
+updateAirAndCheckExit = $646d
+death = $67d6
+S68df = $68df
+L7e80 = $7e80
+
+* = $4c00
+
+!pseudopc $0d00 {
+    ; plenty of zeros
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+
+    ; the foot graphic
+    !byte $33, $22, $33, $22, $33, $00, $00, $11, $55, $aa, $55, $aa, $ff, $99, $99, $ff
+    !byte $44, $cc, $44, $cc, $cc, $00, $00, $88, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $11, $11, $22, $22, $55, $44, $44, $ff, $00, $11, $22, $00, $99, $44, $44, $ff
+    !byte $88, $88, $44, $bb, $22, $44, $00, $ff, $00, $00, $00, $88, $44, $22, $22, $ff
+
+    ; plenty more zeros
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+}
+
+!pseudopc $0f00 {
+    !xor $55 {
+; ***************************************************************************************
+;       A =
+;       X = x pixel coordinate
+;       Y = Y pixel coordinate
+S0f00
+    sta $70                             ;
+    stx $71                             ;
+    sty $72                             ;
+
+    txa                                 ;
+    and #3                              ;
+    sta $73                             ; ($73) = offset within byte of X coordinate
+
+    tya                                 ;
+    and #7                              ;
+    sta $74                             ; ($74) = offset within 8 byte cell of Y coordinate
+
+    txa                                 ;
+    and #$fc                            ;
+    clc                                 ;
+    ror                                 ;
+    sta $71                             ; ($71) = (X pixel / 4) * 2
+    tya                                 ;
+    and #$f8                            ;
+    clc                                 ;
+    ror                                 ;
+    ror                                 ;
+    ror                                 ;
+    sta $72                             ; ($72) = (Y pixel / 8)     [can be improved]
+L0f20
+    lda $70                             ;
+    cmp #10                             ;
+    beq setMode10Address                ;
+    cmp #2                              ;
+    beq setMode2Address                 ;
+    cmp #3                              ;
+    beq setMode3Address                 ;
+    cmp #4                              ;
+    beq setMode4Address                 ;
+    cmp #5                              ;
+    beq setMode5Address                 ;
+
+    lda #<getSpriteDefaultModeByte      ;
+    sta getSourceByte + 1               ;
+    lda #>getSpriteDefaultModeByte      ; address $101b
+    sta getSourceByte + 2               ;
+    jmp calculateScreenAddrAndPlot      ;
+
+setMode10Address
+    lda #<getSpriteMode10Byte           ;
+    sta getSourceByte + 1               ;
+    lda #>getSpriteMode10Byte           ; address $1026
+    sta getSourceByte + 2               ;
+    jmp calculateScreenAddrAndPlot      ;
+
+setMode3Address
+    lda #<getSpriteMode3Byte            ;
+    sta getSourceByte + 1               ;
+    lda #>getSpriteMode3Byte            ; address $102d
+    sta getSourceByte + 2               ;
+    jmp calculateScreenAddrAndPlot      ;
+
+setMode4Address
+    lda #<getSpriteMode4Byte            ;
+    sta getSourceByte + 1               ;
+    lda #>getSpriteMode4Byte            ; address $1033
+    sta getSourceByte + 2               ;
+    jmp calculateScreenAddrAndPlot      ;
+
+setMode5Address
+    lda #<getSpriteMode5Byte            ;
+    sta getSourceByte + 1               ;
+    lda #>getSpriteMode5Byte            ; address $103a
+    sta getSourceByte + 2               ;
+    jmp calculateScreenAddrAndPlot      ;
+
+setMode2Address
+    lda #<getSpriteMode2Byte            ;
+    sta getSourceByte + 1               ;
+    lda #>getSpriteMode2Byte            ; address $1023
+    sta getSourceByte + 2               ;
+
+; ***************************************************************************************
+calculateScreenAddrAndPlot
+    lda #$00                            ; }
+    sta $75                             ; }
+    lda #$30                            ; } start screen address $3000
+    sta $76                             ; }
+
+    lda #0                              ;
+    sta spriteRowCounter                ;
+
+    ; calculate $3000 + 8*(X cell coordinate)
+    ldx #0                              ;
+-
+    cpx $71                             ;
+    beq +                               ;
+
+    lda $75                             ; }
+    clc                                 ; }
+    adc #8                              ; }
+    sta $75                             ; } add eight to address ($75,$76)
+    lda $76                             ; }
+    adc #0                              ; }
+    sta $76                             ; }
+
+    inx                                 ;
+    jmp -                               ;
+
+; ***************************************************************************************
+; add $280*($72) to ($75,$76)
++
+    ldx #0                              ;
+-
+    cpx $72                             ;
+    beq +                               ;
+
+    lda $75                             ; }
+    clc                                 ; }
+    adc #$80                            ; }
+    sta $75                             ; } $0280 to ($75, $76)
+    lda $76                             ; }
+    adc #$02                            ; }
+    sta $76                             ; }
+
+    inx                                 ;
+    jmp -                               ;
+
+; ***************************************************************************************
++
+    lda $75                             ; }
+    clc                                 ; }
+    adc $74                             ; }
+    sta $75                             ; } add ($74) to screen address
+    lda $76                             ; }
+    adc #0                              ; }
+    sta $76                             ; }
+
+spriteDrawRow
+    ldy #0                              ;
+getSourceByte
+    jsr $ffff                           ; call routine to get source byte
+    sta ($75),y                         ; store on screen
+    tya                                 ; }
+    clc                                 ; }
+    adc #8                              ; } Y += 8
+    tay                                 ; }
+    cpy #32                             ;
+    bne getSourceByte                   ; copy 32 bytes
+
+    inc spriteRowCounter                ;
+    lda spriteRowCounter                ;
+    cmp #16                             ;
+    beq return3                         ;
+    and #7                              ;
+    cmp #0                              ;
+    beq add24ToSourceAddress            ;
+
+L0fe9
+    inc $74
+
+    lda $75                             ; }
+    clc                                 ; }
+    adc #1                              ; }
+    sta $75                             ; } add 1 to ($75,$76)
+    lda $76                             ; }
+    adc #0                              ; }
+    sta $76                             ; }
+
+    lda $77                             ; }
+    clc                                 ; }
+    adc #1                              ; }
+    sta $77                             ; } add 1 to ($77,$78)
+    lda $78                             ; }
+    adc #0                              ; }
+    sta $78                             ; }
+
+    lda $79                             ; }
+    clc                                 ; }
+    adc #1                              ; }
+    sta $79                             ; } add 1 to ($79, $7a)
+    lda $7a                             ; }
+    adc #0                              ; }
+    sta $7a                             ; }
+
+    lda $74                             ;
+    cmp #8                              ;
+    beq spriteMoveToNextRow             ;
+    jmp spriteDrawRow                   ;
+
+; ***************************************************************************************
+getSpriteDefaultModeByte
+    lda ($77),y                         ;
+    and spriteMask                      ;
+    ora ($75),y                         ;
+    rts                                 ;
+
+; ***************************************************************************************
+getSpriteMode2Byte
+    lda #0                              ;
+    rts                                 ;
+
+; ***************************************************************************************
+getSpriteMode10Byte
+    lda ($77),y                         ;
+    and #$f0                            ;
+    eor ($75),y                         ;
+    rts                                 ;
+
+; ***************************************************************************************
+getSpriteMode3Byte
+    lda ($77),y                         ;
+    and spriteMask                      ;
+    rts                                 ;
+
+; ***************************************************************************************
+getSpriteMode4Byte
+    lda ($75),y                         ;
+    cmp #$ff                            ;
+    bne getSpriteMode3Byte              ;
+    rts                                 ;
+
+; ***************************************************************************************
+getSpriteMode5Byte
+    lda ($75),y                         ;
+    cmp #$ff                            ;
+    bne getSpriteMode2Byte              ;
+    rts                                 ;
+
+; ***************************************************************************************
+add24ToSourceAddress
+    lda $77                             ; }
+    clc                                 ; }
+    adc #$18                            ; }
+    sta $77                             ; } add 24 to ($77,$78)
+    lda $78                             ; }
+    adc #0                              ; }
+    sta $78                             ; }
+
+    lda $79                             ; }
+    clc                                 ; }
+    adc #$19                            ; }
+    sta $79                             ; } add 25 to ($79,$7A)
+    lda $7a                             ; }
+    adc #0                              ; }
+    sta $7a                             ; }
+    jmp L0fe9                           ;
+
+; ***************************************************************************************
+return3
+    rts                                 ;
+
+    !byte $ea
+
+; ***************************************************************************************
+spriteMoveToNextRow
+    lda #0                              ;
+    sta $74                             ;
+
+    lda $75                             ; }
+    clc                                 ; }
+    adc #$78                            ; }
+    sta $75                             ; }
+    lda $76                             ; } $0278 to ($75, $76)
+    adc #2                              ; }
+    sta $76                             ; }
+
+    jmp spriteDrawRow                   ;
+
+; ***************************************************************************************
+S1074
+    ldy #7
+-
+    lda ($75),y
+    iny
+    sta ($75),y
+    tya
+    clc
+    adc #7
+    tay
+    lda ($75),y
+    iny
+    sta ($75),y
+    tya
+    sec
+    sbc #8
+    tay
+    dey
+    dey
+    cpy #0
+    bne -
+    lda #0
+    ldy #1
+    sta ($75),y
+    ldy #9
+    sta ($75),y
+    rts
+
+spriteMask
+    !byte $ff
+
+; ***************************************************************************************
+updatePlayer
+    lda #$ff                    ;
+    sta spriteMask              ; colour 3
+    lda #0                      ;
+    sta $183e                   ;
+    sta $1848                   ;
+    lda isInAir                 ;
+    cmp #0                      ;
+    beq L10b3                   ;
+    jmp L1634                   ;
+
+; ***************************************************************************************
+L10b3
+    ldx #0                                  ; loop counter
+-
+    lda $1842,x                             ;
+    sta $77,x                               ;
+    inx                                     ;
+    cpx #5                                  ;
+    bne -                                   ;
+
+    lda #$1f                                ; }
+    jsr OSWRCH                              ; }
+    lda playerPixelX                        ; }
+    lsr                                     ; }
+    lsr                                     ; }
+    jsr OSWRCH                              ; } TAB(playerX/4, playerY/8+2)
+    lda playerPixelY                        ; }
+    lsr                                     ; }
+    lsr                                     ; }
+    lsr                                     ; }
+    clc                                     ; }
+    adc #2                                  ; }
+    jsr OSWRCH                              ; }
+
+    jsr readTwoCharactersFromScreen         ; read the two characters immediately lower on screen than the player
+    lda playerPixelY                        ;
+    and #7                                  ;
+    cmp #0                                  ;
+    bne handleInAirMovement                 ; if (not on the ground) then branch
+
+    lda $75                                 ; }
+    clc                                     ; }
+    adc #$78                                ; }
+    sta $75                                 ; } ($75,76) += $280
+    lda $76                                 ; } address of next row down on screen
+    adc #2                                  ; }
+    sta $76                                 ; }
+
+    lda screenCharacterA                    ;
+    jsr isCrumbleBar                        ;
+    cmp #1                                  ;
+    beq updateCrumberBar                    ;
+afterUpdateCrumberBar
+    lda $75                                 ;
+    clc                                     ;
+    adc #16                                 ;
+
+    ; this code after the following graphics at $1100
+    }
+}
+
+!pseudopc $0800 {
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $c0, $c0, $c0, $c0, $04, $04, $04, $04
+    !byte $00, $64, $00, $00, $00, $00, $00, $00, $00, $1f, $00, $00, $00, $00, $00, $00
+    !byte $00, $05, $00, $00, $00, $30, $00, $00, $00, $01, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $8a, $00, $00, $ff, $fd, $c1, $00, $00, $f0, $00, $0e
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $01, $01, $00, $64, $01, $08, $64, $01, $10, $64, $01, $18, $64, $01, $00, $f8
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $01, $78, $00, $00, $1e, $00, $00, $7e, $ff, $00, $ff, $7e, $5a, $00, $00, $00
+    !byte $01, $00, $00, $00, $01, $01, $01, $7f, $ff, $ff, $fe, $7e, $01, $00, $00, $00
+    !byte $05, $10, $00, $00, $07, $00, $00, $20, $f6, $fe, $fe, $7e, $64, $00, $00, $00
+    !byte $01, $02, $00, $00, $64, $00, $00, $7e, $00, $00, $fe, $7e, $7e, $00, $00, $00
+
+    ; data for pseudo pc $0900-$0cff is EORing with #$AA
+!xor $aa {
+    ; smiley face
+    !byte %.....###
+    !byte %....####
+    !byte %....#..#
+    !byte %....#..#
+    !byte %....####
+    !byte %.....#.#
+    !byte %.....##.
+    !byte %......##
+
+    !byte %###.....
+    !byte %####....
+    !byte %#..#....
+    !byte %#..#....
+    !byte %####....
+    !byte %#.#.....
+    !byte %.##.....
+    !byte %##......
+
+    ; bones
+    !byte %.###...#
+    !byte %#####...
+    !byte %#######.
+    !byte %....##.#
+    !byte %.###..##
+    !byte %########
+    !byte %#######.
+    !byte %.#####..
+
+    !byte %#.#####.
+    !byte %.#######
+    !byte %########
+    !byte %##..###.
+    !byte %#.##....
+    !byte %.#######
+    !byte %...#####
+    !byte %....###.
+
+    ; star box (top)
+    !byte %########
+    !byte %#.......
+    !byte %#.######
+    !byte %#.######
+    !byte %#.##.###
+    !byte %#..#.#.#
+    !byte %#.#...##
+    !byte %#.......
+
+    !byte %########
+    !byte %.......#
+    !byte %######.#
+    !byte %######.#
+    !byte %######.#
+    !byte %######.#
+    !byte %######.#
+    !byte %##...#.#
+
+    ; star box (bottom)
+    !byte %#.#...##
+    !byte %#..#.#.#
+    !byte %#.##.###
+    !byte %#.######
+    !byte %#.######
+    !byte %#.######
+    !byte %#.......
+    !byte %########
+
+    !byte %#.###..#
+    !byte %######.#
+    !byte %######.#
+    !byte %######.#
+    !byte %######.#
+    !byte %######.#
+    !byte %.......#
+    !byte %########
+
+    !byte %########
+    !byte %.#...#..
+    !byte %#..##..#
+    !byte %..#...#.
+    !byte %..#...#.
+    !byte %#..##..#
+    !byte %.#...#..
+    !byte %.#...#..
+
+    !byte %########
+    !byte %.#...#..
+    !byte %#..##..#
+    !byte %..#...#.
+    !byte %..#...#.
+    !byte %#..##..#
+    !byte %.#...#..
+    !byte %.#...#..
+
+    !byte %#..##..#
+    !byte %..#...#.
+    !byte %..#...#.
+    !byte %#..##..#
+    !byte %.#...#..
+    !byte %.#...#..
+    !byte %#..##..#
+    !byte %########
+
+    !byte %#..##..#
+    !byte %..#...#.
+    !byte %..#...#.
+    !byte %#..##..#
+    !byte %.#...#..
+    !byte %.#...#..
+    !byte %#..##..#
+    !byte %########
+
+    !byte %########
+    !byte %#...#...
+    !byte %#.#.#.#.
+    !byte %#.#.#.#.
+    !byte %#...#...
+    !byte %##.###.#
+    !byte %##.#...#
+    !byte %##.#.#.#
+
+    !byte %########
+    !byte %#..#####
+    !byte %#.##...#
+    !byte %#.##.#.#
+    !byte %#....#.#
+    !byte %..###..#
+    !byte %.#####.#
+    !byte %.#.#.#.#
+
+    !byte %##.#.#.#
+    !byte %##.#...#
+    !byte %##.###.#
+    !byte %#...##.#
+    !byte %#.#.#...
+    !byte %#.#.#.#.
+    !byte %#...#...
+    !byte %########
+
+    !byte %.#...#.#
+    !byte %.#####.#
+    !byte %#.###.##
+    !byte %#.....##
+    !byte %#.#.#.##
+    !byte %#.#.#.##
+    !byte %#...#..#
+    !byte %########
+
+    !byte %########
+    !byte %#..##..#
+    !byte %#.###.##
+    !byte %########
+    !byte %########
+    !byte %#..##..#
+    !byte %#.###.##
+    !byte %########
+
+    !byte %#...#...
+    !byte %.#...#..
+    !byte %..#...#.
+    !byte %...#...#
+    !byte %#...#...
+    !byte %.#...#..
+    !byte %..#...#.
+    !byte %...#...#
+
+    !byte %########
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %########
+
+    !byte %########
+    !byte %#..#..#.
+    !byte %#..#..#.
+    !byte %#..#..#.
+    !byte %#..#..#.
+    !byte %#..#..#.
+    !byte %#..#..#.
+    !byte %#..#..#.
+
+    !byte %#..#..#.
+    !byte %#..#..#.
+    !byte %#..#..#.
+    !byte %#..#..#.
+    !byte %#..#..#.
+    !byte %#..#..#.
+    !byte %#..#..#.
+    !byte %########
+
+    !byte %########
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %#...####
+    !byte %#...####
+    !byte %#...##..
+    !byte %######..
+
+    !byte %######..
+    !byte %#...##..
+    !byte %#...####
+    !byte %#...####
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %########
+
+    !byte %########
+    !byte %#.......
+    !byte %#.......
+    !byte %##......
+    !byte %#.#.....
+    !byte %##.#....
+    !byte %#.#.#...
+    !byte %#..#.#..
+
+    !byte %#...#.#.
+    !byte %##...#.#
+    !byte %#.#...#.
+    !byte %#..#...#
+    !byte %#...#..#
+    !byte %#..#..#.
+    !byte %#.#..#..
+    !byte %########
+
+    !byte %########
+    !byte %#......#
+    !byte %#.....#.
+    !byte %#....#..
+    !byte %#...#...
+    !byte %#..#....
+    !byte %#.#....#
+    !byte %##....##
+
+    !byte %##....##
+    !byte %#.#....#
+    !byte %#..#....
+    !byte %#...#...
+    !byte %#....#..
+    !byte %#.....#.
+    !byte %#......#
+    !byte %########
+
+    !byte %########
+    !byte %#.......
+    !byte %#.......
+    !byte %#...####
+    !byte %#...####
+    !byte %#...####
+    !byte %#...##..
+    !byte %#...##..
+
+    !byte %#...##..
+    !byte %#...##..
+    !byte %#...####
+    !byte %#...####
+    !byte %#...####
+    !byte %#.......
+    !byte %#.......
+    !byte %########
+
+    !byte %########
+    !byte %#.......
+    !byte %#.......
+    !byte %#.......
+    !byte %#....###
+    !byte %#...#...
+    !byte %#..#....
+    !byte %#..#...#
+
+    !byte %#..#...#
+    !byte %#..#....
+    !byte %#...#...
+    !byte %#....###
+    !byte %#.......
+    !byte %#.......
+    !byte %#.......
+    !byte %########
+
+    !byte %########
+    !byte %#.......
+    !byte %#.......
+    !byte %########
+    !byte %########
+    !byte %#.......
+    !byte %#.......
+    !byte %########
+
+    !byte %########
+    !byte %#.......
+    !byte %#.......
+    !byte %########
+    !byte %########
+    !byte %#.......
+    !byte %#.......
+    !byte %########
+
+    !byte %########
+    !byte %#.......
+    !byte %#.######
+    !byte %#.#.....
+    !byte %#.#.####
+    !byte %#.#.#...
+    !byte %#.#.#.##
+    !byte %#.#.#.#.
+
+    !byte %#.#.#.#.
+    !byte %#.#.#.#.
+    !byte %#.#.#.#.
+    !byte %#.#.#.#.
+    !byte %#.#.#.#.
+    !byte %#.#.#.#.
+    !byte %#.#.#.#.
+    !byte %########
+
+    !byte %########
+    !byte %#.......
+    !byte %#.......
+    !byte %#..#####
+    !byte %#..#....
+    !byte %#..#.##.
+    !byte %#..#.##.
+    !byte %#..#.##.
+
+    !byte %#..#.##.
+    !byte %#..#.##.
+    !byte %#..#.##.
+    !byte %#..#....
+    !byte %#..#####
+    !byte %#.......
+    !byte %#.......
+    !byte %########
+
+    !byte %########
+    !byte %#.......
+    !byte %#.######
+    !byte %#.#.....
+    !byte %#.#.####
+    !byte %#.#.#...
+    !byte %#.#.#.##
+    !byte %#.#.#.#.
+
+    !byte %#.#.#.#.
+    !byte %#.#.#.##
+    !byte %#.#.#...
+    !byte %#.#.####
+    !byte %#.#.....
+    !byte %#.######
+    !byte %#.......
+    !byte %########
+
+    !byte %....####
+    !byte %...#####
+    !byte %..######
+    !byte %..####..
+    !byte %..###...
+    !byte %..###...
+    !byte %..###...
+    !byte %..###...
+
+    !byte %..###...
+    !byte %...###..
+    !byte %....###.
+    !byte %....###.
+    !byte %##..###.
+    !byte %#######.
+    !byte %######..
+    !byte %........
+
+    !byte %..###...
+    !byte %...###..
+    !byte %....###.
+    !byte %....###.
+    !byte %##..###.
+    !byte %#######.
+    !byte %######..
+    !byte %........
+
+    !byte %...###..
+    !byte %..###...
+    !byte %.###....
+    !byte %.###....
+    !byte %.###..##
+    !byte %.#######
+    !byte %..######
+    !byte %........
+
+    !byte %.#...#..
+    !byte %..#.#...
+    !byte %.#.#.#..
+    !byte %..##...#
+    !byte %#..#.#.#
+    !byte %.###.##.
+    !byte %...##...
+    !byte %...#....
+
+    !byte %.######.
+    !byte %..####..
+    !byte %...###..
+    !byte %...##...
+    !byte %...##...
+    !byte %....#...
+    !byte %....#...
+    !byte %........
+
+    !byte %########
+    !byte %#######.
+    !byte %.######.
+    !byte %.#..##..
+    !byte %.#..##..
+    !byte %....#...
+    !byte %....#...
+    !byte %........
+
+    !byte %....#...
+    !byte %.##.#.##
+    !byte %...###..
+    !byte %.##.#.##
+    !byte %...###..
+    !byte %..#...#.
+    !byte %.##...##
+    !byte %...#.#..
+
+    !byte %.##...##
+    !byte %...#.#..
+    !byte %...###..
+    !byte %.##.#.##
+    !byte %...###..
+    !byte %..#...#.
+    !byte %.##...##
+    !byte %...#.#..
+
+    !byte %..####..
+    !byte %...##...
+    !byte %#.####.#
+    !byte %###..###
+    !byte %###..###
+    !byte %#.####.#
+    !byte %...##...
+    !byte %..####..
+
+    !byte %#.#.#.#.
+    !byte %.#...#..
+    !byte %..###...
+    !byte %##.#.##.
+    !byte %..###...
+    !byte %.#####..
+    !byte %#.#.#.#.
+    !byte %..#.#...
+
+    !byte %.#..#...
+    !byte %#.#.#.#.
+    !byte %.#.###.#
+    !byte %....#.#.
+    !byte %.####...
+    !byte %#.#.###.
+    !byte %#.#.#..#
+    !byte %.#...###
+
+    !byte %.#...#..
+    !byte %.#...#..
+    !byte %.#...#..
+    !byte %.#...#..
+    !byte %.##..##.
+    !byte %###.###.
+    !byte %###.###.
+    !byte %########
+
+    !byte %##....##
+    !byte %.##..##.
+    !byte %..####..
+    !byte %..#..#..
+    !byte %..#..#..
+    !byte %..####..
+    !byte %.##..##.
+    !byte %##....##
+
+    !byte %....#...
+    !byte %....#...
+    !byte %....#...
+    !byte %....#...
+    !byte %....#...
+    !byte %....#...
+    !byte %....#...
+    !byte %....#...
+
+    !byte %..##....
+    !byte %.#..#...
+    !byte %#...#...
+    !byte %#..#....
+    !byte %.##.#...
+    !byte %.....#..
+    !byte %....#.#.
+    !byte %.....#..
+
+    !byte %.#.#....
+    !byte %#.#.#...
+    !byte %.#.#.#..
+    !byte %#.#.#...
+    !byte %.#.##...
+    !byte %..#..#..
+    !byte %......#.
+    !byte %.......#
+
+    !byte %...#####
+    !byte %..#...##
+    !byte %.#...###
+    !byte %########
+    !byte %#...####
+    !byte %#...###.
+    !byte %#...##..
+    !byte %#####...
+
+    !byte %##......
+    !byte %###.##..
+    !byte %.###..#.
+    !byte %..#.#...
+    !byte %.#.#.#..
+    !byte %.#..#.#.
+    !byte %.....###
+    !byte %........
+
+    !byte %....#...
+    !byte %....#...
+    !byte %.######.
+    !byte %#.######
+    !byte %#..#####
+    !byte %#...####
+    !byte %##....##
+    !byte %.######.
+
+    !byte %...##...
+    !byte %.##..##.
+    !byte %.#....#.
+    !byte %##.##..#
+    !byte %##..#..#
+    !byte %.##...#.
+    !byte %.######.
+    !byte %...##...
+
+    !byte %..####..
+    !byte %.#.##.#.
+    !byte %#..#.#.#
+    !byte %##.#.#.#
+    !byte %##.#.#.#
+    !byte %##.#.#.#
+    !byte %.#.##.#.
+    !byte %..####..
+
+    !byte %#.#.#.#.
+    !byte %#.#.#.#.
+    !byte %#######.
+    !byte %#######.
+    !byte %#######.
+    !byte %#######.
+    !byte %#.#.#.#.
+    !byte %#.#.#.#.
+
+    !byte %.######.
+    !byte %..####..
+    !byte %.##..##.
+    !byte %##.#####
+    !byte %#...####
+    !byte %##.#####
+    !byte %#.....##
+    !byte %.######.
+
+    !byte %....####
+    !byte %....#..#
+    !byte %..######
+    !byte %..#..#..
+    !byte %######..
+    !byte %#..#....
+    !byte %####....
+    !byte %........
+
+    !byte %########
+    !byte %########
+    !byte %##.##.##
+    !byte %..#.###.
+    !byte %##...#.#
+    !byte %..#.....
+    !byte %........
+    !byte %........
+
+    !byte %########
+    !byte %########
+    !byte %.##..##.
+    !byte %#..##..#
+    !byte %.##..##.
+    !byte %#..##..#
+    !byte %########
+    !byte %........
+
+    !byte %########
+    !byte %########
+    !byte %#..##..#
+    !byte %#..##..#
+    !byte %########
+    !byte %#..##..#
+    !byte %.##..##.
+    !byte %........
+
+    !byte %..####..
+    !byte %########
+    !byte %###.####
+    !byte %##.#####
+    !byte %...###..
+    !byte %....#...
+    !byte %....#...
+    !byte %....#...
+
+    !byte %########
+    !byte %########
+    !byte %###.#.#.
+    !byte %#..#.#.#
+    !byte %.#..#.#.
+    !byte %#.#..#.#
+    !byte %.#.#....
+    !byte %#....###
+
+    !byte %########
+    !byte %########
+    !byte %...#...#
+    !byte %..#...#.
+    !byte %.#...#..
+    !byte %#...#...
+    !byte %########
+    !byte %########
+
+    !byte %########
+    !byte %########
+    !byte %.##...#.
+    !byte %.##..#..
+    !byte %.##.#...
+    !byte %.###....
+    !byte %.##.....
+    !byte %.##.....
+
+    !byte %########
+    !byte %########
+    !byte %.#...##.
+    !byte %..#..##.
+    !byte %...#.##.
+    !byte %....###.
+    !byte %.....##.
+    !byte %.....##.
+
+    !byte %..#...#.
+    !byte %########
+    !byte %#...#...
+    !byte %########
+    !byte %..#...#.
+    !byte %########
+    !byte %#...#...
+    !byte %########
+
+    !byte %#......#
+    !byte %##....##
+    !byte %#.#..#.#
+    !byte %#..##..#
+    !byte %#..##..#
+    !byte %#.#..#.#
+    !byte %##....##
+    !byte %#......#
+
+    !byte %#######.
+    !byte %.#####.#
+    !byte %..###.##
+    !byte %...#.###
+    !byte %...#####
+    !byte %..#..###
+    !byte %.#....##
+    !byte %#......#
+
+    !byte %##.##.##
+    !byte %##.##.##
+    !byte %##.##.##
+    !byte %##.##.##
+    !byte %#.##.#..
+    !byte %#.###.##
+    !byte %##.##.##
+    !byte %##.##.##
+
+    !byte %########
+    !byte %#......#
+    !byte %#......#
+    !byte %########
+    !byte %########
+    !byte %#......#
+    !byte %#......#
+    !byte %########
+
+    !byte %########
+    !byte %#..##..#
+    !byte %#.###.##
+    !byte %########
+    !byte %########
+    !byte %#..##..#
+    !byte %#.###.##
+    !byte %########
+
+    !byte %########
+    !byte %#.#..#.#
+    !byte %#.#..#.#
+    !byte %#.#..#.#
+    !byte %#.#..#.#
+    !byte %#.#..#.#
+    !byte %#.#..#.#
+    !byte %########
+
+    !byte %########
+    !byte %########
+    !byte %########
+    !byte %########
+    !byte %########
+    !byte %########
+    !byte %########
+    !byte %########
+
+    !byte %########
+    !byte %##.##.##
+    !byte %..#..#..
+    !byte %.#.#.#..
+    !byte %..#...#.
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %########
+    !byte %########
+    !byte %..##..##
+    !byte %##..##..
+    !byte %..#....#
+    !byte %....##..
+    !byte %###..#.#
+    !byte %........
+
+    !byte %..####..
+    !byte %########
+    !byte %####.###
+    !byte %....##..
+    !byte %...##...
+    !byte %...#....
+    !byte %...#....
+    !byte %...#....
+
+    !byte %########
+    !byte %#...#...
+    !byte %..#...#.
+    !byte %#...#...
+    !byte %..#...#.
+    !byte %#...#...
+    !byte %..#...#.
+    !byte %#...#...
+
+    !byte %#######.
+    !byte %.##..##.
+    !byte %#######.
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %#####.##
+    !byte %.##..##.
+    !byte %#.######
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %###.####
+    !byte %.##..##.
+    !byte %###.####
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %#.######
+    !byte %.##..##.
+    !byte %#####.##
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %##....##
+    !byte %.##..##.
+    !byte %...##...
+    !byte %.##..##.
+    !byte %........
+    !byte %#..##..#
+    !byte %########
+    !byte %........
+
+    !byte %....####
+    !byte %.##..##.
+    !byte %....####
+    !byte %.##..##.
+    !byte %........
+    !byte %#..##..#
+    !byte %########
+    !byte %........
+
+    !byte %..####..
+    !byte %.##..##.
+    !byte %#......#
+    !byte %.##..##.
+    !byte %........
+    !byte %#..##..#
+    !byte %########
+    !byte %........
+
+    !byte %####....
+    !byte %.##..##.
+    !byte %####....
+    !byte %.##..##.
+    !byte %........
+    !byte %#..##..#
+    !byte %########
+    !byte %........
+
+    !byte %##....##
+    !byte %.##..##.
+    !byte %...##...
+    !byte %.##..##.
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %....####
+    !byte %.##..##.
+    !byte %....####
+    !byte %.##..##.
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %..####..
+    !byte %.##..##.
+    !byte %#......#
+    !byte %.##..##.
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %####....
+    !byte %.##..##.
+    !byte %####....
+    !byte %.##..##.
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %########                 ; char 128 ($80)
+    !byte %########
+    !byte %##.##.##
+    !byte %..#.###.
+    !byte %##...#.#
+    !byte %..#.....
+    !byte %........
+    !byte %........
+
+    !byte %########                 ; char 129 ($81)
+    !byte %########
+    !byte %.##..##.
+    !byte %#..##..#
+    !byte %.##..##.
+    !byte %#..##..#
+    !byte %########
+    !byte %........
+
+    !byte %########                 ; char 130 ($82)
+    !byte %#...#...
+    !byte %..#...#.
+    !byte %#...#...
+    !byte %..#...#.
+    !byte %#...#...
+    !byte %..#...#.
+    !byte %#...#...
+
+    !byte %........                 ; char 131 ($83)
+    !byte %########
+    !byte %#...#...
+    !byte %..#...#.
+    !byte %#...#...
+    !byte %..#...#.
+    !byte %#...#...
+    !byte %..#...#.
+
+    !byte %........                 ; char 132 ($84)
+    !byte %........
+    !byte %########
+    !byte %#...#...
+    !byte %..#...#.
+    !byte %#...#...
+    !byte %..#...#.
+    !byte %#...#...
+
+    !byte %........                 ; char 133 ($85)
+    !byte %........
+    !byte %........
+    !byte %########
+    !byte %#...#...
+    !byte %..#...#.
+    !byte %#...#...
+    !byte %..#...#.
+
+    !byte %........                 ; char 134 ($86)
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %########
+    !byte %#...#...
+    !byte %..#...#.
+    !byte %#...#...
+
+    !byte %........                 ; char 135 ($87)
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %########
+    !byte %#...#...
+    !byte %..#...#.
+
+    !byte %........                 ; char 136 ($88)
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %########
+    !byte %#...#...
+
+    !byte %........                 ; char 137 ($89)
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %########
+
+    !byte %........                 ; char 138 ($8A)
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %##....##                 ; char 139 ($8B)
+    !byte %.##..##.
+    !byte %...##...
+    !byte %.##..##.
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %....####                 ; char 140 ($8C)
+    !byte %.##..##.
+    !byte %....####
+    !byte %.##..##.
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %..####..                 ; char 141 ($8D)
+    !byte %.##..##.
+    !byte %#......#
+    !byte %.##..##.
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %####....                 ; char 142 ($8E)
+    !byte %.##..##.
+    !byte %####....
+    !byte %.##..##.
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %..#...#.                 ; char 143 ($8F)
+    !byte %########
+    !byte %#...#...
+    !byte %########
+    !byte %..#...#.
+    !byte %########
+    !byte %#...#...
+    !byte %########
+
+    !byte %..##....                 ; char 144 ($90)
+    !byte %.#..#...
+    !byte %#...#...
+    !byte %#..#....
+    !byte %.##.#...
+    !byte %.....#..
+    !byte %....#.#.
+    !byte %.....#..
+
+    !byte %########                 ; char 145 ($91)
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %########
+
+    !byte %########                 ; char 146 ($92)
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %########
+
+    !byte %########                 ; char 147 ($93)
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %########
+
+    !byte %########                 ; char 148 ($94)
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %########
+
+    !byte %########                 ; char 149 ($95)
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+    !byte %#......#
+
+    !byte %########                 ; char 150 ($96)
+    !byte %########
+    !byte %...##...
+    !byte %...##...
+    !byte %...##...
+    !byte %...##...
+    !byte %...##...
+    !byte %...##...
+
+    !byte %........                 ; char 151 ($97)
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %#######.                 ; char 152 ($98)
+    !byte %#.....#.
+    !byte %#.....#.
+    !byte %.#...#..
+    !byte %..###...
+    !byte %..#.....
+    !byte %##......
+    !byte %##......
+
+    !byte %#######.                 ; char 153 ($99)
+    !byte %#.....#.
+    !byte %#.....#.
+    !byte %.#...#..
+    !byte %..###...
+    !byte %....#...
+    !byte %.....##.
+    !byte %.....##.
+
+    !byte %........                 ; char 154 ($9A)
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %........                 ; char 155 ($9B)
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %........                 ; char 156 ($9C)
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %........                 ; char 157 ($9D)
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+
+    !byte %....#...                 ; char 158 ($9E)
+    !byte %....#...
+    !byte %....#...
+    !byte %....#...
+    !byte %....#...
+    !byte %....#...
+    !byte %....#...
+    !byte %....#...
+
+    !byte %........                 ; char 159 ($9F)
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    !byte %........
+    }
+}
+
+!pseudopc $1100 {
+!xor $55 {
+
+    ; $1100
+L1100
+    sta $75                     ;
+    lda $76                     ;
+    adc #0                      ;
+    sta $76                     ;
+    lda screenCharacterB        ;
+    jsr isCrumbleBar            ;
+    cmp #1                      ;
+    bne skipCrumbleBarUpdate    ;
+
+    ldx #7                      ; loop counter
+-
+    lda $6bef,x                 ;
+    sta $6bf0,x                 ;
+    lda $6bf7,x                 ;
+    sta $6bf8,x                 ;
+    dex                         ;
+    bne -                       ;
+
+    lda #0                      ;
+    sta $6bf0                   ;
+    sta $6bf8                   ;
+    jsr S1074                   ;
+    jmp skipCrumbleBarUpdate    ;
+
+; ***************************************************************************************
+updateCrumberBar
+    ldx #7                      ;
+L1133
+    lda $6bdf,x                 ;
+    sta $6be0,x                 ;
+    lda $6be7,x                 ;
+    sta $6be8,x                 ;
+    dex                         ;
+    bne L1133                   ;
+    lda #0                      ;
+    sta $6be0                   ;
+    sta $6be8                   ;
+    jsr S1074                   ;
+    jmp afterUpdateCrumberBar   ;
+
+; ***************************************************************************************
+skipCrumbleBarUpdate
+    lda $75                     ;
+    sec                         ;
+    sbc #$88                    ;
+    sta $75                     ; ($75,76) -= $288
+    lda $76                     ; move to previous character row
+    sbc #$02                    ;
+    sta $76                     ;
+handleInAirMovement
+    lda screenCharacterA
+    jsr isConveyor
+    cmp #0
+    bne onConveyor
+    lda screenCharacterB
+    jsr isConveyor
+    cmp #0
+    bne onConveyor
+    lda #$00
+    sta $1852
+onConveyor
+    lda $1852
+    cmp #$01
+    bne L1187
+    lda $1853
+    cmp #$00
+    bne L1187
+    jmp checkForUpdatePlayerOnConveyor
+
+; ***************************************************************************************
+L1187
+    lda playerPixelY
+    and #$07
+    cmp #$00
+    beq L119c
+L1190
+    lda newPlayerPixelY
+    clc
+    adc #$02
+    sta newPlayerPixelY
+    jmp L1375
+
+; ***************************************************************************************
+L119c
+    lda screenCharacterA
+    jsr isSupporting
+    cmp #1
+    beq L11b8
+    lda screenCharacterB
+    jsr isSupporting
+    cmp #1
+    beq L11b8
+    lda #1
+    sta $1847
+    jmp L1190
+
+; ***************************************************************************************
+L11b8
+    lda #$00                                ;
+    sta $1841                               ;
+
+    ldy #$ff                                ;
+    ldx #$9e                                ;
+    lda #$81                                ; check for Z key
+    jsr OSBYTE                              ;
+    cpy #$ff                                ;
+    bne checkForXKey                        ;
+
+    ; handle Z pressed
+    lda willyAnimationEOR                   ;
+    cmp #3                                  ;
+    bne L11e2                               ;
+    lda #$ff                                ;
+    sta $183e                               ;
+    lda newPlayerPixelX                     ;
+    sec                                     ; move left
+    sbc #1                                  ;
+    sta newPlayerPixelX                     ;
+    jmp checkForUpdatePlayerOnConveyor      ; adjust for conveyor
+
+; ***************************************************************************************
+L11e2
+    lda #3                                  ; }
+    sta willyAnimationEOR                   ; }
+    lda #willyPageLeft                      ; } look left
+    sta willyGraphicsPage                   ; }
+    lda #1                                  ;
+    sta $1841                               ;
+    jsr L1375                               ;
+    lda #0                                  ;
+    sta $183e                               ;
+    jmp checkForUpdatePlayerOnConveyor      ;
+
+; ***************************************************************************************
+checkForXKey
+    ldy #$ff                                ; }
+    ldx #$bd                                ; }
+    lda #$81                                ; } check for X key
+    jsr OSBYTE                              ; }
+    cpy #$ff                                ; }
+    bne checkForUpdatePlayerOnConveyor      ; }
+
+    lda willyAnimationEOR                   ;
+    cmp #0                                  ;
+    bne L1221                               ;
+    lda #1                                  ;
+    sta $183e                               ;
+
+    lda newPlayerPixelX                     ;
+    clc                                     ;
+    adc #1                                  ; add one to player x
+    sta newPlayerPixelX                     ;
+
+    jmp checkForUpdatePlayerOnConveyor
+
+; ***************************************************************************************
+L1221
+    lda #0                                  ; }
+    sta willyAnimationEOR                   ; }
+    lda #willyPageRight                     ; } look right
+    sta willyGraphicsPage                   ; }
+    lda #$01
+    sta $1841
+    jsr L1375
+    lda #$00
+    sta $183e
+
+checkForUpdatePlayerOnConveyor
+    lda #$1f                                ; }
+    jsr OSWRCH                              ; }
+    lda playerPixelX                        ; }
+    lsr                                     ; }
+    lsr                                     ; }
+    jsr OSWRCH                              ; } TAB(playerX/4, playerY/8+2)
+    lda playerPixelY                        ; }
+    lsr                                     ; }
+    lsr                                     ; }
+    lsr                                     ; }
+    clc                                     ; }
+    adc #2                                  ; }
+    jsr OSWRCH                              ; }
+
+    jsr readTwoCharactersFromScreen         ; read the two characters immediately lower on screen than the player
+    lda $1852                               ;
+    cmp #0                                  ;
+    bne L127a                               ;
+    lda screenCharacterA                    ;
+    jsr isConveyor                          ;
+    cmp #1                                  ;
+    beq L126f                               ;
+    lda screenCharacterB                    ;
+    jsr isConveyor                          ;
+    cmp #1                                  ;
+    bne L127a                               ;
+L126f
+    lda $183e                               ;
+    sta $1853                               ;
+    lda #1                                  ;
+    sta $1852                               ;
+L127a
+    lda $1852                               ;
+    cmp #1                                  ;
+    bne L12c4                               ;
+    lda $1847                               ;
+    cmp #1                                  ;
+    bne L1297                               ;
+    lda $183e                               ;
+    eor #$fe                                ;
+    cmp $1854                               ;
+    bne L1297                               ;
+    lda #$fe                                ;
+    sta $1853                               ;
+L1297
+    lda $1847                               ;
+    cmp #1                                  ;
+    bne L12b0                               ;
+    lda #$fe                                ;
+    sta $1853                               ;
+L12a3
+    lda newPlayerPixelX                     ;
+    sec                                     ;
+    sbc $183e                               ;
+    sta newPlayerPixelX                     ;
+    jmp checkForJump                        ;
+
+; ***************************************************************************************
+L12b0
+    lda $1853
+    cmp #$fe
+    bne L12c4
+    lda $183e
+    eor #$fe
+    cmp $1854
+    bne L12c4
+    jmp L12a3
+
+; ***************************************************************************************
+L12c4
+    lda $183e
+    cmp #$00
+    beq L12d3
+    lda $183e
+    cmp $1854
+    bne L12d8
+L12d3
+    lda #$00
+    sta $1853
+L12d8
+    lda $1853
+    cmp #$00
+    bne L12e9
+    lda $1852
+    cmp #$01
+    bne L12e9
+    jsr S17db
+L12e9
+    lda $183e
+    sta jumpDirection
+    cmp #0
+    beq checkForJump
+    jsr L1375
+checkForJump
+    ldy #$ff                        ;
+    ldx #$b6                        ;
+    lda #$81                        ;
+    jsr OSBYTE                      ; check for RETURN key pressed
+    cpy #$ff                        ;
+    bne cancelJump                  ; if (return not pressed) then branch (no jump)
+
+    ; handle jump
+    lda $1848                       ;
+    cmp #0                          ;
+    bne cancelJump                  ;
+    lda $1847                       ;
+    cmp #0                          ;
+    bne cancelJump                  ;
+    jmp checkForWallOnJump          ;
+
+; ***************************************************************************************
+cancelJump
+    lda #0                          ;
+    sta $183e                       ;
+    sta $1851                       ;
+    sta $1847                       ;
+    sta jumpDirection               ;
+    lda $1846                       ;
+    cmp #0                          ;
+    beq L132f                       ;
+    lda #0                          ;
+    sta $1846                       ;
+    rts                             ;
+
+; ***************************************************************************************
+L132f
+    jsr drawConveyors               ;
+    jmp L1423                       ;
+
+    ; $1335
+; ***************************************************************************************
+checkForWallOnJump
+    lda #$1f                        ;
+    jsr OSWRCH                      ;
+    lda newPlayerPixelX             ;
+    lsr                             ;
+    lsr                             ;
+    jsr OSWRCH                      ;
+    lda newPlayerPixelY             ;
+    lsr                             ; TAB(newPlayerPixelX/4, newPlayerPixelY/8 - 1)
+    lsr                             ;
+    lsr                             ;
+    sec                             ;
+    sbc #1                          ;
+    jsr OSWRCH                      ;
+
+    jsr readTwoCharactersFromScreen ; read the two characters immediately higher on screen than the player
+    lda screenCharacterA            ;
+    cmp #$8f                        ;
+    beq foundWallSoCancelJump       ; if (wall) then branch
+    lda screenCharacterB            ;
+    cmp #$8f                        ;
+    beq foundWallSoCancelJump       ; if (wall) then branch
+
+    ; start jump
+    lda #1                          ;
+    sta isInAir                     ;
+    lda playerPixelY                ;
+    sta playerHeightOnTakeOff       ;
+    lda #0                          ;
+    sta jumpPhase                   ;
+    jmp L1634                       ;
+
+; ***************************************************************************************
+foundWallSoCancelJump
+    jmp cancelJump
+
+; ***************************************************************************************
+L1375
+    lda #$00
+    sta $105f
+    sta $1851
+    lda newPlayerPixelY
+    and #$07
+    cmp #0
+    beq L1392
+    sta $1850
+    lda #$ff
+    clc
+    sbc $1850
+    sta $1851
+L1392
+    lda newPlayerPixelX
+    and #$03
+    sta $1850
+    lda $1850
+    cmp #$03
+    bne L13ab
+    lda $183e
+    cmp #$ff
+    bne L13ab
+    jsr S1709
+L13ab
+    lda $183e
+    cmp #$fd
+    bne L13c3
+    lda newPlayerPixelX
+    clc
+    adc #1
+    sta newPlayerPixelX
+    lda #$00
+    sta $183e
+    jmp L13ef
+
+; ***************************************************************************************
+L13c3
+    lda $1850
+    cmp #0
+    bne L13d4
+    lda $183e
+    cmp #$01
+    bne L13d4
+    jsr S1772
+L13d4
+    lda $183e
+    cmp #$fe
+    bne L13ec
+    lda newPlayerPixelX
+    sec
+    sbc #$01
+    sta newPlayerPixelX
+    lda #$00
+    sta $183e
+    jmp L13ef
+
+; ***************************************************************************************
+L13ec
+    jmp movePlayer
+
+; ***************************************************************************************
+L13ef
+    lda playerPixelY            ;
+    cmp playerHeightOnTakeOff   ;
+    bne movePlayer              ; if (player height not on ground value) then branch (move player)
+    lda jumpPhase               ;
+    cmp #0                      ;
+    bne movePlayer              ; if (jumping) then branch (move player)
+    lda newPlayerPixelY         ;
+    sta playerPixelY            ;
+    rts                         ;
+
+; ***************************************************************************************
+movePlayer
+
+    ldx playerPixelX                    ; }
+    ldy playerPixelY                    ; }
+    lda #0                              ; }
+    jsr readOrWriteCachedBackground     ; } draw old background from cache
+
+    jsr drawConveyors                   ; animate conveyors
+
+    lda #1                              ;
+    sta $1846                           ; ?
+
+    ldx newPlayerPixelX                 ; }
+    ldy newPlayerPixelY                 ; }
+    lda #1                              ; }
+    jsr readOrWriteCachedBackground     ; } cache new background
+
+L1423
+    lda #$00                            ;
+    sta $77                             ;
+    lda willyGraphicsPage               ; ($77,$78) = $0500 or $0600 for willy looking right or left
+    sta $78                             ;
+
+    lda #$00                            ;
+    sta $79                             ;
+    lda #$0d                            ; $0d00?
+    sta $7a                             ;
+
+    lda newPlayerPixelX
+    and #$03
+    eor willyAnimationEOR
+    sta $75
+
+    ldx #0                              ; loop counter
+-
+    cpx $75                             ; }
+    beq L1455                           ; }
+    lda $77                             ; }
+    clc                                 ; } add $40 to ($77,$78) for ($75) times
+    adc #$40                            ; }
+    sta $77                             ; }
+    lda $78                             ; }
+    adc #$00                            ; }
+    sta $78                             ; }
+    inx                                 ;
+    jmp -                               ;
+
+; ***************************************************************************************
+L1455
+    ldx newPlayerPixelX                 ;
+    ldy newPlayerPixelY                 ;
+    lda #0                              ;
+    jsr S0f00                           ; draw player?
+    jsr checkForLandingOnSpike          ;
+
+    lda #$1f                            ;
+    jsr OSWRCH                          ; TAB(34,23)
+    lda #$22                            ;
+    jsr OSWRCH                          ;
+    lda #$17                            ;
+    jsr OSWRCH                          ;
+
+    jsr checkSpikeKeySwitch             ;
+    lda #$09                            ; forward space
+    jsr OSWRCH                          ;
+    jsr checkSpikeKeySwitch             ;
+    lda newPlayerPixelY                 ;
+    and #7                              ;
+    cmp #0                              ;
+    beq +                               ; if (level with cell vertically) then branch
+    lda #9                              ; forward space
+    jsr OSWRCH                          ;
+    jsr checkSpikeKeySwitch             ;
++
+    ; copy local variables back (4 bytes)
+    ldx #0                              ;
+-
+    lda $77,x                           ;
+    sta $1842,x                         ;
+    inx                                 ;
+    cpx #4                              ;
+    bne -                               ;
+
+    lda newPlayerPixelX                 ;
+    sta playerPixelX                    ;
+    lda newPlayerPixelY                 ; store new player position
+    sta playerPixelY                    ;
+    rts                                 ;
+
+; ***************************************************************************************
+readTwoCharactersFromScreen
+    lda #$87                ;
+    jsr OSBYTE              ; read character at cursor position
+    stx screenCharacterA    ; store result
+
+    lda #$09                ;
+    jsr OSWRCH              ; move forward one space
+
+    lda #$87                ;
+    jsr OSBYTE              ; read character at cursor position
+    stx screenCharacterB    ; store result
+    rts
+
+; ***************************************************************************************
+readTwoCharactersVertically
+    lda #$87                ;
+    jsr OSBYTE              ; read character at text cursor position
+    stx screenCharacterA    ; store result
+
+    lda #$0a                ;
+    jsr OSWRCH              ; move text cursor down one cell
+
+    lda #$87                ;
+    jsr OSBYTE              ; read character at text cursor position
+    stx screenCharacterB    ; store result
+    rts                     ;
+
+; ***************************************************************************************
+checkSpikeKeySwitch
+    jsr readTwoCharactersFromScreen                 ;
+    lda #$08                                        ;
+    jsr OSWRCH                                      ; move back one character
+    lda screenCharacterA                            ; first character
+    jsr checkForSpikeKeySwitchCollisions            ;
+    lda #$09                                        ; tab forwards
+    jsr OSWRCH                                      ;
+    lda screenCharacterB                            ; second character
+    jmp checkForSpikeKeySwitchCollisions            ;
+
+; ***************************************************************************************
+checkForSpikeKeySwitchCollisions
+    cmp #$9b                    ;
+    beq deathJumper             ; if (spike) then branch
+    cmp #$9c                    ;
+    beq deathJumper             ; if (spike) then branch
+    cmp #$90                    ;
+    beq keyCollisionFound       ; if (key) then branch
+    cmp #$98                    ;
+    beq switchCollisionFound    ; if (unswitched switch) then branch
+    rts
+
+; ***************************************************************************************
+; is this checking an 'offscreen cache' for spikes?
+checkForLandingOnSpike
+    lda #$1f                    ;
+    jsr OSWRCH                  ;
+    lda #$22                    ; TAB(34, 23)
+    jsr OSWRCH                  ;
+    lda #$17                    ;
+    jsr OSWRCH                  ;
+
+-
+    lda #$87                    ;
+    jsr OSBYTE                  ; read character at cursor position
+    cpx #0                      ;
+    beq drawSpaces              ;
+    cpx #$9b                    ;
+    beq deathJumper             ; if (spike) then branch (die)
+    cpx #$9c                    ;
+    beq deathJumper             ; if (spike) then branch (die)
+
+    lda #9                      ; forward space
+backIntoSpaceLoop
+    jsr OSWRCH                  ;
+    lda vduTextCursorXPosition  ; read text cursor X position
+    cmp #0                      ;
+    bne -                       ;
+    rts                         ;
+
+; ***************************************************************************************
+drawSpaces
+    lda #$20                    ;
+    jmp backIntoSpaceLoop       ;
+
+; ***************************************************************************************
+keyCollisionFound
+    lda #charSPACE              ;
+    jsr OSWRCH                  ;
+
+    dec keysLeft                ;
+
+    lda #8                      ;
+    jsr OSWRCH                  ;
+    lda vduTextCursorXPosition  ;
+    sta textCursorX             ;
+    lda vduTextCursorYPosition  ;
+    sta textCursorY             ;
+
+    lda #$63                    ;
+    jsr $673c                   ;
+    jmp L159b                   ;
+
+; ***************************************************************************************
+deathJumper
+    jmp death
+
+    !byte $ea, $ea
+
+switchCollisionFound
+    jsr $0040
+    sta textCursorX
+    lda vduTextCursorYPosition
+    sta textCursorY
+
+    ldx #0                          ; loop counter
+-
+    lda $60,x                       ;
+    jsr OSWRCH                      ;
+    inx                             ;
+    cpx #8                          ;
+    bne -                           ;
+
+    lda playerPixelX                ;
+    cmp #80                         ;
+    bcc L159b                       ;
+
+    lda #1                          ;
+    sta $197f                       ; ?
+
+
+    ldx #0                          ; loop counter
+-
+    lda $50,x                       ;
+    jsr OSWRCH                      ;
+    inx                             ;
+    cpx #8                          ;
+    bne -                           ;
+
+    ldy #2                          ;
+outerLoop
+    ldx #0                          ; loop counter
+-
+    lda $53,x                       ;
+    jsr OSWRCH                      ;
+    inx                             ;
+    cpx #5                          ;
+    bne -                           ;
+    dey                             ;
+    bne outerLoop                   ;
+
+    lda #$60
+    sta $19ee
+L159b
+    lda #$1f                        ;
+    jsr OSWRCH                      ;
+    lda textCursorX                 ; TAB(X, Y)
+    jsr OSWRCH                      ;
+    lda textCursorY                 ;
+    jmp OSWRCH                      ;
+
+; ***************************************************************************************
+isSupporting
+    cmp #$95                        ;
+    bcs +                           ;
+    cmp #$5f                        ;
+    beq +                           ;
+    cmp #$80                        ;
+    bcc notSupporting               ;
+    cmp #$90                        ;
+    bcs notSupporting               ;
++
+    lda playerPixelY                ;
+    sta playerHeightOnTakeOff       ;
+    lda #1                          ; yes, is supporting
+    rts                             ;
+
+; ***************************************************************************************
+notSupporting
+    lda #0                          ; no, is not supporting
+    rts                             ;
+
+; ***************************************************************************************
+isCrumbleBar
+    cmp #$5f                        ;
+    beq L15d4                       ;
+    cmp #$82                        ;
+    bcc notCrumbleBar               ;
+    cmp #$8a                        ;
+    bcs notCrumbleBar               ;
+L15d4
+    lda #1                          ;
+    rts                             ;
+
+; ***************************************************************************************
+notCrumbleBar
+    lda #0
+    rts
+
+; ***************************************************************************************
+isConveyor
+    cmp #$8b                        ; }
+    bcc notConveyor                 ; }
+    cmp #$8f                        ; }
+    bcs notConveyor                 ; } if (conveyor belt) then A=1 else A=0
+    lda #1                          ; }
+    rts                             ; }
+
+; ***************************************************************************************
+notConveyor
+    lda #0                          ;
+    rts                             ;
+
+; ***************************************************************************************
+checkUpdateConveyor
+    lda jumpDirection               ;
+    cmp #0                          ;
+    bne updateConveyor              ;
+    lda #$01
+    sta $1847
+    rts
+
+; ***************************************************************************************
+updateConveyor
+    lda #$1f                        ; }
+    jsr OSWRCH                      ; }
+    lda playerPixelX                ; }
+    lsr                             ; }
+    lsr                             ; }
+    jsr OSWRCH                      ; } TAB(playerX/4, playerY/8 + 2)
+    lda playerPixelY                ; }
+    lsr                             ; }
+    lsr                             ; }
+    lsr                             ; }
+    clc                             ; }
+    adc #2                          ; }
+    jsr OSWRCH                      ; }
+    jsr readTwoCharactersFromScreen ; read the two characters immediately lower on screen than the player
+
+    lda screenCharacterA            ;
+    jsr isConveyor                  ;
+    cmp #1                          ;
+    beq foundConveyor               ;
+
+    lda screenCharacterB            ;
+    jsr isConveyor                  ;
+    cmp #1                          ;
+    beq foundConveyor               ;
+    rts                             ;
+
+; ***************************************************************************************
+foundConveyor
+    lda #1                              ;
+    sta $1848                           ;
+    lda jumpDirection                   ;
+    sta $183e                           ;
+    jmp checkForUpdatePlayerOnConveyor  ;
+
+; ***************************************************************************************
+L1634
+    lda jumpPhase                   ;
+    cmp #$11                        ;
+    bcc updatePlayerWhenJumping     ;
+    jmp updatePlayerWhenSupported   ;
+
+; ***************************************************************************************
+updatePlayerWhenJumping
+    lda playerPixelY                ;
+    and #7                          ;
+    cmp #0                          ;
+    beq checkForLanding             ;
+    jmp updateJump                  ;
+
+; ***************************************************************************************
+checkForLanding
+    lda #$1f                        ;
+    jsr OSWRCH                      ;
+    lda playerPixelX                ;
+    lsr                             ;
+    lsr                             ;
+    jsr OSWRCH                      ; TAB(playerX/4, (playerY-2) / 8)
+    lda playerPixelY                ;
+    sec                             ;
+    sbc #2                          ;
+    lsr                             ;
+    lsr                             ;
+    lsr                             ;
+    jsr OSWRCH                      ;
+
+    jsr readTwoCharactersFromScreen
+
+    lda screenCharacterA            ;
+    cmp #$8f                        ;
+    beq hitWall                     ; if (wall) then branch
+    lda screenCharacterB            ;
+    cmp #$8f                        ;
+    beq hitWall                     ; if (wall) then branch
+    jmp updateInAir                 ;
+
+; ***************************************************************************************
+hitWall
+    lda jumpPhase                   ;
+    cmp #9                          ;
+    bcs updateInAir                 ;
+    lda #$11                        ;
+    sec                             ;
+    sbc jumpPhase                   ;
+    sta jumpPhase                   ;
+    lda #0                          ;
+    sta jumpDirection               ;
+updateInAir
+    lda playerPixelY                ;
+    and #7                          ;
+    cmp #0                          ;
+    bne updateJump                  ;
+    lda jumpPhase                   ;
+    cmp #8                          ;
+    bcc updateJump                  ;
+
+    lda #$1f                        ;
+    jsr OSWRCH                      ;
+    lda playerPixelX                ;
+    lsr                             ;
+    lsr                             ;
+    jsr OSWRCH                      ; TAB(playerX/4, 2 + (playerY + 3)/8)
+    lda playerPixelY                ;
+    clc                             ;
+    adc #3                          ;
+    lsr                             ;
+    lsr                             ;
+    lsr                             ;
+    clc                             ;
+    adc #2                          ;
+    jsr OSWRCH                      ;
+
+    jsr readTwoCharactersFromScreen ;
+    lda screenCharacterA            ;
+    jsr isSupporting                ;
+    cmp #1                          ;
+    beq updatePlayerWhenSupported   ;
+
+    lda screenCharacterB            ;
+    jsr isSupporting                ;
+    cmp #1                          ;
+    beq updatePlayerWhenSupported   ;
+
+updateJump
+    lda jumpPhase                   ;
+    clc                             ;
+    adc #1                          ;
+    sta jumpPhase                   ;
+
+    ldy jumpPhase                   ;
+    lda newPlayerPixelY             ;
+    sec                             ;
+    sbc jumpMovementArray - 1,y     ;
+    sta newPlayerPixelY             ;
+
+    lda newPlayerPixelX             ;
+    clc                             ;
+    adc jumpDirection               ;
+    sta newPlayerPixelX             ;
+    lda jumpDirection               ;
+    sta $183e                       ;
+    jmp L1375                       ;
+
+; ***************************************************************************************
+updatePlayerWhenSupported
+    lda #0                          ;
+    sta isInAir                     ;
+    sta jumpPhase                   ;
+    jsr drawConveyors               ;
+    jsr checkUpdateConveyor         ;
+    jmp updatePlayer                ;
+
+; ***************************************************************************************
+S1709
+    lda #$1f                        ;
+    jsr OSWRCH                      ;
+    lda playerPixelX                ;
+    lsr                             ;
+    lsr                             ;
+    sec                             ;
+    sbc #1                          ;
+    jsr OSWRCH                      ; TAB(playerX/4 - 1, (newPlayerPixelY + $1851) / 8)
+    lda newPlayerPixelY             ;
+    clc                             ;
+    adc $1851                       ;
+    lsr                             ;
+    lsr                             ;
+    lsr                             ;
+    jsr OSWRCH                      ;
+
+    jsr readTwoCharactersVertically ;
+    lda newPlayerPixelY             ;
+    and #7                          ;
+    cmp #0                          ;
+    beq +                           ;
+
+    lda screenCharacterB            ;
+    sta $105f                       ;
+    lda #$0a                        ; move down one line
+    jsr OSWRCH                      ;
+    jsr readTwoCharactersVertically ;
+
++
+    lda $105f                       ;
+    cmp #$20                        ;
+    bne L1756                       ; if (not a space) then branch (check for collision)
+
+    lda screenCharacterB            ;
+    cmp #$20                        ;
+    bne L1756                       ; if (not a space) then branch (check for collision)
+
+    lda jumpPhase                   ;
+    cmp #5                          ;
+    bne L1756                       ;
+    rts                             ;
+
+; ***************************************************************************************
+L1756
+    lda screenCharacterA            ;
+    cmp #$8f                        ;
+    beq L176c                       ; if (wall) then branch
+
+    lda screenCharacterB            ;
+    cmp #$8f                        ;
+    beq L176c                       ; if (wall) then branch
+
+    lda $105f                       ;
+    cmp #$8f                        ;
+    beq L176c                       ; if (wall) then branch
+    rts                             ;
+
+; ***************************************************************************************
+L176c
+    lda #$fd                        ;
+    sta $183e                       ;
+    rts                             ;
+
+; ***************************************************************************************
+S1772
+    lda #$1f                        ; }
+    jsr OSWRCH                      ; }
+    lda playerPixelX                ; }
+    lsr                             ; }
+    lsr                             ; }
+    clc                             ; }
+    adc #2                          ; }
+    jsr OSWRCH                      ; } TAB(playerX/4 + 2, (newPlayerPixelY + $1851)/8)
+    lda newPlayerPixelY             ; }
+    clc                             ; }
+    adc $1851                       ; }
+    lsr                             ; }
+    lsr                             ; }
+    lsr                             ; }
+    jsr OSWRCH                      ; }
+    jsr readTwoCharactersVertically ;
+
+    lda newPlayerPixelY             ;
+    and #7                          ;
+    cmp #0                          ;
+    beq +                           ;
+    lda screenCharacterB            ;
+    sta $105f                       ;
+    lda #10                         ; VDU 10 (down)
+    jsr OSWRCH                      ;
+    jsr readTwoCharactersVertically ;
++
+    lda $105f                       ;
+    cmp #$20                        ;
+    bne L17bf                       ;
+    lda screenCharacterB            ;
+    cmp #$20                        ;
+    bne L17bf                       ;
+    lda jumpPhase                   ;
+    cmp #$05                        ;
+    bne L17bf                       ;
+    rts                             ;
+
+; ***************************************************************************************
+L17bf
+    lda screenCharacterA            ;
+    cmp #$8f                        ;
+    beq L17d5                       ;
+    lda screenCharacterB            ;
+    cmp #$8f                        ;
+    beq L17d5                       ;
+    lda $105f                       ;
+    cmp #$8f                        ;
+    beq L17d5                       ;
+    rts                             ;
+
+; ***************************************************************************************
+L17d5
+    lda #$fe                        ;
+    sta $183e                       ;
+    rts                             ;
+
+; ***************************************************************************************
+S17db
+    lda $1854                       ;
+    cmp #$01                        ;
+    bne L17f6                       ;
+    lda willyAnimationEOR           ;
+    cmp #$03                        ;
+    bne L17f6                       ;
+
+    lda #willyPageRight             ; }
+    sta willyGraphicsPage           ; }
+    lda #0                          ; } look right
+    sta willyAnimationEOR           ; }
+
+    jmp L1375                       ;
+
+; ***************************************************************************************
+L17f6
+    lda $1854                       ;
+    cmp #$01                        ;
+    bne L180e                       ;
+    lda $1854                       ;
+    sta $183e                       ;
+    lda newPlayerPixelX             ;
+    clc                             ;
+    adc $1854                       ;
+    sta newPlayerPixelX             ;
+    rts                             ;
+
+; ***************************************************************************************
+L180e
+    lda $1854                       ;
+    cmp #$ff                        ;
+    bne L1829                       ;
+    lda willyAnimationEOR           ;
+    cmp #0                          ;
+    bne L1829                       ;
+    lda #willyPageLeft              ; }
+    sta willyGraphicsPage           ; }
+    lda #3                          ; } look left
+    sta willyAnimationEOR           ; }
+    jmp L1375                       ;
+
+; ***************************************************************************************
+L1829
+    lda $1854                       ;
+    sta $183e                       ;
+    lda newPlayerPixelX             ;
+    clc                             ;
+    adc $1854                       ;
+    sta newPlayerPixelX             ;
+    rts                             ;
+
+; ***************************************************************************************
+playerPixelX
+    !byte $18
+playerPixelY
+    !byte $20
+newPlayerPixelX
+    !byte $18
+newPlayerPixelY
+    !byte $20
+
+    !byte $ea
+
+;
+willyAnimationEOR
+    !byte $03
+willyGraphicsPage
+    !byte $06
+    !byte $ea
+
+    !byte $00, $00, $00, $00, $ea
+    !byte $ea, $ea
+
+    ; $1849
+screenCharacterA
+    !byte $ea
+screenCharacterB
+    !byte $ea
+
+    ; $184b
+isInAir
+    !byte $ea
+playerHeightOnTakeOff
+    !byte $ea
+jumpPhase
+    !byte $ea
+jumpDirection
+    !byte $ea
+spriteRowCounter
+    !byte $ea
+    !byte $ea, $ea, $ea, $ea, $ff
+    !byte $ea
+
+    ; $1856
+
+    ; vertical movements at each stage of a jump
+jumpMovementArray
+    !byte $04, $04, $03, $03, $02, $02, $01, $00, $00, $00, $ff, $fe, $fe, $fd, $fd, $fc, $fc
+
+textCursorX
+    !byte $00
+textCursorY
+    !byte $ea
+
+;   $1869
+; ***************************************************************************************
+; On Entry:
+;   A = 0   means read from cache and write to screen
+;   A = 1   means read from screen and write to cache
+;   X = x pixel position
+;   Y = Y pixel position
+readOrWriteCachedBackground
+    stx $71                         ;
+    sty $72                         ;
+    sta $70                         ;
+    txa                             ;
+    and #$fc                        ;
+    sta $71                         ;
+    tya                             ;
+    lsr                             ;
+    lsr                             ;
+    lsr                             ;
+    sta $72                         ;
+    lda #$00                        ; }
+    sta $196b                       ; } $3000 screen address to read
+    lda #$30                        ; }
+    sta $196c                       ; }
+    ldx #0                          ; loop counter
+-
+    lda $196b                       ; }
+    clc                             ; }
+    adc $71                         ; }
+    sta $196b                       ; } add $71 to ($196b,$196c)
+    lda $196c                       ; }
+    adc #0                          ; }
+    sta $196c                       ; }
+    inx                             ;
+    cpx #4                          ; loop four times
+    bne -                           ;
+
+    ; $72 is the character row we want, we add $0280 for each row in a loop
+    ldx #0                          ; loop counter
+-
+    cpx $72                         ;
+    beq L18b7                       ;
+    lda $196b                       ; }
+    clc                             ; }
+    adc #$80                        ; }
+    sta $196b                       ; } Add $0280 to ($196b,$196c)
+    lda $196c                       ; }
+    adc #2                          ; }
+    sta $196c                       ; }
+    inx                             ;
+    jmp -                           ;
+
+; ***************************************************************************************
+; On Entry:
+;   $70 = 0   means read from cache and write to screen
+;   $70 = 1   means read from screen and write to cache
+L18b7
+    lda #<readScreenWriteCache      ;
+    sta L1932 + 1                   ; $1978 is the address of the routine to call
+    lda #>readScreenWriteCache      ;
+    sta L1932 + 2                   ;
+
+    lda #$bd                        ; store opcode for LDA abs,X
+    sta readOrWriteScreen           ;
+
+    lda #$99                        ; store opcode for STA abs,Y
+    sta $196e                       ;
+    lda $70
+    cmp #1
+    beq +
+
+    lda #<readCacheWriteScreen      ; }
+    sta L1932 + 1                   ; } $1972 is the address of the routine to call
+    lda #>readCacheWriteScreen      ; }
+    sta L1932 + 2                   ; }
+
+    lda #$9d                        ; } store opcode for STA abs,X
+    sta readOrWriteScreen           ; }
+
+    lda #$b9                        ; } store opcode for LDA abs,Y
+    sta $196e                       ; }
+
++
+    lda #$20                        ;
+    sta $1938                       ;
+
+    lda $1852                       ;
+    cmp #1                          ;
+    beq L192b                       ;
+    lda switchTriggered             ;
+    cmp #1                          ;
+    beq L192b                       ;
+
+    lda $1841                       ;
+    cmp #0                          ;
+    bne L192b                       ;
+
+    lda $70                         ;
+    cmp #0                          ;
+    bne L192b                       ;
+
+    lda playerPixelX                ;
+    and #3                          ;
+    eor willyAnimationEOR           ;
+    cmp #0                          ;
+    bne L192b                       ;
+    lda willyAnimationEOR           ;
+    cmp #3                          ;
+    beq L191f                       ;
+    lda #$10                        ;
+    sta $1938                       ;
+    jmp L192b                       ;
+
+; ***************************************************************************************
+L191f
+    ldx #$10                        ;
+    ldy #$10                        ;
+    lda #$10                        ;
+    sta L194e + 1                   ;
+    jmp L1932                       ;
+
+; ***************************************************************************************
+L192b
+    ldx #$00                        ;
+    ldy #$00                        ;
+    stx L194e + 1                   ;
+L1932
+    jsr $ffff                       ;
+    inx                             ;
+    iny                             ;
+    cpx #$20                        ;
+    bne L1932                       ;
+    lda L194e + 1                   ;
+    cmp #$10
+    beq L1949
+    lda $1938
+    cmp #$20
+    beq L194e
+L1949
+    tya
+    clc
+    adc #$10
+    tay
+L194e
+    ldx #0
+    lda $196b
+    clc
+    adc #$80
+    sta $196b
+    lda $196c
+    adc #$02
+    sta $196c
+    cpy #$5f
+    bcc L1932
+    lda #0
+    sta switchTriggered
+    rts
+
+; ***************************************************************************************
+readOrWriteScreen
+    lda L3000,x                         ; screen address
+    rts                                 ;
+
+; ***************************************************************************************
+readOrWriteCache
+    lda $6ba0,y                         ; off-the-visible-screen storage area
+    rts                                 ;
+
+; ***************************************************************************************
+readCacheWriteScreen
+    jsr readOrWriteCache                ; read cache
+    jmp readOrWriteScreen               ; write to screen
+
+; ***************************************************************************************
+readScreenWriteCache
+    jsr readOrWriteScreen               ; read screen
+    jmp readOrWriteCache                ; write cache
+
+    !byte $00, $00
+
+; ***************************************************************************************
+L1980
+    lda currentLevel                    ;
+    cmp #5                              ;
+    beq L199e                           ;
+    cmp #8                              ;
+    beq L19ee                           ;
+    cmp #12                             ;
+    beq L19ee                           ;
+    cmp #9                              ;
+    beq L199b                           ;
+    cmp #16                             ;
+    beq L199a                           ;
+    cmp #11                             ;
+    bcs L199b                           ;
+L199a
+    rts
+
+; ***************************************************************************************
+L199b
+    jmp L1a29
+
+; ***************************************************************************************
+L199e
+    lda #$f0
+    sta spriteMask                      ; colour 2
+    lda $1c48                           ;
+    and #$7f                            ;
+    cmp #$60                            ;
+    beq L19e3                           ;
+    cmp #$08                            ;
+    beq L19e3                           ;
+L19b0
+    lda $1c48                           ;
+    and #$80                            ;
+    cmp #$80                            ;
+    bne L19bf                           ;
+    inc $1c48                           ;
+    jmp L19c2                           ;
+
+; ***************************************************************************************
+L19bf
+    dec $1c48
+L19c2
+    ldx #$4c
+    lda $1c48
+    and #$7f
+    tay
+    jsr S19d2
+    lda #$03
+    jmp S0f00
+
+; ***************************************************************************************
+S19d2
+    lda #0
+    sta $77
+    lda #4
+    sta $78
+    lda #0                      ;
+    sta $79                     ;
+    lda #$2f                    ; $2f00?
+    sta $7a                     ;
+    rts
+
+; ***************************************************************************************
+L19e3
+    lda $1c48
+    eor #$80
+    sta $1c48
+    jmp L19b0
+
+; ***************************************************************************************
+L19ee
+    lda #$f0                    ;
+    sta spriteMask              ; colour 2
+    inc $1c49                   ;
+    lda $1c49                   ;
+    and #$08                    ;
+    cmp #$08                    ;
+    beq L1a0a                   ;
+    lda #$00                    ;
+    sta $77                     ;
+    lda #$04                    ;
+    sta $78                     ;
+    jmp L1a12                   ;
+
+; ***************************************************************************************
+L1a0a
+    lda #$40
+    sta $77
+    lda #$04
+    sta $78
+L1a12
+    ldx #$4e
+    ldy #$08
+    lda #$03
+    jmp S0f00
+
+; ***************************************************************************************
+L1a1b
+    rts
+
+; ***************************************************************************************
+L1a1c
+    lda #$04
+    sta $1b2a
+    lda #$05
+    sta $1ae9
+    jmp L1a39
+
+; ***************************************************************************************
+L1a29
+    lda currentLevel
+    cmp #19
+    beq L1a1c
+    lda #$02
+    sta $1ae9
+    lda #$03
+    sta $1b2a
+L1a39
+    inc $1c4a
+    lda $1c4a
+    and #3
+    sta $1c48
+    ldx #0
+    lda #0
+    sta $1c54
+    lda #$04
+    sta $1c55
+L1a50
+    cpx $1c48
+    beq L1a62
+    inx
+    lda $1c54
+    clc
+    adc #$40
+    sta $1c54
+    jmp L1a50
+
+; ***************************************************************************************
+L1a62
+    lda currentLevel
+    cmp #14
+    bne L1a6d
+    lda #$00
+    sta $1c54
+L1a6d
+    lda #$00
+    sta $1d95
+    ldx #$00
+    stx $1c4f
+L1a77
+    lda L1dad,x
+    cmp #$ff
+    beq L1a1b
+    sta $1c4b
+    inx
+    jsr S1d9a
+    sta $1c4c
+    inx
+    jsr S1d9a
+    sta $1c4d
+    inx
+    jsr S1d9a
+    sta $1c4e
+    stx $1c4f
+    lda $1c4b
+    and #$40
+    cmp #$40
+    beq L1aa7
+    lda #$02
+    jmp L1aa9
+
+; ***************************************************************************************
+L1aa7
+    lda #4                      ;
+L1aa9
+    sta $1c57                   ;
+    lda $1d95                   ;
+    and #$03                    ;
+    tax                         ;
+    lda $1dbd,x                 ;
+    sta spriteMask              ; set sprite colour
+    lda $1c4d                   ;
+    and #$80                    ;
+    cmp #$80                    ;
+    bne L1ac4                   ;
+    jmp L1b97                   ;
+
+; ***************************************************************************************
+L1ac4
+    lda currentLevel            ;
+    cmp #19                     ;
+    bne L1ad6                   ;
+    lda spriteMask              ;
+    cmp #$ff                    ;
+    bne L1ad6                   ;
+    lda #$f0                    ; sprite colour 2
+    sta spriteMask              ;
+L1ad6
+    lda $1c4b
+    and #$3f
+    asl
+    asl
+    clc
+    adc #$10
+    tax
+    lda $1c4c
+    clc
+    adc #$08
+    tay
+    lda #$05
+    jsr S0f00
+    lda $1c4b
+    and #$80
+    cmp #$80
+    beq L1b03
+    lda $1c4c
+    sec
+    sbc $1c57
+    sta $1c4c
+    jmp L1b0d
+
+; ***************************************************************************************
+L1b03
+    lda $1c4c
+    clc
+    adc $1c57
+    sta $1c4c
+L1b0d
+    lda $1c4b
+    and #$3f
+    asl
+    asl
+    clc
+    adc #$10
+    tax
+    lda $1c4c
+    clc
+    adc #$08
+    tay
+    lda $1c54
+    sta $77
+    lda $1c55
+    sta $78
+    lda #$04
+    jsr S0f00
+    lda $1c4c
+    cmp $1c4d
+    beq L1b73
+    cmp $1c4e
+    beq L1b73
+L1b3b
+    ldx $1c4f
+    dex
+    dex
+    dex
+    lda $1c4b
+    jsr S1d9e
+    inx
+    lda $1c4c
+    jsr S1d9e
+    inx
+    lda $1c4d
+    jsr S1d9e
+    inx
+    lda $1c4e
+    jsr S1d9e
+    inx
+    stx $1c4f
+    lda $1d95
+    clc
+    adc #$01
+    and #$03
+    sta $1d95
+    cpx #$10
+    beq L1b72
+    jmp L1a77
+
+; ***************************************************************************************
+L1b72
+    rts
+
+; ***************************************************************************************
+L1b73
+    lda currentLevel
+    cmp #14
+    beq L1b84
+    lda $1c4b
+    eor #$80
+    sta $1c4b
+    jmp L1b3b
+
+; ***************************************************************************************
+L1b84
+    lda $1c4d
+    eor #$80
+    sta $1c4d
+    jsr S1bf6
+    lda #$00
+    sta $1c51,y
+    jmp L1b3b
+
+; ***************************************************************************************
+L1b97
+    jsr S1bf6
+    lda $1c51,y
+    clc
+    adc #$01
+    sta $1c51,y
+    asl
+    asl
+    asl
+    asl
+    asl
+    asl
+    sta $77
+    sty $1c50
+    jsr S1c16
+    lda $1c4b
+    and #$3f
+    asl
+    asl
+    clc
+    adc #$10
+    tax
+    lda $1c4c
+    clc
+    adc #$08
+    tay
+    lda #$03
+    jsr S0f00
+    ldy $1c50
+    lda $1c51,y
+    cmp #$06
+    beq L1bd5
+    jmp L1b3b
+
+; ***************************************************************************************
+L1bd5
+    lda #$00
+    sta $1c4c
+    lda $1c4d
+    eor #$80
+    sta $1c4d
+    lda $1c4b
+    ora #$80
+    clc
+    adc #$08
+    sta $1c4b
+    and #$3f
+    cmp #$20
+    bcs L1c0a
+    jmp L1b3b
+
+; ***************************************************************************************
+S1bf6
+    lda $1c4c
+    cmp #$48
+    beq L1c04
+    cmp #$38
+    beq L1c07
+    ldy #$02
+    rts
+
+; ***************************************************************************************
+L1c04
+    ldy #$00
+    rts
+
+; ***************************************************************************************
+L1c07
+    ldy #$01
+    rts
+
+; ***************************************************************************************
+L1c0a
+    lda $1c4b
+    sec
+    sbc #$20
+    sta $1c4b
+    jmp L1b3b
+
+; ***************************************************************************************
+S1c16
+    jsr S1bf6
+    lda $1c51,y
+    cmp #$04
+    beq L1c2d
+    cmp #$05
+    beq L1c36
+    cmp #$06
+    beq L1c3f
+    lda #$04
+    sta $78
+    rts
+
+; ***************************************************************************************
+L1c2d
+    lda #$80
+    sta $77
+    lda #$7a
+    sta $78
+    rts
+
+; ***************************************************************************************
+L1c36
+    lda #$c0
+    sta $77
+    lda #$7a
+    sta $78
+    rts
+
+; ***************************************************************************************
+L1c3f
+    lda #$d0
+    sta $77
+    lda #$34
+    sta $78
+    rts
+
+    !byte $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea
+    !byte $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea
+
+; ***************************************************************************************
+S1c58
+    ldy #$00
+    lda #$00
+    sta S1cc4 + 1
+    sta $1cca
+    lda #$04
+    sta S1cc4 + 2
+
+L1c67
+    ldx $1cca
+    lda $7b00,x
+    sta $1cc8
+    stx $1cca
+    and #$f0
+    sta $1cc9
+    lsr
+    lsr
+    lsr
+    lsr
+    clc
+    adc $1cc9
+    jsr S1cc4
+    lda $1cc8
+    and #$0f
+    sta $1cc9
+    asl
+    asl
+    asl
+    asl
+    clc
+    adc $1cc9
+    sta $1cc9
+    tya
+    clc
+    adc #$08
+    tay
+    lda $1cc9
+    jsr S1cc4
+    ldx $1cca
+    inx
+    stx $1cca
+    tya
+    sec
+    sbc #$07
+    tay
+    cmp #$08
+    bne L1c67
+    ldy #$00
+    lda S1cc4 + 1
+    clc
+    adc #$10
+    sta S1cc4 + 1
+    ldx $1cca
+    cpx #$80
+    bne L1c67
+    rts
+
+; ***************************************************************************************
+S1cc4
+    sta $ffff,y
+    rts
+
+    !byte $ea, $ea, $ea
+
+; ***************************************************************************************
+L1ccb
+    lda #$02
+    sta $1cc9
+    jmp L1d15
+
+; ***************************************************************************************
+L1cd3
+    lda #$09
+    sta $1cc9
+    jmp L1d15
+
+; ***************************************************************************************
+L1cdb
+    lda #$01
+    sta $1cc9
+    lda #$08
+    sta $1c48
+    jmp L1d15
+
+; ***************************************************************************************
+L1ce8
+    lda #$00
+    sta $1c4a
+    lda #$7b
+    sta $1c6c
+    lda #$00
+    sta $1c6b
+    lda currentLevel
+    cmp #12
+    beq L1ccb
+    cmp #$08
+    beq L1ccb
+    cmp #$09
+    beq L1cd3
+    cmp #$05
+    beq L1cdb
+    lda currentLevel
+    sec
+    sbc #$0a
+    tax
+    lda $1da2,x
+    sta $1cc9
+L1d15
+    ldx #1
+
+L1d17
+    cpx $1cc9
+    beq L1d32
+    lda $1c6b
+    clc
+    adc #$80
+    sta $1c6b
+    lda $1c6c
+    adc #$00
+    sta $1c6c
+    inx
+    jmp L1d17
+
+; ***************************************************************************************
+L1d31
+    rts
+
+; ***************************************************************************************
+L1d32
+    jsr S1c58
+    lda currentLevel
+    cmp #$09
+    beq L1d3f
+    cmp #$0b
+    bcc L1d31
+
+L1d3f
+    ldx #8
+    lda #0
+-
+    clc                     ;
+    adc #8                  ; multiplication through repeated addition
+    inx                     ;
+    cpx currentLevel        ;
+    bne -                   ;
+
+    clc
+    adc #$78
+    sta S1d96 + 1
+    ldx #0
+    ldy #0
+
+L1d55
+    jsr S1d96
+    cmp #$ff
+    beq L1d91
+    sta L1dad,y
+    iny
+    inx
+    jsr S1d96
+    sta L1dad,y
+    iny
+    sta L1dad,y
+    iny
+    sta L1dad,y
+    lda L1dad,y
+    and #$0f
+    asl
+    asl
+    asl
+    sta L1dad,y
+    dey
+    lda L1dad,y
+    and #$f0
+    lsr
+    sta L1dad,y
+    dey
+    sta L1dad,y
+    iny
+    iny
+    iny
+    inx
+    cpx #$08
+    bne L1d55
+    rts
+
+; ***************************************************************************************
+L1d91
+    sta L1dad,y
+    rts
+
+    !byte $ea
+
+; ***************************************************************************************
+S1d96
+    lda $2480,x
+    rts
+
+; ***************************************************************************************
+S1d9a
+    lda L1dad,x
+    rts
+
+; ***************************************************************************************
+S1d9e
+    sta L1dad,x
+    rts
+
+    !byte $ea, $03, $00, $04, $05, $06, $00, $07, $0a, $08, $04
+L1dad
+    !byte $ea, $ea, $ea
+    !byte $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $f0, $ff, $0f
+    !byte $f0, $ff, $66, $00, $24, $42, $24, $42, $24, $42, $24, $42, $24, $42, $00, $66
+    !byte $ff, $ff, $66, $00, $42, $24, $42, $24, $42, $24, $42, $24, $42, $24, $00, $66
+    !byte $ff, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $49
+
+; ***************************************************************************************
+L1e00
+    jmp swapPagesC00andE00
+
+; ***************************************************************************************
+S1e03
+    lda $2280,x
+    rts
+
+; ***************************************************************************************
+L1e07
+    jsr drawMonsters
+    jmp L20fa
+
+; ***************************************************************************************
+; render monsters?
+L1e0d
+    nop
+    nop
+    nop
+
+    jsr S2e8c                       ;
+
+    lda #17                         ;
+    jsr OSWRCH                      ;
+    lda #3                          ; COLOUR 3
+    jsr OSWRCH                      ;
+
+    lda currentLevel                ;
+    cmp #19                         ;
+    beq L1e07                       ; if (level 19) then branch
+    jmp drawMonsters                ; [redundant]
+
+; ***************************************************************************************
+drawMonsters
+    jsr swapPagesC00andE00          ; swap in monster definitions
+    lda #0                          ;
+    sta drawMonsterLoopCounter      ;
+    tay                             ;
+    tax                             ;
+
+L1e30
+    lda $0d80,y                     ;
+    sta $8a,x                       ;
+    iny                             ;
+    inx                             ;
+    cpx #4                          ;
+    bne L1e30                       ;
+
+    lda $8a                         ;
+    cmp #$ff                        ;
+    beq L1e00                       ; if (end of monster array) then branch (finish up)
+
+    jsr S1e78                       ; update and draw monster
+
+    lda drawMonsterLoopCounter      ;
+    clc                             ;
+    rol                             ;
+    rol                             ;
+    tay                             ; Y = 4 * loop counter
+    ldx #0                          ; loop counter
+
+-
+    lda $8a,x                       ;
+    sta $0d80,y                     ; store $8a,$8b,$8d,$8e into $0d80+y, $0d80+y+1 etc
+    inx                             ;
+    iny                             ;
+    cpx #4                          ;
+    bne -                           ;
+
+    inc drawMonsterLoopCounter      ;
+
+    lda #$11                        ;
+    jsr OSWRCH                      ; COLOUR
+
+    lda drawMonsterLoopCounter      ;
+    and #3                          ;
+    tax                             ;
+    lda colourTable,x               ;
+    jsr OSWRCH                      ; set colour
+
+    lda drawMonsterLoopCounter      ;
+    clc                             ;
+    rol                             ;
+    rol                             ;
+    tay                             ;
+    ldx #0                          ;
+    jmp L1e30                       ;
+
+; ***************************************************************************************
+S1e78
+    lda $8b                         ;
+    eor #$40                        ; flip bit 6
+    sta $8b                         ;
+
+    tay                             ;
+    and #$20                        ;
+    cmp #$20                        ;
+    bne L1e8d                       ; if (bit 5 clear) then branch
+    tya                             ;
+    and #$40                        ;
+    cmp #$40                        ;
+    beq L1e8d                       ; if (bit 6 set) then branch
+    rts
+
+; ***************************************************************************************
+L1e8d
+    lda $8b
+    and #$80
+    cmp #$80
+    bne L1eef
+    lda $8a
+    clc
+    adc #$01
+    and #$7f
+    sta $1fa5
+    lda $8a
+    and #$03
+    asl
+    sta $8e
+    jsr S1f4b
+    lda $8e
+    cmp #$00
+    bne L1eb5
+    jsr S1f67
+    jsr S1f4b
+
+L1eb5
+    lda #$e0
+    clc
+    adc $8e
+    jsr L20ad
+    lda #$e1
+    clc
+    adc $8e
+    jsr L20ad
+    lda #$0a
+    jsr OSWRCH
+    lda #$08
+    jsr OSWRCH
+    jsr OSWRCH
+    lda #$e8
+    clc
+    adc $8e
+    jsr L20ad
+    lda #$e9
+    clc
+    adc $8e
+    jsr L20ad
+    jmp L1fa7
+
+; ***************************************************************************************
+L1ee5
+    lda $8a
+    and #$03
+    asl
+    sta $8e
+    jmp L1eb5
+
+; ***************************************************************************************
+L1eef
+    lda $8a
+    sec
+    sbc #$01
+    and #$7f
+    sta $1fa5
+    lda $8a
+    and #$03
+    eor #$03
+    asl
+    sta $8e
+    jsr S1f4b
+    lda $8e
+    cmp #$00
+    bne L1f11
+    jsr S1f81
+    jsr S1f4b
+
+L1f11
+    lda currentLevel
+    cmp #19
+    beq L1ee5
+    cmp #15
+    beq L1ee5
+    lda #$f1
+    clc
+    adc $8e
+    jsr L20ad
+    lda #$f0
+    clc
+    adc $8e
+    jsr L20ad
+    lda #$08                        ;
+    jsr OSWRCH                      ; move back three places
+    jsr OSWRCH                      ;
+    lda #$0a                        ;
+    jsr OSWRCH                      ;
+    lda #$f9
+    clc
+    adc $8e
+    jsr L20ad
+    lda #$f8
+    clc
+    adc $8e
+    jsr L20ad
+    jmp L1fa7
+
+; ***************************************************************************************
+S1f4b
+    lda #$1f                        ;
+    jsr OSWRCH                      ;
+    lda $8a                         ;
+    and #$fc                        ;
+    clc                             ;
+    ror                             ;
+    ror                             ; TAB($8a/4 + 5, ($8b AND $0f) + 1)
+    clc                             ;
+    adc #$05                        ;
+    jsr OSWRCH                      ;
+    lda $8b                         ;
+    and #$0f                        ;
+    clc                             ;
+    adc #$01                        ;
+    jmp OSWRCH                      ;
+
+; ***************************************************************************************
+S1f67
+    lda #$08
+    jsr OSWRCH
+    lda #$20
+    jsr L20ad
+    lda #$0a
+    jsr OSWRCH
+    lda #$08
+    jsr OSWRCH
+    lda #$20
+    jsr L20ad
+    rts
+
+; ***************************************************************************************
+S1f81
+    lda #$09                        ;
+    jsr OSWRCH                      ;
+    jsr OSWRCH                      ; forward two spaces
+
+    lda #$20                        ;
+    jsr L20ad                       ;
+
+    lda #$0a                        ; down
+    jsr OSWRCH                      ;
+    lda #$08                        ; left
+    jsr OSWRCH                      ;
+
+    lda #$20                        ;
+    jsr L20ad                       ;
+    rts                             ;
+
+; ***************************************************************************************
+L1f9e
+    lda $8b                         ;
+    eor #$80                        ; toggle top bit
+    sta $8b                         ;
+    rts
+
+    !byte $ea
+drawMonsterLoopCounter
+    !byte $ea
+
+; ***************************************************************************************
+L1fa7
+    lda $1fa5
+    sta $8a
+    cmp $8c
+    beq L1f9e
+    cmp $8d
+    beq L1f9e
+    rts
+
+; ***************************************************************************************
+L1fb5
+    lda #$80                            ;
+    sta S1e03 + 1                       ; set address to read from as $7280
+    lda #$72                            ;
+    sta S1e03 + 2                       ;
+
+    lda #$ea                            ; }
+    ldx #0                              ; }
+-
+    nop                                 ; }
+    nop                                 ; }
+    nop                                 ; }
+    nop                                 ; }
+    nop                                 ; } was some code nop'd out here?!
+    nop                                 ; }
+    inx                                 ; }
+    cpx #4                              ; }
+    bne -                               ; }
+
+    ldx currentLevel                    ;
+    lda $20e5,x                         ;
+    sta $8a                             ;
+
+    ldx #1                              ;
+L1fd7
+    cpx $8a
+    beq L1ff0
+    lda S1e03 + 1                       ;
+    clc                                 ;
+    adc #$80                            ;
+    sta S1e03 + 1                       ; add $80 for each X up to ($8a)
+    lda S1e03 + 2                       ;
+    adc #$00                            ;
+    sta S1e03 + 2                       ;
+    inx
+    jmp L1fd7
+
+; ***************************************************************************************
+L1ff0
+    ldx #0                              ; loop counter
+-
+    jsr S1e03                           ;
+    sta $0c00,x                         ;
+    inx                                 ;
+    cpx #$80                            ;
+    bne -                               ;
+
+    ldy #0                              ; loop counter
+L1fff
+    lda $0c00,y
+    sty $20a6
+    jsr L208a
+    ldy $20a6
+    sta $0c80,y
+    iny
+    cpy #$80
+    bne L1fff
+    lda #$ff                        ;
+    sta S1e03 + 1                   ; address $22ff
+    lda #$22                        ;
+    sta S1e03 + 2                   ;
+    ldy #$00
+    ldx #$00
+L2021
+    lda S1e03 + 1
+    clc
+    adc #$01
+    sta S1e03 + 1
+    lda S1e03 + 2
+    adc #$00
+    sta S1e03 + 2
+    jsr S1e03
+    cmp #$ff
+    beq L203c
+    jmp L2021
+
+; ***************************************************************************************
+L203c
+    iny
+    cpy currentLevel
+    bne L2021
+    ldy #0
+    ldx #1
+
+L2045
+    jsr S1e03
+    jsr S2070
+    iny
+    iny
+    jsr S2070
+    inx
+    dey
+    jsr S1e03
+    jsr S2070
+    inx
+    iny
+    iny
+    jsr S1e03
+    jsr S2070
+    inx
+    jsr S1e03
+    iny
+    cmp #$ff
+    bne L2045
+    jsr S2070
+    jmp swapPagesC00andE00
+
+; ***************************************************************************************
+S2070
+    sta $0d80,y
+    rts
+
+; ***************************************************************************************
+swapPagesC00andE00
+    ldx #0                              ;
+L2076
+    lda $0c00,x                         ;
+    tay                                 ;
+    lda $0e00,x                         ;
+    sta $0c00,x                         ; swap page at $0c00 with page at $0e00
+    tya                                 ;
+    sta $0e00,x                         ;
+    inx                                 ;
+    cpx #$ff                            ;
+    bne L2076                           ; copy 255 bytes in this loop
+    rts                                 ;
+
+; ***************************************************************************************
+L208a
+    sta $20a5
+    ldy #$00
+    ldx #$00
+L2091
+    lda $20a5
+    clc
+    rol
+    sta $20a5
+    bcs L20a7
+    txa
+    clc
+L209d
+    ror
+    tax
+    iny
+    cpy #$08
+    bne L2091
+    rts
+
+; ***************************************************************************************
+    !byte $ea, $ea
+
+; ***************************************************************************************
+L20a7
+    txa
+    sec
+    jmp L209d
+
+; ***************************************************************************************
+    !byte $ea
+
+; ***************************************************************************************
+L20ad
+    sta $20ac
+    lda vduTextCursorYPosition
+    clc
+    adc #2
+    cmp exitPositionY
+    bne L20d0
+L20bb
+    lda vduTextCursorXPosition
+    cmp exitPositionX
+    beq L20cb
+    sec
+    sbc #$01
+    cmp exitPositionX
+    bne L20db
+L20cb
+    lda #$09
+    jmp OSWRCH
+
+L20d0
+    sec
+    sbc #$01
+    cmp exitPositionY
+    bne L20db
+    jmp L20bb
+
+L20db
+    lda $20ac
+    jmp OSWRCH
+
+; ***************************************************************************************
+colourTable
+    !byte $03, $02, $01, $03
+    ; $20e5
+    !byte $ea, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0a
+    !byte $0b, $08, $0c, $00, $0d, $0e, $0f, $09, $10, $01
+
+; ***************************************************************************************
+L20fa
+    jsr S2227
+L20fd
+    ldx #$00
+L20ff
+    lda $0d80,x
+    sta $0d90,x
+    inx
+    cpx #$05
+L2108
+    bne L20ff
+L210a
+    lda $227c
+    sec
+    sbc #$05
+    asl
+    asl
+    sta $0d80
+    lda $227d
+    clc
+    adc #$01
+    sta $0d81
+    lda #$ff
+    sta $0d84
+    jsr S68df
+    ldx #$00
+L2128
+    lda $0d90,x
+    sta $0d80,x
+    inx
+    cpx #$05
+    bne L2128
+    jsr L2204
+    inc $227d
+L2139
+    lda #$11                        ;
+    jsr OSWRCH                      ;
+    lda #$03                        ; COLOUR 3
+    jsr OSWRCH                      ;
+
+    lda #$1f                        ;
+    jsr OSWRCH                      ;
+    lda $227c                       ; TAB($227c, $227d + 1)
+    jsr OSWRCH                      ;
+
+    lda $227d                       ;
+    and #1                          ;
+    sta $3f                         ;
+    lda $227d                       ;
+    cmp #0                          ;
+    bne L2165                       ;
+    clc                             ;
+    adc #1                          ;
+    jsr OSWRCH                      ;
+    jmp L216d                       ;
+
+; ***************************************************************************************
+L2165
+    jsr OSWRCH
+    lda #$20
+    jsr S221a
+L216d
+    lda $227d
+    cmp $227b
+    beq L2188
+L2175
+    lda #$e0
+    clc
+    adc $3f
+    tay
+    jsr S221a
+    tya
+    clc
+    adc #2
+    jsr OSWRCH
+    jmp L2204
+
+; ***************************************************************************************
+L2188
+    inc $227e
+    dec $227d
+    lda $227e
+    cmp #$04
+    beq L21aa
+    cmp #$01
+    beq L2175
+    cmp #$02
+    beq L21f7
+    lda #$e5
+    jsr S221a
+    lda #$e7
+    jsr OSWRCH
+    jmp L2204
+
+; ***************************************************************************************
+L21aa
+    lda #$00
+    sta $227e
+    lda #$ff
+    sta $227d
+    lda #$20
+    jsr S221a
+    lda #$20
+    jsr OSWRCH
+    inc $227f
+    lda $227f
+    and #$0f
+    tax
+    lda $2280,x
+    tay
+    and #$1f
+    clc
+    adc #$04
+    sta $227c
+    tya
+    and #$e0
+    lsr
+    lsr
+    lsr
+    lsr
+    lsr
+    clc
+    adc #$03
+    sta $227b
+    lda $227c
+    cmp #$19
+    beq L21ef
+    cmp #$1a
+    beq L21ef
+    jmp L2204
+
+; ***************************************************************************************
+L21ef
+    lda #$0b
+    sta $227b
+    jmp L2204
+
+; ***************************************************************************************
+L21f7
+    lda #$e4
+    jsr S221a
+    lda #$e6
+    jsr OSWRCH
+    jmp L2204
+
+; ***************************************************************************************
+L2204
+    ldx #$00
+L2206
+    lda $22c0,x
+    tay
+    lda $0c00,x
+    sta $22c0,x
+    tya
+    sta $0c00,x
+    inx
+    cpx #$40
+    bne L2206
+    rts
+
+; ***************************************************************************************
+S221a
+    jsr OSWRCH
+    lda #$0a
+    jsr OSWRCH
+    lda #$08
+    jmp OSWRCH
+
+; ***************************************************************************************
+S2227
+    lda $7eed
+    and #$10
+    cmp #$00
+    beq L223e
+    ldx #$3f
+    ldy #$f2
+    jsr S2241
+    ldx #$49
+    ldy #$f2
+    jsr S2241
+L223e
+    jmp L7e80
+
+; ***************************************************************************************
+S2241
+    stx S2277 + 2
+    sty S2277 + 1
+    ldx #$00
+    jsr S2277
+    and #$80
+    cmp #$00
+    bne L2274
+    ldx #$07
+    jsr S2277
+    and #$01
+    cmp #$00
+    bne L2274
+    ldx #$90
+    jsr S2277
+    and #$80
+    cmp #$00
+    bne L2274
+    ldx #$97
+    jsr S2277
+    and #$01
+    cmp #$00
+    bne L2274
+    rts
+
+; ***************************************************************************************
+L2274
+    jmp death
+
+; ***************************************************************************************
+S2277
+    lda $ffff,x
+    rts
+
+; ***************************************************************************************
+    !byte $06, $08, $ff, $00, $00
+    !byte $64, $1b, $28, $a9, $16, $1d, $02, $58, $65, $57, $27, $d9, $aa, $1c, $15, $63
+
+; ***************************************************************************************
+S2290
+    lda #$60            ;
+    sta L2500           ; Store opcode for RTS
+    jsr drawRoomName    ;
+    jmp L2503           ;
+
+; ***************************************************************************************
+L229b
+    lda #$20            ;
+    sta L2500           ; store opcode for JSR
+    lda #8              ;
+    sta $227c           ;
+    lda #$ff            ;
+    sta $227d           ;
+    lda #6              ;
+    sta $227b           ;
+    lda #0              ;
+    sta $227f           ;
+    lda #$f0            ;
+    sta $7eed           ;
+    jmp L2427           ;
+
+; ***************************************************************************************
+    !byte $7c, $6b, $4c, $e8
+    !byte $00, $00, $22, $91, $4a, $91, $4a, $12, $00, $20, $2a, $4a, $4a, $51, $22, $14
+    !byte $48, $1c, $2e, $7d, $57, $7d, $36, $1c, $42, $3c, $36, $5f, $7d, $6f, $3a, $1c
+    !byte $00, $00, $00, $00, $00, $22, $91, $4a, $00, $00, $00, $00, $00, $00, $00, $40
+    !byte $91, $4a, $12, $48, $1c, $2e, $7d, $57, $09, $20, $14, $40, $28, $02, $22, $5d
+    !byte $ff, $1a, $87, $3a, $ff, $47, $03, $01, $72, $0d, $2d, $ff, $3f, $03, $01, $4a
+    !byte $0d, $01, $45, $83, $72, $ff, $01, $8d, $26, $15, $8d, $3a, $ff, $0c, $87, $2f
+    !byte $2f, $03, $01, $ff, $14, $88, $32, $34, $88, $52, $19, $8d, $4e, $5d, $8d, $72
+    !byte $ff, $38, $81, $72, $27, $08, $05, $41, $8d, $72, $ff, $22, $0d, $01, $29, $ab
+    !byte $3a, $45, $87, $52, $ff, $31, $83, $46, $31, $aa, $46, $ff, $41, $85, $52, $20
+    !byte $87, $36, $0d, $8d, $66, $36, $2a, $1c, $ff, $14, $8d, $4a, $38, $83, $5b, $35
+    !byte $a7, $49, $ff, $26, $ab, $3a, $22, $0d, $02, $5e, $86, $6e, $ff, $1a, $81, $6e
+    !byte $6e, $24, $1a, $62, $07, $26, $5a, $2a, $1a, $ff, $ff, $40, $ad, $4b, $ff, $65
+    !byte $a5, $72, $4a, $0d, $02, $45, $87, $5e, $02, $8a, $1e, $ff, $10, $ad, $1f, $2c
+    !byte $8d, $62, $ff, $2e, $a3, $46, $46, $06, $2e, $2e, $aa, $46, $42, $0d, $2e, $ff
+    !byte $4a, $0b, $1e, $72, $0d, $5a, $1a, $0d, $02, $ff, $1a, $83, $2e, $4a, $21, $30
+    !byte $29, $29, $05, $ff, $29, $05, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+
+; ***************************************************************************************
+showScreenAndWaitForRETURN
+    lda #2                          ;
+    sta lives                       ;
+
+    lda #31                         ; }
+    jsr OSWRCH                      ; }
+    lda #$12                        ; }
+    jsr OSWRCH                      ; } TAB(18,19)
+    lda #$13                        ; }
+    jsr OSWRCH                      ; }
+
+    ; print 18 spaces
+    lda #charSPACE                  ;
+    ldx #0                          ; loop counter
+-
+    jsr OSWRCH                      ;
+    inx                             ;
+    cpx #18                         ;
+    bne -                           ;
+
+    ; set palette to regular numbers
+    ldx #0                          ;
+-
+    txa                             ;
+    jsr setPalette                  ;
+    inx                             ;
+    cpx #$05                        ;
+    bne -                           ;
+
+    ; set logical colour 3 to white
+    lda #$07                        ;
+    ldx #$03                        ;
+    jsr setPalette                  ;
+
+    ; delay
+    lda #$d0                        ;
+    sta $70                         ;
+    tax                             ;
+    tay                             ;
+    sta $70                         ;
+
+-
+    inx                             ;
+    bne -                           ;
+    iny                             ;
+    bne -                           ;
+    stx $71                         ; reset to zero
+    sty $72                         ;
+
+    ldy #$ff                        ;
+    ldx #$b6                        ;
+    lda #$81                        ; wait for RETURN key
+    jsr OSBYTE                      ;
+    cpy #$ff                        ;
+    beq startGameJumper             ; if (RETURN pressed) then branch
+
+    ldy $72                         ;
+    ldx $71                         ;
+    inc $70                         ;
+    bne -                           ;
+
+    lda #$00                        ;
+    sta $3098                       ; }
+    jsr S62e3                       ; } demo mode?
+    jmp playGame                    ; }
+
+; ***************************************************************************************
+startGameJumper
+    jmp startGame                   ;
+
+; ***************************************************************************************
+L2427
+    lda #$ff
+    sta $6b7c
+    jmp L1ce8
+
+; ***************************************************************************************
+    !byte $00
+
+; ***************************************************************************************
+creditsMessage
+    !byte 31, 19, 2                 ; TAB(19,2)
+    !text "SOFTWARE PROJECTS"
+    !byte 31, 23, 4                 ; TAB(23,4)
+    !text "Presents"
+    !byte 31, 26, 9                 ; TAB(26,9)
+    !text "BY"
+    !byte 31, 21, 11                ; TAB(21,11)
+    !text "D.J.COATHUPE"
+    !byte 31, 19, 15                ; TAB(19,15)
+    !text "ORIGINAL PROGRAM"
+    !byte 31                        ; TAB...
+creditsMessageEnd
+
+; ***************************************************************************************
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $85, $0d, $cb, $0d, $94, $0d, $d9, $0d, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $83, $4d, $8c, $07, $95, $6d, $da, $0d, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+    !byte $85, $1d, $ff, $ff, $ff, $ff, $ff, $ff, $c1, $09, $8b, $04, $d5, $07, $ff, $ff
+    !byte $89, $4d, $8f, $5d, $d5, $4d, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+    !byte $83, $8d, $4a, $c0, $13, $80, $db, $0c, $c5, $1d, $8a, $1d, $d4, $1d, $99, $1d
+    !byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $82, $06, $da, $4d, $ff, $ff, $ff, $ff
+
+bylineMessage
+    !byte 19, 17                    ; ...(19,17)
+    !text "BY MATTHEW SMITH"
+    !byte 31, 19, 7                 ; TAB(19,7)
+bylineMessageEnd
+
+    !byte $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00
+
+; ***************************************************************************************
+L2500
+    jsr S2290
+
+L2503
+    lda currentLevel                ;
+    cmp #10                         ; level 10
+    bne nonLevel10                  ;
+    lda #$ff                        ;
+    sta conveyorLength              ;
+    jmp drawFixedString             ;
+
+; ***************************************************************************************
+nonLevel10
+    ldy currentLevel                ;
+    lda fixedText - 1,y             ;
+    and #$80                        ;
+    clc                             ;
+    adc $71                         ;
+    clc                             ;
+    adc #5                          ;
+    sta conveyorX                   ;
+
+    lda $72                         ;
+    clc                             ;
+    adc #1                          ;
+    sta conveyorY                   ;
+
+    lda $73                         ;
+    sta conveyorLength              ;
+
+drawFixedString
+    lda #$1f                        ;
+    jsr OSWRCH                      ;
+    lda #4                          ; TAB(4,19)
+    jsr OSWRCH                      ;
+    lda #19                         ;
+    jsr OSWRCH                      ;
+
+    ; draw fixed text below play area
+    ldy #0                          ;
+-
+    lda fixedText,y                 ;
+    and #$7f                        ;
+    jsr OSWRCH                      ;
+    iny                             ;
+    cpy #32                         ;
+    bne -                           ;
+    rts                             ;
+
+; ***************************************************************************************
+drawConveyors
+    jsr updateAirAndCheckExit       ;
+    lda currentLevel                ;
+    cmp #18                         ;
+    beq L259b                       ;
+
+    inc conveyorSpriteOffset        ;
+    lda conveyorLength              ;
+    cmp #$ff                        ;
+    beq L259b                       ;
+
+    lda #$11                        ; }
+    jsr OSWRCH                      ; }
+    lda #$02                        ; } COLOUR 2
+    jsr OSWRCH                      ; }
+
+    lda conveyorX                   ;
+    and #$80                        ;
+    cmp #$80                        ;
+    beq reverseConveyorDirection    ;
+
+    lda conveyorSpriteOffset        ;
+L2576
+    tax                             ;
+
+    lda #$1f                        ;
+    jsr OSWRCH                      ;
+    lda conveyorX                   ;
+    and #$7f                        ; remove top bit (direction)
+    jsr OSWRCH                      ; TAB(conveyorX, conveyorY)
+    lda conveyorY                   ;
+    jsr OSWRCH                      ;
+
+    ldy #0                          ;
+    txa                             ;
+    and #3                          ;
+    clc                             ;
+    adc #$eb                        ; sprite to draw for conveyor
+
+-
+    jsr OSWRCH                      ;
+    iny                             ;
+    cpy conveyorLength              ;
+    bne -                           ;
+L259b
+    rts                             ;
+
+; ***************************************************************************************
+reverseConveyorDirection
+    lda conveyorSpriteOffset        ;
+    eor #3                          ;
+    jmp L2576                       ;
+
+; ***************************************************************************************
+conveyorX
+    !byte $ea
+conveyorY
+    !byte $ea
+conveyorLength
+    !byte $ea
+conveyorSpriteOffset
+    !byte $ea
+
+; The fixed text under the play area: "Score         Lives     Level"
+; but with the top bit being the conveyor direction for each level (for the first 20 bytes)
+fixedText
+    !text $00 + 'S', $80 + 'c', $00 + 'o', $80 + 'r', $00 + 'e'
+    !text $00 + ' ', $00 + $09, $80 + $09, $80 + $09, $00 + $09
+    !text $00 + $09, $80 + $09, $80 + ' ', $00 + ' ', $00 + 'L'
+    !text $00 + 'i', $80 + 'v', $00 + 'e', $80 + 's', $00 + ' '
+    !text $09, $09, $20, $20, "Level"
+
+; ***************************************************************************************
+    jsr $3831                   ; [unused]
+
+showScoreLivesAndLevel
+    lda #$ff                    ; }
+    jsr addToScore              ; } add 0 to score
+
+    ; show lives
+    lda #$1f                    ; }
+    jsr OSWRCH                  ; }
+    lda #$22                    ; } TAB(34,19)
+    jsr OSWRCH                  ; }
+    lda #$13                    ; }
+    jsr OSWRCH                  ; }
+
+    lda currentLevel            ; show current level
+    tax                         ; [redundant]
+    ldy #0                      ; counter for tens digit
+    jsr print10sDigit           ; print 10s digit
+    txa                         ; X is units
+    tay                         ;
+    jmp printY                  ; print units
+
+; ***************************************************************************************
+;
+; On Entry:
+;   A is the number to print
+;   Y = 0
+;
+; ***************************************************************************************
+print10sDigit
+    cmp #10                     ;
+    bcc printY                  ;
+    iny                         ;
+    sec                         ;
+    sbc #10                     ;
+    jmp print10sDigit           ;
+
+; ***************************************************************************************
+;
+; print a single digit 0-9 in the Y register
+;
+; On Entry:
+;   Y is the digit 0-9 to print
+;
+; ***************************************************************************************
+printY
+    tax                         ;
+    tya                         ;
+    clc                         ;
+    adc #$30                    ;
+    jmp OSWRCH                  ;
+
+; ***************************************************************************************
+    !byte $74, $68
+
+exitPositionX
+    !byte $13
+exitPositionY
+    !byte $07
+
+; ***************************************************************************************
+S2600
+    lda $ffff,x
+    rts
+
+; ***************************************************************************************
+; unused?
+L2604
+    lda #$80
+    sta S2600 + 1
+    lda #$26
+    sta S2600 + 2
+    lda #$00
+    sta $2693
+    lda #$11
+    jsr OSWRCH
+    lda #$03
+    jsr OSWRCH
+    ldx #$00
+L261f
+    jsr S2600
+    cmp #$20
+    bcc L2631
+L2626
+    inx
+    cpx #$00
+    bne L261f
+    inc S2600 + 2
+    jmp L261f
+
+; ***************************************************************************************
+; unused?
+L2631
+    inc $2693                       ; UNUSED
+    lda currentLevel                ; UNUSED
+    cmp $2693                       ; UNUSED
+    bne L2626                       ; UNUSED
+    lda #$1f                        ; UNUSED
+    jsr OSWRCH                      ; UNUSED
+    jsr S2600                       ; UNUSED   TAB(level value + 4, 17)
+    clc                             ; UNUSED
+    adc #$04                        ; UNUSED
+    jsr OSWRCH                      ; UNUSED
+    lda #$11                        ; UNUSED
+    jsr OSWRCH                      ; UNUSED
+
+-
+    inx                             ; UNUSED
+    jsr S2600                       ; UNUSED
+    cmp #$20                        ; UNUSED
+    bcc L265c                       ; UNUSED
+    jsr OSWRCH                      ; UNUSED
+    jmp -                           ; UNUSED
+
+; ***************************************************************************************
+; unused?
+L265c
+    lda #$00                        ; UNUSED
+    sta $2695                       ; UNUSED
+    lda #$5a                        ; UNUSED
+    sta $2696                       ; UNUSED
+    ldy #$c0                        ; UNUSED
+    lda #$b9                        ; UNUSED
+    sta S2694                       ; UNUSED
+    jsr S2694                       ; UNUSED
+    eor #$ff                        ; UNUSED
+    tax                             ; UNUSED
+    lda #$99                        ; UNUSED
+    sta S2694                       ; UNUSED
+    txa                             ; UNUSED
+    jsr S2694                       ; UNUSED
+    iny                             ; UNUSED
+    cpy #$c0                        ; UNUSED
+
+    !byte $f0                       ; UNUSED
+
+; ***************************************************************************************
+S2694 = * + 20
+
+; ***************************************************************************************
+numbers
+    !text 9, "Central Cavern"
+    !text 9, "The Cold Room"
+    !text 9, "The Menagerie"
+    !text 3, "Abandoned Uranium Workings"
+    !text 9, "Eugene's Lair"
+    !text 8, "Processing Plant"
+    !text 12, "The Vat"
+    !text 0, "Miner Willy meets the Kong Beast"
+    !text 7, "Wacky Amoebatrons"
+    !text 6, "The Endorian Forest"
+    !text 0, "Attack of the Mutant Telephones"
+    !text 1, "Return of the Alien Kong Beast"
+    !text 10, "Ore Refinery"
+    !text 7, "Skylab Landing Bay"
+    !text 12, "The Bank"
+    !text 6, "The Sixteenth Cavern"
+    !text 9, "The Warehouse"
+    !text 6, "Amoebatrons' Revenge"
+    !text 7, "The Meteor Storm     "        ; ... should really be the "Solar Power Generator" level
+    !text 7, "The Final Barrier"
+    !byte $0d                               ; terminator
+
+; ***************************************************************************************
+    ; unused?
+    !byte $07, $54, $68
+
+; ***************************************************************************************
+levelNumberCounter
+tempCounter
+    !byte $ea
+
+; ***************************************************************************************
+setVerticalDisplayedCharacters
+    lda #23                         ;
+    jsr OSWRCH                      ; VDU 23
+    lda #0                          ;
+    jsr OSWRCH                      ; VDU 0
+    lda #6                          ;
+    jsr OSWRCH                      ; VDU 6
+    txa                             ;
+    jsr OSWRCH                      ; VDU X
+
+    lda #0                          ;
+    ldx #0                          ;
+-
+    jsr OSWRCH                      ; VDU 0
+    inx                             ;
+    cpx #6                          ;
+    bne -                           ; loop 6 times
+    rts                             ;
+
+; ***************************************************************************************
+clearScreen
+    lda #0                          ;
+    tax                             ; loop counter
+-
+
+    jsr setPalette                  ; set every colour black (A=0)
+    inx                             ;
+    cpx #$04                        ; are we done yet?
+    bne -                           ; if (not done yet) then branch (loop back)
+
+    lda #>screenStartAddress        ;
+    sta injectAddressHigh           ;
+    lda #<screenStartAddress        ;
+    sta injectAddressLow            ;
+    ldx #$00                        ;
+-
+
+    lda #$00                        ;
+injectAddressLow = * + 1
+injectAddressHigh = * + 2
+    sta $3000,x                     ; clear screen
+    inx                             ;
+    beq L2843                       ;
+    jmp -                           ;
+
+L2843
+    inc injectAddressHigh           ;
+    lda injectAddressHigh           ;
+    cmp #>screenEndAddress          ;
+    bcc -                           ;
+
+    ldx #19                         ; set 19 character rows
+    jmp setVerticalDisplayedCharacters      ;
+
+level10Init
+    lda #$e1                        ;
+    sta levelFeature3               ;
+    lda #$02                        ;
+    sta levelColourArray + 1        ;
+    sta levelColourArray + 2        ;
+    lda #3                          ;
+    sta levelColourArray + 3        ;
+    jmp levelInitContinued          ;
+
+drawSwitchAt10Comma1
+    lda #$1f                        ; }
+    jsr OSWRCH                      ; }
+    lda #$0a                        ; }
+    jsr OSWRCH                      ; } TAB(10,1)
+    lda #$01                        ; }
+    jsr OSWRCH                      ; }
+
+    lda #$f8                        ; VDU $f8
+    jsr OSWRCH                      ;
+
+    ; print 11 spaces
+    ldx #0                          ;
+    lda #$20                        ;
+-
+    inx                             ;
+    jsr OSWRCH                      ;
+    cpx #11                         ;
+    bne -                           ;
+
+    lda #$f8                        ; VDU $f8
+    jsr OSWRCH                      ;
+    jmp nonLevel10Init              ;
+
+level13Init
+    lda #$f5                        ;
+    sta levelFeature1               ;
+    lda #3                          ;
+    sta levelColourArray + 1        ;
+    jmp levelInitContinued          ;
+
+; ***************************************************************************************
+;
+; set an entry in the palette
+;
+; On Entry:
+;       X = logical colour to change
+;       A = physical colour to use
+;
+; ***************************************************************************************
+setPalette
+    tay                             ;
+    lda #19                         ;
+    jsr OSWRCH                      ; VDU 19
+    txa                             ;
+    jsr OSWRCH                      ; VDU X
+    tya                             ;
+    ldy #0                          ;
+-
+    jsr OSWRCH                      ; VDU Y
+    iny                             ;
+    cpy #$04                        ;
+    bne -                           ; loop four times
+    rts                             ;
+
+readByteOffsetX
+    lda $2c00,x                     ; read byte
+    rts                             ;
+
+    sta currentLevel                ; [unused?]
+initLevel
+    jsr clearScreen                 ;
+    lda #>levelDefinitions          ; } read data from $6c00 upwards
+    sta readByteOffsetX + 2         ; }
+
+    lda #$eb                        ;
+    sta levelFeature3               ;
+
+    lda currentLevel                ;
+    cmp #10                         ;
+    beq level10Init                 ;
+    cmp #8                          ; }
+    beq drawSwitchAt10Comma1        ; } if (level 8 or 12) then branch (show switch)
+    cmp #12                         ; }
+    beq drawSwitchAt10Comma1        ; }
+
+nonLevel10Init
+    lda #$eb                        ; }
+    sta levelFeature3               ; }
+    lda #$03                        ; }
+    sta levelColourArray + 2        ; } values for all levels except level 10
+    lda #$01                        ; }
+    sta levelColourArray + 1        ; }
+    lda #$02                        ; }
+    sta levelColourArray + 3        ; }
+
+    lda currentLevel                ;
+    cmp #13                         ;
+    beq level13Init                 ;
+    lda #$e2                        ;
+    sta levelFeature1               ;
+
+levelInitContinued
+    ldx #0                          ;
+    stx readByteOffsetX + 1         ;
+    stx levelNumberCounter          ;
+
+findLevelDataLoop
+    jsr readByteOffsetX             ;
+    inx                             ;
+    cpx #0                          ;
+    beq addToHighByte               ;
+    cmp #$ff                        ;
+    beq +                           ;
+    jmp findLevelDataLoop           ;
+
+addToHighByte
+    inc readByteOffsetX + 2         ;
+    jmp findLevelDataLoop           ;
+
++
+    jsr readByteOffsetX             ;
+    cmp #$ff                        ;
+    bne findLevelDataLoop           ; if (not end of current level data) then branch (loop back)
+    inc levelNumberCounter          ;
+    lda levelNumberCounter          ; add one to level counter
+    cmp currentLevel                ;
+    bne findLevelDataLoop           ; if (not the level we are looking for) then branch (loop back)
+    jmp foundLevelData              ;
+
+; ***************************************************************************************
+readLevelDataByte
+    lda $2c00,x                     ;
+    rts                             ;
+
+; ***************************************************************************************
+foundLevelData
+    inx                             ; }
+    stx readLevelDataByte + 1       ; } store address of start of level data
+    lda readByteOffsetX + 2         ; }
+    sta readLevelDataByte + 2       ; }
+
+    ; the first two bytes of the level data contain 3 colours, stored in nybbles
+    ldx #0                          ;
+    jsr readLevelDataByte           ; read first byte of level data (colours)
+    sta levelColours                ; store it
+    inx                             ;
+    jsr readLevelDataByte           ; read second byte of level data
+    sta levelColours2               ; store it
+
+    ; set palette to black
+    ldx #0                          ;
+    lda #0                          ;
+-
+    jsr setPalette                  ;
+    inx                             ;
+    cpx #4                          ;
+    bne -                           ;
+
+    ; next read header information (4 bytes) into $83-$86
+    ldx #2                          ;
+-
+    jsr readLevelDataByte           ; read the next four bytes of level data
+    sta $81,x                       ; store them at the level address
+    inx                             ;
+    cpx #6                          ;
+    bne -                           ;
+
+    ; $83 contains two sprite numbers to use, one in each nybble
+    ;
+    ;   top nybble is the floor sprite
+    ; lower nybble is the crumble bar sprite
+    ;
+    lda $83                         ; top nybble contains sprite to copy
+    and #$f0                        ;
+    clc                             ;
+    ror                             ;
+    tax                             ;
+
+    ; copy floor sprite from $0b00+X to $0c00 for 16 bytes
+    ldy #0                          ;
+-
+    lda $0b00,x                     ;
+    sta $0c00,y                     ;
+    inx                             ;
+    iny                             ;
+    cpy #16                         ;
+    bne -                           ;
+
+    lda $83                         ; lower nybble contains sprite to copy
+    and #$0f                        ;
+    clc                             ;
+    rol                             ;
+    rol                             ;
+    rol                             ;
+    tax                             ;
+
+    ; copy crumble bar sprite from $0b80+X to $0c10 for 8 bytes
+    ldy #0                          ;
+-
+    lda $0b80,x                     ;
+    sta $0c10,y                     ;
+    iny                             ;
+    inx                             ;
+    cpy #8                          ;
+    bne -                           ;
+
+    ;
+    ; copy crumble bar seven times into the different crumbled states:
+    ;
+    ;       $0c19-$0c28
+    ;       $0c22-$0c30
+    ;       $0c2b-$0c38
+    ;       $0c34-$0c40
+    ;       $0c3d-$0c48
+    ;       $0c46-$0c50
+    ;       $0c4f-$0c58
+    ;
+    lda #1                          ;
+    sta tempCounter                 ;
+    lda #$18                        ;
+    sta storeAddressLow             ;
+
+tempLoop
+    ldx #0                          ;
+    ldy tempCounter                 ; loop counter
+
+-
+    lda $0c10,x                     ;
+storeAddressLow = * + 1
+    sta $0c18,y                     ;
+    inx                             ;
+    iny                             ;
+    cpy #8                          ;
+    bne -                           ;
+
+    inc tempCounter                 ;
+    lda storeAddressLow             ;
+    clc                             ;
+    adc #8                          ;
+    sta storeAddressLow             ;
+    lda tempCounter                 ;
+    cmp #8                          ;
+    bne tempLoop                    ;
+
+    ; ($84) bottom three bits contain the conveyor sprite to use
+    ;       this also determines the side walls sprite
+    ;
+    ; We transform abcdefgh -> fgh00bcd, but in practice bcd = 000 so -> fgh00000
+    lda $84                         ;
+    and #$7f                        ;
+    clc                             ;
+    rol                             ;
+    rol                             ;
+    rol                             ;
+    rol                             ;
+    rol                             ;
+    tax                             ;
+
+    ; copy conveyor sprite from $0ba0+X to $0c58 for 32 bytes
+    ldy #0                          ;
+-
+    lda $0ba0,x                     ;
+    sta $0c58,y                     ;
+    inx                             ;
+    iny                             ;
+    cpy #$20                        ;
+    bne -                           ;
+
+    lda $85                         ;
+    and #$f0                        ; get upper nybble
+    clc                             ;
+    ror                             ; divide by two
+    tax                             ;
+
+    ; copy side wall sprite from $0b40+X to $0c78 for 8 bytes
+    ldy #0                          ;
+-
+    lda $0b40,x                     ;
+    sta $0c78,y                     ;
+    iny                             ;
+    inx                             ;
+    cpy #8                          ;
+    bne -                           ;
+
+    ; $85 holds the key sprite
+    lda $85                         ;
+    and #$0f                        ; get lower nybble
+    clc                             ;
+    rol                             ;
+    rol                             ;
+    rol                             ; multiply by eight
+    tax                             ;
+
+    ; copy key sprite from $0ab0+X to $0c80 for 8 bytes
+    ldy #0                          ;
+-
+    lda $0ab0,x                     ;
+    sta $0c80,y                     ;
+    iny                             ;
+    inx                             ;
+    cpy #8                          ;
+    bne -                           ;
+
+    jsr getExitSprite               ;
+    jmp drawLevel                   ;
+
+getExitSprite
+    ; $86 bottom 3 bits holds the exit sprite - top two bits are the type:
+    ;
+    ;   00 = 8x8 exit sprite repeated four times (lower 3 bits are sprite number)
+    ;   10 = 8x16 exit sprite mirrored about the Y axis (lower 3 bits are sprite number)
+    ;   01 = }
+    ;   11 = } 16x16 exit sprite (lower 6 bits are the sprite number)
+    ;
+    lda $86                         ;
+    and #$c0                        ; get top two bits
+    clc                             ; [redundant]
+    cmp #0                          ;
+    beq getExit8x8                  ; if (neither bit set) then branch
+    cmp #$80                        ;
+    beq getExit8x16                 ; if (only top bit set) then branch
+
+getExit16x16
+    lda $86                         ;
+    and #$3f                        ; get lower 6 bits
+    clc                             ;
+    rol                             ;
+    rol                             ;
+    rol                             ;
+    rol                             ;
+    rol                             ; multiply by 32
+    tax                             ;
+    ; copy from $0900+X to $0c88 for 32 bytes
+    ldy #0                          ;
+-
+    lda $0900,x                     ;
+    sta $0c88,y                     ;
+    inx                             ;
+    iny                             ;
+    cpy #32                         ;
+    bne -                           ;
+    rts                             ;
+
+getExit8x8
+    lda $86                         ;
+    and #7                          ; get bottom three bits
+    clc                             ;
+    rol                             ;
+    rol                             ;
+    rol                             ; multiply by eight
+    tax                             ;
+
+    ; copy from $0980+X to $0c88 and $0c90 and $0c98 and $0ca0 for eight bytes
+    ldy #0                          ;
+-
+    lda $0980,x                     ;
+    sta $0c88,y                     ;
+    sta $0c90,y                     ;
+    sta $0c98,y                     ;
+    sta $0ca0,y                     ;
+    inx                             ;
+    iny                             ;
+    cpy #8                          ;
+    bne -                           ;
+    rts                             ;
+
+getExit8x16
+    lda #9                          ;
+    sta getExitSourceByte + 2       ;
+    lda $86                         ;
+    and #$3f                        ; get lower 6 bits
+    clc                             ;
+    rol                             ;
+    rol                             ;
+    rol                             ;
+    rol                             ;
+    clc                             ;
+    adc #$98                        ;
+    sta getExitSourceByte + 1       ;
+    lda getExitSourceByte + 2       ;
+    adc #0                          ;
+    sta getExitSourceByte + 2       ; address of sprite set
+
+    ; copy 16 bytes
+    ldy #0                          ; loop counter
+getExitSourceByte
+    lda $0998                       ;
+    sta $0c88,y                     ;
+    lda getExitSourceByte + 1       ; }
+    clc                             ; }
+    adc #1                          ; }
+    sta getExitSourceByte + 1       ; } increment source address
+    lda getExitSourceByte + 2       ; }
+    adc #0                          ; }
+    sta getExitSourceByte + 2       ; }
+    iny                             ;
+    cpy #16                         ;
+    bne getExitSourceByte           ;
+
+    ; copy 8x8 sprite
+    ldx #0                          ;
+-
+    lda $0c90,x                     ;
+    sta $0c98,x                     ;
+    inx                             ;
+    cpx #8                          ;
+    bne -                           ;
+
+    ; reverse the left hand side of the exit to get the right hand side
+    ldx #0                          ;
+-
+    lda $0c88,x                     ;
+    stx tempX                       ;
+    jsr reverseBits                 ;
+    ldx tempX                       ;
+    sta $0c90,x                     ;
+
+    lda $0c98,x                     ;
+    stx tempX                       ; [redundant]
+    jsr reverseBits                 ;
+    ldx tempX                       ;
+    sta $0ca0,x                     ;
+    inx                             ;
+    cpx #8                          ;
+    bne -                           ;
+    rts                             ;
+
+tempX
+    !byte $ea                       ;
+
+; ***************************************************************************************
+;
+; Reverse the order of all bits in A
+;
+; [ This is not the most efficient way of doing it
+;   e.g. use this from https://sites.google.com/site/h2obsession/programming/6502
+; reverseBits
+;     sta byteToReverse               ;
+;     lda #1                          ;
+; -
+;     lsr byteToReverse               ;
+;     rol                             ;
+;     bcc -                           ;
+;     rts                             ;
+; ]
+
+; ***************************************************************************************
+reverseBits
+    sta byteToReverse               ;
+
+    ldy #0                          ;
+    ldx #0                          ;
+L2ab8
+    lda byteToReverse               ;
+    clc                             ;
+    rol                             ;
+    sta byteToReverse               ;
+    bcs bitSet                      ;
+    txa                             ;
+    clc                             ;
+
+continueReverseBits
+    ror                             ;
+    tax                             ;
+    iny                             ;
+    cpy #8                          ;
+    bne L2ab8                       ;
+    rts                             ;
+
+byteToReverse
+    !byte $ea                       ;
+
+bitSet
+    txa                             ;
+    sec                             ;
+    jmp continueReverseBits         ;
+
+; ***************************************************************************************
+drawExit
+    ldx #7                          ;
+    jsr readLevelDataByte           ;
+    sta $70                         ;
+    inx                             ; read level exit position (index 7 and 8 into level data)
+    jsr readLevelDataByte           ;
+    sta $71                         ;
+
+    lda #$1f                        ;
+    jsr OSWRCH                      ;
+    lda $70                         ; TAB(exitX,exitY - 2)
+    jsr OSWRCH                      ;
+    lda $71                         ;
+    sec                             ;
+    sbc #2                          ;
+    jsr OSWRCH                      ;
+
+    ; Draw: f1,f2
+    ;       f3,f4
+    ldx #0
+L2af3
+    lda L2aff,x                     ;
+    jsr OSWRCH                      ;
+    inx                             ;
+    cpx #$08                        ;
+    bne L2af3                       ;
+    rts                             ;
+
+L2aff
+    !byte $f1, $f2, $0a, $08, $08, $f3, $f4, $00
+
+setRoomColours
+    lda #0                          ;
+    jsr OSWRCH                      ;
+    jsr drawAirBar                  ;
+
+    lda #$11                        ;
+    jsr OSWRCH                      ; COLOUR 2
+    lda #2                          ;
+    jsr OSWRCH                      ;
+
+    jsr drawConveyors               ;
+    jsr drawExit                    ;
+
+    ldx #0                          ;
+    lda levelColours                ;
+    and #$0f                        ;
+    jsr setPalette                  ; set palette from lower nybble
+
+    lda levelColours                ;
+    and #$f0                        ;
+    clc                             ;
+    ror                             ;
+    ror                             ;
+    ror                             ;
+    ror                             ;
+    ldx #1                          ;
+    jsr setPalette                  ; set palette from upper nybble
+
+    lda levelColours2               ;
+    and #$0f                        ;
+    ldx #$02                        ;
+    jsr setPalette                  ; set palette from second colour byte (lower nybble)
+    ldx #3                          ;
+    lda #3                          ;
+    jsr setPalette                  ; set palette(3) = 3
+    jmp swapPagesC00andE00          ; use different character set
+
+; ***************************************************************************************
+command255
+    stx levelDataOffset             ;
+    lda levelFeatureIndex           ;
+    cmp #5                          ;
+    beq setRoomColours              ;
+    inc levelFeatureIndex           ;
+    jmp decodeLevelData             ;
+
+command253
+    inx                             ;
+    jsr readLevelDataByte           ; read next byte
+    sta levelFeatureIndex           ; store next byte
+    stx $70                         ; record incremented index
+    jmp decodeLevelData             ;
+
+command254
+    inx                             ;
+    ldy #0                          ; loop counter
+-
+    jsr readLevelDataByte           ; }
+    sta $0071,y                     ; }
+    inx                             ; } read four level bytes and store them in $71,$72,$73,$74
+    iny                             ; }
+    cpy #4                          ; }
+    bne -                           ; }
+
+    dex                             ;
+    stx levelDataOffset             ;
+
+    jsr drawFeature                 ;
+    jmp decodeLevelData             ;
+
+drawFeature
+    jsr commandPlatform                 ;
+    inc $72                             ;
+    lda $72                             ;
+    cmp $74                             ;
+    bne drawFeature                     ;
+    rts                                 ;
+
+drawLevel
+    jsr drawSideWallsAndFloor           ;
+    lda #8                              ;
+    sta levelDataOffset                 ;
+    lda #0                              ;
+    sta levelFeatureIndex               ;
+
+decodeLevelData
+    inc levelDataOffset                 ;
+    ldx levelDataOffset                 ;
+    jsr readLevelDataByte               ; read next byte of data
+    cmp #$ff                            ;
+    beq command255                      ; if (255) then branch
+    cmp #$fe                            ;
+    beq command254                      ; if (254) then branch
+    cmp #$fd                            ;
+    beq command253                      ; if (253) then branch
+
+    ldy #0                              ;
+    ldx levelDataOffset                 ;
+-
+    jsr readLevelDataByte               ;
+    sta $0071,y                         ;
+    iny                                 ; store next three bytes of level data into $71, $72, $73
+    inx                                 ; these are X, Y, Length of a feature
+    cpy #3                              ;
+    bne -                               ;
+    dex                                 ;
+    stx levelDataOffset                 ; remember incremented level data offset
+
+    jsr commandPlatform                 ;
+    jmp decodeLevelData                 ;
+
+setColourAndDrawLevel7Platform
+    lda levelFeatureIndex               ;
+    cmp #1                              ;
+    bne setColourAndDrawPlatform        ;
+    lda #$11                            ; }
+    jsr OSWRCH                          ; } COLOUR 2
+    lda #$02                            ; }
+    jsr OSWRCH                          ; }
+    jmp drawPlatform                    ;
+
+setColourAndDrawLevel14Platform
+    lda levelFeatureIndex               ;
+    cmp #0                              ;
+    bne setColourAndDrawPlatform        ;
+
+    lda #$11                            ;
+    jsr OSWRCH                          ;
+    lda #1                              ; COLOUR 1
+    jsr OSWRCH                          ;
+
+    lda #$1f                            ;
+    jsr OSWRCH                          ;
+    lda $71                             ;
+    clc                                 ;
+    adc #5                              ;
+    jsr OSWRCH                          ; TAB($71 + 5, $72 + 1)
+    lda $72                             ;
+    clc                                 ;
+    adc #1                              ;
+    jsr OSWRCH                          ;
+
+    lda #$e0                            ;
+    jsr OSWRCH                          ;
+    lda #$e1                            ;
+    jsr OSWRCH                          ;
+
+    rts                                 ;
+
+commandPlatform
+    lda currentLevel                    ;
+    cmp #7                              ;
+    beq setColourAndDrawLevel7Platform  ;
+    cmp #14                             ;
+    beq setColourAndDrawLevel14Platform ;
+
+setColourAndDrawPlatform
+    lda #$11                            ;
+    jsr OSWRCH                          ;
+    ldx levelFeatureIndex               ;
+    lda levelColourArray,x              ;
+    jsr OSWRCH                          ;
+
+drawPlatform
+    lda #$1f                            ;
+    jsr OSWRCH                          ;
+    lda $71                             ;
+    clc                                 ;
+    adc #5                              ;
+    jsr OSWRCH                          ; TAB($71 + 5, $72 + 1)
+    lda $72                             ;
+    clc                                 ;
+    adc #1                              ;
+    jsr OSWRCH                          ;
+
+    ldx levelFeatureIndex               ;
+    lda levelFeatureArray,x             ;
+    ldy #0                              ;
+-
+    jsr OSWRCH                          ;
+    iny                                 ;
+    cpy $73                             ;
+    bne -                               ;
+    lda levelFeatureIndex               ;
+    cmp #3                              ;
+    beq +                               ;
+    rts                                 ;
+
++
+    lda currentLevel                    ;
+    cmp #10                             ;
+    beq +                               ;
+    lda #$f6                            ;
+    sta levelFeature3                   ;
+
++
+    jmp L2500                           ;
+
+    ; sprite numbers to draw (level specific)
+levelFeatureArray
+levelFeature0
+    !byte $e0                           ;
+levelFeature1
+    !byte $e2                           ;
+levelFeature2
+    !byte $ef                           ;
+levelFeature3
+    !byte $eb                           ;
+levelFeature4
+    !byte $ea                           ;
+
+    ; $2c54
+levelColourArray
+    !byte $01, $01, $03, $02, $03, $00, $00, $00
+
+    ; $2c5c
+drawSideWallsAndFloor
+
+    ; draw left edge wall
+    lda #$ff                            ; }
+    sta $71                             ; }
+    lda #0                              ; } at (-1, 0)
+    sta $72                             ; }
+
+    lda #1                              ; }
+    sta $73                             ; } type 1
+
+    lda #16                             ; }
+    sta $74                             ; } end coordinate 16
+
+    lda #2                              ;
+    sta levelFeatureIndex               ;
+    jsr drawFeature                     ; draw feature
+
+    ; draw right edge wall
+    lda #30                             ; }
+    sta $71                             ; }
+    lda #0                              ; } at (30,0)
+    sta $72                             ; }
+
+    lda #16                             ; }
+    sta $74                             ; } end coordinate 16
+    jsr drawFeature                     ; draw feature
+
+    ; draw floor
+    lda #0                              ;
+    sta levelFeatureIndex               ;
+    lda #0                              ; }
+    sta $71                             ; }
+    lda #15                             ; } at (0,15)
+    sta $72                             ; }
+
+    lda #30                             ; }
+    sta $73                             ; } length 30
+    jsr commandPlatform                 ; [use JMP commandPlatform to avoid needing the next RTS]
+    rts                                 ;
+
+    !byte $0d, $03
+
+; this following code (up to $2d00) is kind of duplicated in miner4.a
+S2c98
+    lda $7180
+    rts
+
+L2c9c
+    jsr L2500
+    jmp L2cb2
+
+L2ca2
+    lda #$00
+    sta $2e89
+    lda #$71
+    sta S2c98 + 2
+    lda currentLevel
+    cmp #18
+    beq L2c9c
+
+L2cb2
+    lda #$00
+    sta $2dfe
+    lda #$6f
+    sta S2c98 + 1
+
+L2cbc
+    jsr S2e18
+    jsr S2c98
+    cmp #$ff
+    beq L2cc9
+    jmp L2cbc
+
+L2cc9
+    inc $2dfe
+    lda $2dfe
+    cmp currentLevel
+    bne L2cbc
+    jsr S2e18
+    jsr S2c98
+    sta $2e02
+    lda $2e02
+    and #$3f
+    sta L2e03
+    lda $2e02
+    and #$c0
+    clc
+    rol
+    rol
+    rol
+    sta $2e02
+    inc $2e02
+    lda #$f0
+    sta $2dfd
+    jsr S2df7
+    ldx #$00
+    jmp L2d69
+}
+
+    ;$2D00
+start
+    ; *FX 13,4 - disable vsync event
+    lda #$0d
+    ldx #$04
+    ldy #$00
+    jsr OSBYTE
+
+    jsr swapManicMinerGraphicWithC00
+
+    ; *fx 200,3 - clear memory on BREAK
+    lda #$c8
+    ldx #$03
+    ldy #$00
+    jsr OSBYTE
+
+    ; print message (switch to MODE 1)
+    ldx #$00
+moreMessageLoop
+    lda mode1Message,x
+    cmp #$ff
+    beq output8Zeroes
+    jsr OSWRCH
+outputMessageLoop
+    inx
+    cpx #$37
+    bne moreMessageLoop
+
+    ; VDU 31,12,3
+    lda #$1f                            ;
+    jsr OSWRCH                          ;
+    lda #$0c                            ; TAB(12,3)
+    jsr OSWRCH                          ;
+    lda #$03                            ;
+    jsr OSWRCH                          ;
+
+    ; VDU 128,129,130,...,143 (TAB and show user defined characters)
+    ldx #$80                            ; loop counter
+vduLoop
+    txa                                 ;
+    jsr OSWRCH                          ;
+    inx                                 ;
+    cpx #$90                            ;
+    bne vduLoop                         ;
+
+    ; copy 256 of screen memory 2 bytes back
+    ldx #0                              ;
+-
+    lda $3840,x                         ;
+    sta $3838,x                         ;
+    inx                                 ;
+    bne -                               ;
+
+    ; store zero byte on screen
+    stx $393e
+    jsr swapManicMinerGraphicWithC00    ; swap back character definitions
+
+    ; fill in the background with RED
+    lda #$b8                            ;
+    sta $70                             ; screen address $35b8
+    lda #$35                            ;
+    sta $71                             ;
+
+    ldx #0                              ;
+loop1
+    ldy #0                              ;
+-
+    lda ($70),y                         ;
+    ora #$0f                            ; colour the background red
+    sta ($70),y                         ; while leaving the foreground logo white
+    iny                                 ;
+    bne -                               ;
+    inx                                 ;
+
+    lda $70                             ; }
+    clc                                 ; }
+    adc #$80                            ; }
+    sta $70                             ; } add $280 to screen address
+    lda $71                             ; }
+    adc #2                              ; }
+    sta $71                             ; }
+    cpx #7                              ;
+    bne loop1                           ; if (fill not finished) then branch (loop back)
+    jmp postFill
+
+output8Zeroes
+    ldy #8                              ;
+    lda #0                              ;
+out8loop
+    jsr OSWRCH                          ;
+    dey                                 ;
+    bne out8loop                        ;
+    jmp outputMessageLoop               ;
+
+    ; swap $2f00-$2fff with $0c00-$0cff ('manic miner' graphics as character definitions)
+swapManicMinerGraphicWithC00
+    ldx #0                              ;
+-
+    lda manicMinerGraphic,x             ;
+    tay                                 ;
+    lda $0c00,x                         ;
+    sta manicMinerGraphic,x             ;
+    tya                                 ;
+    sta $0c00,x                         ;
+    inx                                 ;
+    bne -                               ;
+    rts                                 ;
+
+postFill
+    ; show 14 rows of screen
+    ldx #0                              ;
+-
+    lda show14Rows,x                    ;
+    jsr OSWRCH                          ;
+    inx                                 ;
+    cpx #show14RowsEnd - show14Rows     ;
+    bne -                               ;
+
+    ; output 8 zeros
+    lda #0                              ;
+    ldy #8                              ;
+-
+    jsr OSWRCH                          ;
+    dey                                 ;
+    bne -                               ;
+
+    ; set text window
+    ldx #0                              ;
+-
+    lda setTextWindow,x                 ;
+    jsr OSWRCH                          ;
+    inx                                 ;
+    cpx #setTextWindowEnd - setTextWindow       ;
+    bne -                               ;
+
+    nop                                 ;
+    nop                                 ;
+    nop                                 ;
+    nop                                 ;
+    nop                                 ;
+    nop                                 ;
+    nop                                 ;
+    nop                                 ;
+    nop                                 ;
+    nop                                 ;
+
+    ; *FX 14,4
+    lda #14                             ;
+    ldx #4                              ;
+    ldy #0                              ;
+    jsr OSBYTE                          ;
+
+    ; *L.MINER3
+    ldx #<loadMiner3                    ;
+    ldy #>loadMiner3                    ;
+    jsr OSWORD
+
+    ; *L.MINER4
+    ldx #<loadMiner4                    ;
+    ldy #>loadMiner4                    ;
+    jsr OSWORD                          ;
+    jmp afterLoads                      ;
+
+    !byte $ea, $ea, $ea, $ea            ;
+
+show14Rows
+    !byte $17, $00, $06, $0e            ;
+show14RowsEnd
+
+setTextWindow
+    !byte 28, 12, 13, 26, 10            ; VDU 28,left,bottom,right,top
+setTextWindowEnd
+
+loadMiner3
+    !text "L.MINER3",13                 ; OSCLI command to load MINER 3
+loadMiner4
+    !text "L.MINER4",13                 ; OSCLI command to load MINER 4
+
+afterLoads
+    lda #$8c                            ;
+    jsr OSWRCH                           ; VDU 140 - why?
+
+    ; copy ($0500-$05ff) to ($0d00-$0dff)
+    ldx #0                              ;
+copyMemoryLoop
+    lda $0500,x                         ;
+    sta $0d00,x                         ;
+    ; copy ($0600-$06ff) to ($0f00-$0fff)
+    lda $0600,x                         ;
+    sta $0f00,x                         ;
+    ; copy ($0700-$07ff) to ($1000-$10ff)
+    lda $0700,x                         ;
+    sta $1000,x                         ;
+    inx                                 ;
+    bne copyMemoryLoop                  ;
+    jmp miner4EntryPoint                ;
+
+    !byte $ea, $ea, $ea, $ea
+
+mode1Message
+    !byte 22, 1                         ; MODE 1
+    !byte 23, 0, 6, 0, $ff              ; hide display
+    !byte 31, 17, 5                     ; TAB(17,5)
+    !byte $90                           ; VDU 144 (user defined character - copyright?)
+    !text "1984"                        ;
+
+    !byte 31, 12, 7                     ; TAB(12,7)
+    !text "By D.J.Coathupe"             ;
+    !byte 23,0,13,$50, $ff              ; set display address (low)
+    !byte 19, 0, 4, $ff                 ; set palette blue background
+    !byte 19, 2, 2, $ff                 ; set palette logical colour 2 to physical colour 2
+    !byte 23, 0, 7, 30, $ff             ; move display down
+    !byte 23, 1, 0, $ff                 ; cursor off
+
+unused1
+    !byte $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+
+    ; $2f00
+manicMinerGraphic
+    !byte $00, $00, $00, $03, $04, $04, $04, $03
+    !byte $07, $03, $06, $0c, $98, $30, $60, $c0
+    !byte $8e, $9c, $bc, $ec, $cc, $0c, $0c, $1e
+    !byte $00, $0e, $1b, $31, $31, $7f, $60, $f1
+    !byte $00, $0e, $07, $87, $86, $c6, $c6, $ef
+    !byte $00, $3d, $18, $98, $d8, $78, $38, $19
+    !byte $00, $e1, $c3, $c6, $c6, $c6, $c3, $e1
+    !byte $00, $f0, $18, $00, $00, $00, $18, $f0
+    !byte $00, $01, $01, $00, $00, $00, $00, $00
+    !byte $fe, $0f, $2d, $cc, $0c, $0c, $0c, $1e
+    !byte $1e, $3c, $ec, $cc, $0c, $0c, $0c, $1e
+    !byte $00, $f7, $63, $63, $63, $63, $63, $f7
+    !byte $00, $1e, $8c, $cc, $6c, $3c, $1c, $8c
+    !byte $00, $ff, $63, $68, $78, $68, $63, $ff
+    !byte $00, $7f, $30, $30, $3f, $31, $30, $78
+    !byte $00, $80, $c0, $c0, $80, $80, $c8, $70
+    !byte $3c, $42, $99, $a1, $a1, $99, $42, $3c
+    !byte $00, $00, $00, $00, $00, $00, $00, $00
+manicMinerGraphicEnd
+
+unused2
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00
+
+roomNumberReached
+    !byte $00
+    !byte $00, $00, $00, $00, $8e, $fc, $50, $04
+keysLeft
+    !byte $00
+}
+
+; ***************************************************************************************
+miner2Entry
+    lda #0                          ;
+    sta $70                         ; reset timer counter for animating logo
+    lda #0                          ;
+    sta $71                         ; reset scrolling message counter
+
+    ; *FX 200,3 - clear memory on BREAK
+    lda #$c8
+    ldx #$03
+    ldy #$00
+    jsr OSBYTE
+
+    ; set MODE 7 and text window
+    ldx #0
+setModeStringLoop
+    lda setModeString,x
+    jsr OSWRCH
+    inx
+    cpx #setModeStringEnd - setModeString
+    bne setModeStringLoop
+
+    ldx #0
+copyToScreen3
+    lda whiteBackgroundString,x
+    sta $7f23,x
+    inx
+    cpx #whiteBackgroundStringEnd - whiteBackgroundString
+    bne copyToScreen3
+
+    ; turn off cursor
+    lda #$0a
+    sta $fe00
+    lda #$20
+    sta $fe01
+
+    ; store original EventV address
+    lda $0220
+    sta eventVLow
+    lda $0221
+    sta eventVHigh
+
+    ; show 'Press Space'
+    ldx #0
+displayStringLoop
+    lda pressSpaceMessage,x
+    jsr OSWRCH
+    inx
+    cpx #pressSpaceMessageEnd - pressSpaceMessage
+    bne displayStringLoop
+    jmp fromMiner2
+
+unused3
+    !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+
+pressSpaceMessage
+    ; $86 = cyan text
+    !text "       ",$86,"Press Space"
+pressSpaceMessageEnd
+
+unused4
+    !byte 0,0,0,0,0,0,0,0,0,0,0,0,0
+
+; ***************************************************************************************
+afterSpace
+    ; relocate code
+    lda #0                          ;
+    sta $78                         ;
+    sta $7a                         ;
+    sta $7c                         ;
+    lda #$54                        ; start = $5400
+    sta $79                         ;
+    lda #$11                        ; dest = $1100
+    sta $7b                         ;
+    ldx #$1f                        ; length = $1f00
+    jsr copyMem                     ; copy ($5400 to $72ff) -> ($1100, $2fff)
+
+    lda #$4c                        ; start = $4c00
+    sta $79                         ;
+    lda #$05                        ; dest = $0500
+    sta $7b                         ;
+    ldx #$08                        ; length = $0800
+    jsr copyMem                     ; copy ($4c00 to $53ff) -> ($0500, $0cff)
+
+    jmp start                       ; call relocated code
+
+; ***************************************************************************************
+copyMem
+    ldy #0                          ; inner loop counter
+copyMemInner
+    lda ($78),y                     ; load byte
+    sta ($7a),y                     ; store byte
+    iny                             ;
+    bne copyMemInner                ; loop back to copy 256 bytes
+    inc $79                         ; increment high byte of source
+    inc $7b                         ; increment high byte of destination
+    dex                             ; decrement outer loop counter
+    bne copyMem                     ; if not finished then branch back
+    rts                             ;
+
+unused5
+    !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+    !byte 0,0,0,0,0,0,0,0,0,0
