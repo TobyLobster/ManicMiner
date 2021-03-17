@@ -5,6 +5,7 @@
 	<key>HierarchyData</key>
 	<array>
 		<string>84D36E9E-FCCF-4EC5-99EE-4370302755CF</string>
+		<string>9CCE079C-CBC8-44D3-809E-57956646E957</string>
 		<string>8C21822B-A7F9-4CD0-A9A4-9B19319004C2</string>
 		<string>EB335192-04D7-42E2-BF3F-9503BAC4A936</string>
 		<string>0BF0F50E-019C-427D-8CD5-9E531CD17BF4</string>
@@ -572,6 +573,57 @@
 			</dict>
 			<key>ItemName</key>
 			<string>miner_inst.txt</string>
+			<key>ItemType</key>
+			<string>FileReference</string>
+			<key>UserOverrideItemName</key>
+			<true/>
+		</dict>
+		<key>9CCE079C-CBC8-44D3-809E-57956646E957</key>
+		<dict>
+			<key>ItemData</key>
+			<dict>
+				<key>BookmarkData</key>
+				<data>
+				Ym9va0ADAAAAAAQQMAAAAJekeiQz+E4ALZX1UrAOgxbA
+				wcPP4f5DBKJ+rsj/BYcBMAIAAAQAAAADAwAAAAgAKAUA
+				AAABAQAAVXNlcnMAAAAKAAAAAQEAAHRvYnluZWxzb24A
+				AAQAAAABAQAAQ29kZQQAAAABAQAANjUwMgUAAAABAQAA
+				bWluZXIAAAAKAAAAAQEAAC5naXRpZ25vcmUAABgAAAAB
+				BgAAEAAAACAAAAA0AAAAQAAAAEwAAABcAAAACAAAAAQD
+				AACtZAIAAAAAAAgAAAAEAwAAaFUJAAAAAAAIAAAABAMA
+				AE6GCQAAAAAACAAAAAQDAAABJzMAAgAAAAgAAAAEAwAA
+				YPHnBQIAAAAIAAAABAMAAPRv8gUCAAAAGAAAAAEGAACQ
+				AAAAoAAAALAAAADAAAAA0AAAAOAAAAAIAAAAAAQAAEHD
+				ARmhmBXkGAAAAAECAAABAAAAAAAAAA8AAAAAAAAAAAAA
+				AAAAAAAIAAAABAMAAAQAAAAAAAAABAAAAAMDAAD1AQAA
+				CAAAAAEJAABmaWxlOi8vLwwAAAABAQAATWFjaW50b3No
+				IEhECAAAAAQDAAAAsGBudAAAAAgAAAAABAAAQbgnVsoA
+				AAAkAAAAAQEAAEVDOTcwNDJELTczQjYtMzYzNy1CMEE4
+				LTZEMTNCODg2OTEzMBgAAAABAgAAgQAAAAEAAADvEwAA
+				AQAAAAAAAAAAAAAAAQAAAAEBAAAvAAAAAAAAAAEFAAAa
+				AAAAAQEAAE5TVVJMRG9jdW1lbnRJZGVudGlmaWVyS2V5
+				AAAEAAAAAwMAAAsEAPLYAAAA/v///wEAAAAAAAAAEQAA
+				AAQQAABwAAAAAAAAAAUQAADwAAAAAAAAABAQAAAgAQAA
+				AAAAAEAQAAAQAQAAAAAAAAIgAADsAQAAAAAAAAUgAABc
+				AQAAAAAAABAgAABsAQAAAAAAABEgAACgAQAAAAAAABIg
+				AACAAQAAAAAAABMgAACQAQAAAAAAACAgAADMAQAAAAAA
+				ADAgAAD4AQAAAAAAAAHAAABAAQAAAAAAABHAAAAgAAAA
+				AAAAABLAAABQAQAAAAAAABDQAAAEAAAAAAAAAAACAIAk
+				AgAAAAAAAA==
+				</data>
+				<key>FileURL</key>
+				<string>file:///Users/tobynelson/Code/6502/miner/.gitignore</string>
+				<key>HasSecurityScope</key>
+				<true/>
+				<key>RelativePath</key>
+				<string>./.gitignore</string>
+				<key>TypeID</key>
+				<string>_CFileLocator</string>
+				<key>Version</key>
+				<integer>1</integer>
+			</dict>
+			<key>ItemName</key>
+			<string>.gitignore</string>
 			<key>ItemType</key>
 			<string>FileReference</string>
 			<key>UserOverrideItemName</key>
