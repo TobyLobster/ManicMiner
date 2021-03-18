@@ -20,7 +20,7 @@ eventV
     pha                                 ;
     php                                 ;
     lda #$20                            ;
-    sta $7bfd                           ; Write a space
+    sta $7bfd                           ; Write a space?
     sta $03ca                           ;
     lda #0                              ;
     sta $03c7                           ;

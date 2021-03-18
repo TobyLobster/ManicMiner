@@ -4,9 +4,12 @@ AUTO
 MODE 1:VDU 19,2,2,0,0,0:VDU 19,0,4,0,0,0:VDU23,0,6,19,0,0,0,0,0,0,0,0:VDU23,0,7,30,0,0,0,0,0,0,0,0
 REPEAT
     READ C%
-    IF C% = 255 THEN END
-    IF C% = 254 THEN READ C%:GCOL 0,C% ELSE READ X%,Y%:PLOTC%,4*X%,4*Y%:REM PRINT;~C%;" ";~X%;" ";~Y%;"            ":IF C%<>4 THEN A$=GET$
-UNTIL 0
+    PRINT;"&";~C%;" ";
+    IF C% = 254 THEN READ D%:GCOL 0,D%
+    IF C%<254 THEN READ X%,Y%:PLOTC%,4*X%,4*Y%:REM PRINT;~C%;" ";~X%;" ";~Y%;"            "
+    REM IF ((C%<254) AND (C%<>4)) THEN A$=GET$
+    PRINT (C% = 255)
+UNTIL (C% = 255)
 END
 :
 DATA &FE, 1

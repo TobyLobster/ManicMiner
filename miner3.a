@@ -16,12 +16,13 @@ isInAir                     = $184b             ;
 playerHeightOnTakeOff       = $184c             ;
 jumpPhase                   = $184d             ;
 
-L1e0d                       = $1e0d
+drawMonsters                = $1e0d
 showScreenAndWaitForRETURN  = $23c0
 creditsMessage              = $2430
 creditsMessageEnd           = creditsMessage + $47
 bylineMessage               = $24e0
 bylineMessageEnd            = bylineMessage + $15
+drawConveyors               = $254d             ;
 clearScreen                 = $2821
 showLevel                   = $62c3
 startGame                   = $6200
@@ -145,13 +146,11 @@ channel2Frequency
 
 ; ***************************************************************************************
 playGame
-    ; start on level 1
     lda #1                          ;
-    sta currentLevel                ;
+    sta currentLevel                ; start on level 1
 
-    ; start with 2 remaining lives (3 lives total)
     lda #2                          ;
-    sta lives                       ;
+    sta lives                       ; start with 2 remaining lives (3 lives total)
 
     ; clear the score (6 digits in 3 BCD bytes)
     lda #0                          ;
@@ -168,8 +167,8 @@ L30af
     lda #0                          ;
     sta $30e9                       ;
 L30b9
-    jsr $254d                       ;
-    jsr L1e0d                       ;
+    jsr drawConveyors               ;
+    jsr drawMonsters                ;
     jsr $1980                       ;
 
     ; pointless delay loop
@@ -185,15 +184,17 @@ L30b9
     lda $30e9                       ;
     cmp #$40                        ;
     beq L30ea                       ;
+
     ldy #$ff                        ;
     ldx #$b6                        ;
     lda #$81                        ; check for RETURN
     jsr OSBYTE                      ;
     cpy #$ff                        ;
-    beq L30e6                       ;
+    beq +                           ;
+
     jmp L30b9                       ;
 
-L30e6
++
     jmp startGame                   ;
 
     !byte $ea                       ;
@@ -464,15 +465,15 @@ plotMessageStart
     !byte 25                        ; VDU 25
 fiveValues
 plotType
-    !byte $ea
+    !byte $ea                       ;
 plotXLow
-    !byte $ea
+    !byte $ea                       ;
 plotXHigh
-    !byte $ea
+    !byte $ea                       ;
 plotYLow
-    !byte $ea
+    !byte $ea                       ;
 plotYHigh
-    !byte $ea
+    !byte $ea                       ;
 plotMessageEnd
 
     !byte $00, $00, $00, $00, $00, $00, $00

@@ -15,6 +15,10 @@ levelColours                = $81
 levelColours2               = $82
 switchTriggered             = $9f
 
+keySprite                   = $2dfd
+decodeLevelByte             = $2dfe
+keyPositionCounter          = $2e89
+
 vduTextCursorXPosition      = $0318
 vduTextCursorYPosition      = $0319
 
@@ -83,10 +87,26 @@ L7e80 = $7e80
 !pseudopc $0f00 {
     !xor $55 {
 ; ***************************************************************************************
-;       A =
+;
+; plot
+;
+;   e.g. used to plot the player, and the leg/foot
+;
+; On Entry:
+;       ($77,$78) = source sprite address
+;
+;       A = mode:
+;           Mode            Operation                              Description
+;           2               0                                      erase
+;           3               source AND mask                        colour mask applied to source
+;           4               source (if not 255) otherwise screen   stencil alpha
+;           5               source (if not 255) otherwise black    copy, but 255=black
+;           10              (source AND $F0) EOR screen            tint source to colour 2, eor with screen
+;           anything else   source (AND mask) OR screen            additive with mask
+;
 ;       X = x pixel coordinate
-;       Y = Y pixel coordinate
-S0f00
+;       Y = y pixel coordinate
+plot
     sta $70                             ;
     stx $71                             ;
     sty $72                             ;
@@ -126,55 +146,55 @@ L0f20
 
     lda #<getSpriteDefaultModeByte      ;
     sta getSourceByte + 1               ;
-    lda #>getSpriteDefaultModeByte      ; address $101b
+    lda #>getSpriteDefaultModeByte      ; set address getSpriteDefaultModeByte
     sta getSourceByte + 2               ;
     jmp calculateScreenAddrAndPlot      ;
 
 setMode10Address
     lda #<getSpriteMode10Byte           ;
     sta getSourceByte + 1               ;
-    lda #>getSpriteMode10Byte           ; address $1026
+    lda #>getSpriteMode10Byte           ; set address getSpriteMode10Byte
     sta getSourceByte + 2               ;
     jmp calculateScreenAddrAndPlot      ;
 
 setMode3Address
     lda #<getSpriteMode3Byte            ;
     sta getSourceByte + 1               ;
-    lda #>getSpriteMode3Byte            ; address $102d
+    lda #>getSpriteMode3Byte            ; address getSpriteMode3Byte
     sta getSourceByte + 2               ;
     jmp calculateScreenAddrAndPlot      ;
 
 setMode4Address
     lda #<getSpriteMode4Byte            ;
     sta getSourceByte + 1               ;
-    lda #>getSpriteMode4Byte            ; address $1033
+    lda #>getSpriteMode4Byte            ; address getSpriteMode4Byte
     sta getSourceByte + 2               ;
     jmp calculateScreenAddrAndPlot      ;
 
 setMode5Address
     lda #<getSpriteMode5Byte            ;
     sta getSourceByte + 1               ;
-    lda #>getSpriteMode5Byte            ; address $103a
+    lda #>getSpriteMode5Byte            ; address getSpriteMode5Byte
     sta getSourceByte + 2               ;
     jmp calculateScreenAddrAndPlot      ;
 
 setMode2Address
     lda #<getSpriteMode2Byte            ;
     sta getSourceByte + 1               ;
-    lda #>getSpriteMode2Byte            ; address $1023
+    lda #>getSpriteMode2Byte            ; address getSpriteMode2Byte
     sta getSourceByte + 2               ;
 
 ; ***************************************************************************************
 calculateScreenAddrAndPlot
     lda #$00                            ; }
     sta $75                             ; }
-    lda #$30                            ; } start screen address $3000
+    lda #$30                            ; } set start screen address $3000
     sta $76                             ; }
 
     lda #0                              ;
     sta spriteRowCounter                ;
 
-    ; calculate $3000 + 8*(X cell coordinate)
+    ; calculate $3000 + 8*(X cell coordinate) by repeated addition
     ldx #0                              ;
 -
     cpx $71                             ;
@@ -275,7 +295,7 @@ L0fe9
 ; ***************************************************************************************
 getSpriteDefaultModeByte
     lda ($77),y                         ;
-    and spriteMask                      ;
+    and spriteColourMask                ;
     ora ($75),y                         ;
     rts                                 ;
 
@@ -294,7 +314,7 @@ getSpriteMode10Byte
 ; ***************************************************************************************
 getSpriteMode3Byte
     lda ($77),y                         ;
-    and spriteMask                      ;
+    and spriteColourMask                ;
     rts                                 ;
 
 ; ***************************************************************************************
@@ -353,50 +373,51 @@ spriteMoveToNextRow
 
 ; ***************************************************************************************
 S1074
-    ldy #7
+    ldy #7                              ;
 -
-    lda ($75),y
-    iny
-    sta ($75),y
-    tya
-    clc
-    adc #7
-    tay
-    lda ($75),y
-    iny
-    sta ($75),y
-    tya
-    sec
-    sbc #8
-    tay
-    dey
-    dey
-    cpy #0
-    bne -
-    lda #0
-    ldy #1
-    sta ($75),y
-    ldy #9
-    sta ($75),y
-    rts
+    lda ($75),y                         ;
+    iny                                 ;
+    sta ($75),y                         ;
+    tya                                 ;
+    clc                                 ;
+    adc #7                              ;
+    tay                                 ;
+    lda ($75),y                         ;
+    iny                                 ;
+    sta ($75),y                         ;
+    tya                                 ;
+    sec                                 ;
+    sbc #8                              ;
+    tay                                 ;
+    dey                                 ;
+    dey                                 ;
+    cpy #0                              ;
+    bne -                               ;
+    lda #0                              ;
+    ldy #1                              ;
+    sta ($75),y                         ;
+    ldy #9                              ;
+    sta ($75),y                         ;
+    rts                                 ;
 
-spriteMask
-    !byte $ff
+; ***************************************************************************************
+spriteColourMask
+    !byte $ff                           ;
 
 ; ***************************************************************************************
 updatePlayer
-    lda #$ff                    ;
-    sta spriteMask              ; colour 3
-    lda #0                      ;
-    sta $183e                   ;
-    sta $1848                   ;
-    lda isInAir                 ;
-    cmp #0                      ;
-    beq L10b3                   ;
-    jmp L1634                   ;
+    lda #$ff                            ;
+    sta spriteColourMask                ; colour 3
+    lda #0                              ;
+    sta $183e                           ;
+    sta $1848                           ;
+    lda isInAir                         ;
+    cmp #0                              ;
+    beq handleOnGround                  ;
+    jmp handleInAir                     ;
 
 ; ***************************************************************************************
-L10b3
+handleOnGround
     ldx #0                                  ; loop counter
 -
     lda $1842,x                             ;
@@ -1679,55 +1700,55 @@ skipCrumbleBarUpdate
     sbc #$02                    ;
     sta $76                     ;
 handleInAirMovement
-    lda screenCharacterA
-    jsr isConveyor
-    cmp #0
-    bne onConveyor
-    lda screenCharacterB
-    jsr isConveyor
-    cmp #0
-    bne onConveyor
-    lda #$00
-    sta $1852
-onConveyor
-    lda $1852
-    cmp #$01
-    bne L1187
-    lda $1853
-    cmp #$00
-    bne L1187
-    jmp checkForUpdatePlayerOnConveyor
+    lda screenCharacterA        ;
+    jsr isConveyor              ;
+    cmp #0                      ;
+    bne onConveyor              ;
+    lda screenCharacterB        ;
+    jsr isConveyor              ;
+    cmp #0                      ;
+    bne onConveyor              ;
+    lda #0                      ;
+    sta $1852                   ;
+onConveyor                      ;
+    lda $1852                   ;
+    cmp #$01                    ;
+    bne L1187                   ;
+    lda $1853                   ;
+    cmp #0                      ;
+    bne L1187                   ;
+    jmp checkForUpdatePlayerOnConveyor  ;
 
 ; ***************************************************************************************
 L1187
-    lda playerPixelY
-    and #$07
-    cmp #$00
-    beq L119c
+    lda playerPixelY            ;
+    and #7                      ;
+    cmp #0                      ;
+    beq L119c                   ;
 L1190
-    lda newPlayerPixelY
-    clc
-    adc #$02
-    sta newPlayerPixelY
-    jmp L1375
+    lda newPlayerPixelY         ;
+    clc                         ;
+    adc #$02                    ;
+    sta newPlayerPixelY         ;
+    jmp L1375                   ;
 
 ; ***************************************************************************************
 L119c
-    lda screenCharacterA
-    jsr isSupporting
-    cmp #1
-    beq L11b8
-    lda screenCharacterB
-    jsr isSupporting
-    cmp #1
-    beq L11b8
-    lda #1
-    sta $1847
-    jmp L1190
+    lda screenCharacterA        ;
+    jsr isSupporting            ;
+    cmp #1                      ;
+    beq L11b8                   ;
+    lda screenCharacterB        ;
+    jsr isSupporting            ;
+    cmp #1                      ;
+    beq L11b8                   ;
+    lda #1                      ;
+    sta $1847                   ;
+    jmp L1190                   ;
 
 ; ***************************************************************************************
 L11b8
-    lda #$00                                ;
+    lda #0                                  ;
     sta $1841                               ;
 
     ldy #$ff                                ;
@@ -1793,7 +1814,7 @@ L1221
     lda #$01
     sta $1841
     jsr L1375
-    lda #$00
+    lda #0
     sta $183e
 
 checkForUpdatePlayerOnConveyor
@@ -1856,40 +1877,40 @@ L12a3
 
 ; ***************************************************************************************
 L12b0
-    lda $1853
-    cmp #$fe
-    bne L12c4
-    lda $183e
-    eor #$fe
-    cmp $1854
-    bne L12c4
-    jmp L12a3
+    lda $1853                       ;
+    cmp #$fe                        ;
+    bne L12c4                       ;
+    lda $183e                       ;
+    eor #$fe                        ;
+    cmp $1854                       ;
+    bne L12c4                       ;
+    jmp L12a3                       ;
 
 ; ***************************************************************************************
 L12c4
-    lda $183e
-    cmp #$00
-    beq L12d3
-    lda $183e
-    cmp $1854
-    bne L12d8
+    lda $183e                       ;
+    cmp #0                          ;
+    beq L12d3                       ;
+    lda $183e                       ;
+    cmp $1854                       ;
+    bne L12d8                       ;
 L12d3
-    lda #$00
-    sta $1853
+    lda #0                          ;
+    sta $1853                       ;
 L12d8
-    lda $1853
-    cmp #$00
-    bne L12e9
-    lda $1852
-    cmp #$01
-    bne L12e9
-    jsr S17db
+    lda $1853                       ;
+    cmp #0                          ;
+    bne L12e9                       ;
+    lda $1852                       ;
+    cmp #$01                        ;
+    bne L12e9                       ;
+    jsr S17db                       ;
 L12e9
-    lda $183e
-    sta jumpDirection
-    cmp #0
-    beq checkForJump
-    jsr L1375
+    lda $183e                       ;
+    sta jumpDirection               ;
+    cmp #0                          ;
+    beq checkForJump                ;
+    jsr L1375                       ;
 checkForJump
     ldy #$ff                        ;
     ldx #$b6                        ;
@@ -1958,73 +1979,73 @@ checkForWallOnJump
     sta playerHeightOnTakeOff       ;
     lda #0                          ;
     sta jumpPhase                   ;
-    jmp L1634                       ;
+    jmp handleInAir                 ;
 
 ; ***************************************************************************************
 foundWallSoCancelJump
-    jmp cancelJump
+    jmp cancelJump                  ;
 
 ; ***************************************************************************************
 L1375
-    lda #$00
-    sta $105f
-    sta $1851
-    lda newPlayerPixelY
-    and #$07
-    cmp #0
-    beq L1392
-    sta $1850
-    lda #$ff
-    clc
-    sbc $1850
-    sta $1851
+    lda #0                          ;
+    sta $105f                       ;
+    sta $1851                       ;
+    lda newPlayerPixelY             ;
+    and #$07                        ;
+    cmp #0                          ;
+    beq L1392                       ;
+    sta $1850                       ;
+    lda #$ff                        ;
+    clc                             ;
+    sbc $1850                       ;
+    sta $1851                       ;
 L1392
-    lda newPlayerPixelX
-    and #$03
-    sta $1850
-    lda $1850
-    cmp #$03
-    bne L13ab
-    lda $183e
-    cmp #$ff
-    bne L13ab
-    jsr S1709
+    lda newPlayerPixelX             ;
+    and #$03                        ;
+    sta $1850                       ;
+    lda $1850                       ;
+    cmp #$03                        ;
+    bne L13ab                       ;
+    lda $183e                       ;
+    cmp #$ff                        ;
+    bne L13ab                       ;
+    jsr S1709                       ;
 L13ab
-    lda $183e
-    cmp #$fd
-    bne L13c3
-    lda newPlayerPixelX
-    clc
-    adc #1
-    sta newPlayerPixelX
-    lda #$00
-    sta $183e
-    jmp L13ef
+    lda $183e                       ;
+    cmp #$fd                        ;
+    bne L13c3                       ;
+    lda newPlayerPixelX             ;
+    clc                             ;
+    adc #1                          ;
+    sta newPlayerPixelX             ;
+    lda #0                          ;
+    sta $183e                       ;
+    jmp L13ef                       ;
 
 ; ***************************************************************************************
 L13c3
-    lda $1850
-    cmp #0
-    bne L13d4
-    lda $183e
-    cmp #$01
-    bne L13d4
-    jsr S1772
+    lda $1850                       ;
+    cmp #0                          ;
+    bne L13d4                       ;
+    lda $183e                       ;
+    cmp #$01                        ;
+    bne L13d4                       ;
+    jsr S1772                       ;
 L13d4
-    lda $183e
-    cmp #$fe
-    bne L13ec
-    lda newPlayerPixelX
-    sec
-    sbc #$01
-    sta newPlayerPixelX
-    lda #$00
-    sta $183e
-    jmp L13ef
+    lda $183e                       ;
+    cmp #$fe                        ;
+    bne L13ec                       ;
+    lda newPlayerPixelX             ;
+    sec                             ;
+    sbc #$01                        ;
+    sta newPlayerPixelX             ;
+    lda #0                          ;
+    sta $183e                       ;
+    jmp L13ef                       ;
 
 ; ***************************************************************************************
 L13ec
-    jmp movePlayer
+    jmp movePlayer                  ;
 
 ; ***************************************************************************************
 L13ef
@@ -2057,20 +2078,20 @@ movePlayer
     jsr readOrWriteCachedBackground     ; } cache new background
 
 L1423
-    lda #$00                            ;
+    lda #0                              ;
     sta $77                             ;
     lda willyGraphicsPage               ; ($77,$78) = $0500 or $0600 for willy looking right or left
     sta $78                             ;
 
-    lda #$00                            ;
+    lda #0                              ;
     sta $79                             ;
     lda #$0d                            ; $0d00?
     sta $7a                             ;
 
-    lda newPlayerPixelX
-    and #$03
-    eor willyAnimationEOR
-    sta $75
+    lda newPlayerPixelX                 ;
+    and #$03                            ;
+    eor willyAnimationEOR               ;
+    sta $75                             ;
 
     ldx #0                              ; loop counter
 -
@@ -2081,7 +2102,7 @@ L1423
     adc #$40                            ; }
     sta $77                             ; }
     lda $78                             ; }
-    adc #$00                            ; }
+    adc #0                              ; }
     sta $78                             ; }
     inx                                 ;
     jmp -                               ;
@@ -2091,18 +2112,18 @@ L1455
     ldx newPlayerPixelX                 ;
     ldy newPlayerPixelY                 ;
     lda #0                              ;
-    jsr S0f00                           ; draw player?
+    jsr plot                            ; draw player
     jsr checkForLandingOnSpike          ;
 
-    lda #$1f                            ;
+    lda #31                             ;
     jsr OSWRCH                          ; TAB(34,23)
-    lda #$22                            ;
+    lda #34                             ;
     jsr OSWRCH                          ;
-    lda #$17                            ;
+    lda #23                             ;
     jsr OSWRCH                          ;
 
     jsr checkSpikeKeySwitch             ;
-    lda #$09                            ; forward space
+    lda #9                              ; forward space
     jsr OSWRCH                          ;
     jsr checkSpikeKeySwitch             ;
     lda newPlayerPixelY                 ;
@@ -2233,15 +2254,15 @@ keyCollisionFound
 
 ; ***************************************************************************************
 deathJumper
-    jmp death
+    jmp death                       ;
 
-    !byte $ea, $ea
+    !byte $ea, $ea                  ;
 
 switchCollisionFound
-    jsr $0040
-    sta textCursorX
-    lda vduTextCursorYPosition
-    sta textCursorY
+    jsr $0040                       ;
+    sta textCursorX                 ;
+    lda vduTextCursorYPosition      ;
+    sta textCursorY                 ;
 
     ldx #0                          ; loop counter
 -
@@ -2346,9 +2367,9 @@ checkUpdateConveyor
     lda jumpDirection               ;
     cmp #0                          ;
     bne updateConveyor              ;
-    lda #$01
-    sta $1847
-    rts
+    lda #1                          ;
+    sta $1847                       ;
+    rts                             ;
 
 ; ***************************************************************************************
 updateConveyor
@@ -2387,7 +2408,7 @@ foundConveyor
     jmp checkForUpdatePlayerOnConveyor  ;
 
 ; ***************************************************************************************
-L1634
+handleInAir
     lda jumpPhase                   ;
     cmp #$11                        ;
     bcc updatePlayerWhenJumping     ;
@@ -2855,8 +2876,8 @@ L191f
 
 ; ***************************************************************************************
 L192b
-    ldx #$00                        ;
-    ldy #$00                        ;
+    ldx #0                          ;
+    ldy #0                          ;
     stx L194e + 1                   ;
 L1932
     jsr $ffff                       ;
@@ -2936,8 +2957,8 @@ L199b
 
 ; ***************************************************************************************
 L199e
-    lda #$f0
-    sta spriteMask                      ; colour 2
+    lda #$f0                            ;
+    sta spriteColourMask                ; colour 2
     lda $1c48                           ;
     and #$7f                            ;
     cmp #$60                            ;
@@ -2954,15 +2975,15 @@ L19b0
 
 ; ***************************************************************************************
 L19bf
-    dec $1c48
+    dec $1c48                   ;
 L19c2
-    ldx #$4c
-    lda $1c48
-    and #$7f
-    tay
-    jsr S19d2
-    lda #$03
-    jmp S0f00
+    ldx #$4c                    ;
+    lda $1c48                   ;
+    and #$7f                    ;
+    tay                         ;
+    jsr S19d2                   ;
+    lda #3                      ;
+    jmp plot                    ;   ?
 
 ; ***************************************************************************************
 S19d2
@@ -2986,16 +3007,16 @@ L19e3
 ; ***************************************************************************************
 L19ee
     lda #$f0                    ;
-    sta spriteMask              ; colour 2
+    sta spriteColourMask        ; colour 2
     inc $1c49                   ;
     lda $1c49                   ;
     and #$08                    ;
     cmp #$08                    ;
     beq L1a0a                   ;
-    lda #$00                    ;
-    sta $77                     ;
-    lda #$04                    ;
-    sta $78                     ;
+    lda #$00                    ; }
+    sta $77                     ; }
+    lda #$04                    ; } address $0400
+    sta $78                     ; }
     jmp L1a12                   ;
 
 ; ***************************************************************************************
@@ -3007,8 +3028,8 @@ L1a0a
 L1a12
     ldx #$4e
     ldy #$08
-    lda #$03
-    jmp S0f00
+    lda #3
+    jmp plot
 
 ; ***************************************************************************************
 L1a1b
@@ -3056,12 +3077,12 @@ L1a62
     lda currentLevel
     cmp #14
     bne L1a6d
-    lda #$00
+    lda #0
     sta $1c54
 L1a6d
-    lda #$00
+    lda #0
     sta $1d95
-    ldx #$00
+    ldx #0
     stx $1c4f
 L1a77
     lda L1dad,x
@@ -3093,8 +3114,8 @@ L1aa9
     lda $1d95                   ;
     and #$03                    ;
     tax                         ;
-    lda $1dbd,x                 ;
-    sta spriteMask              ; set sprite colour
+    lda L1dbd,x                 ;
+    sta spriteColourMask        ; set sprite colour
     lda $1c4d                   ;
     and #$80                    ;
     cmp #$80                    ;
@@ -3106,11 +3127,11 @@ L1ac4
     lda currentLevel            ;
     cmp #19                     ;
     bne L1ad6                   ;
-    lda spriteMask              ;
+    lda spriteColourMask        ;
     cmp #$ff                    ;
     bne L1ad6                   ;
     lda #$f0                    ; sprite colour 2
-    sta spriteMask              ;
+    sta spriteColourMask        ;
 L1ad6
     lda $1c4b
     and #$3f
@@ -3123,8 +3144,8 @@ L1ad6
     clc
     adc #$08
     tay
-    lda #$05
-    jsr S0f00
+    lda #5
+    jsr plot
     lda $1c4b
     and #$80
     cmp #$80
@@ -3157,8 +3178,8 @@ L1b0d
     sta $77
     lda $1c55
     sta $78
-    lda #$04
-    jsr S0f00
+    lda #4
+    jsr plot
     lda $1c4c
     cmp $1c4d
     beq L1b73
@@ -3211,7 +3232,7 @@ L1b84
     eor #$80
     sta $1c4d
     jsr S1bf6
-    lda #$00
+    lda #0
     sta $1c51,y
     jmp L1b3b
 
@@ -3242,8 +3263,8 @@ L1b97
     clc
     adc #$08
     tay
-    lda #$03
-    jsr S0f00
+    lda #3
+    jsr plot
     ldy $1c50
     lda $1c51,y
     cmp #$06
@@ -3252,7 +3273,7 @@ L1b97
 
 ; ***************************************************************************************
 L1bd5
-    lda #$00
+    lda #0
     sta $1c4c
     lda $1c4d
     eor #$80
@@ -3260,7 +3281,7 @@ L1bd5
     lda $1c4b
     ora #$80
     clc
-    adc #$08
+    adc #8
     sta $1c4b
     and #$3f
     cmp #$20
@@ -3279,12 +3300,12 @@ S1bf6
 
 ; ***************************************************************************************
 L1c04
-    ldy #$00
+    ldy #0
     rts
 
 ; ***************************************************************************************
 L1c07
-    ldy #$01
+    ldy #1
     rts
 
 ; ***************************************************************************************
@@ -3338,8 +3359,8 @@ L1c3f
 
 ; ***************************************************************************************
 S1c58
-    ldy #$00
-    lda #$00
+    ldy #0
+    lda #0
     sta S1cc4 + 1
     sta $1cca
     lda #$04
@@ -3423,157 +3444,159 @@ L1cdb
 
 ; ***************************************************************************************
 L1ce8
-    lda #$00
-    sta $1c4a
-    lda #$7b
-    sta $1c6c
-    lda #$00
-    sta $1c6b
-    lda currentLevel
-    cmp #12
-    beq L1ccb
-    cmp #$08
-    beq L1ccb
-    cmp #$09
-    beq L1cd3
-    cmp #$05
-    beq L1cdb
-    lda currentLevel
-    sec
-    sbc #$0a
-    tax
-    lda $1da2,x
-    sta $1cc9
+    lda #0                      ;
+    sta $1c4a                   ;
+    lda #$7b                    ;
+    sta $1c6c                   ;
+    lda #0                      ;
+    sta $1c6b                   ;
+    lda currentLevel            ;
+    cmp #12                     ;
+    beq L1ccb                   ;
+    cmp #8                      ;
+    beq L1ccb                   ;
+    cmp #9                      ;
+    beq L1cd3                   ;
+    cmp #5                      ;
+    beq L1cdb                   ;
+    lda currentLevel            ;
+    sec                         ;
+    sbc #$0a                    ;
+    tax                         ;
+    lda $1da2,x                 ;
+    sta $1cc9                   ;
 L1d15
-    ldx #1
+    ldx #1                      ;
 
 L1d17
-    cpx $1cc9
-    beq L1d32
-    lda $1c6b
-    clc
-    adc #$80
-    sta $1c6b
-    lda $1c6c
-    adc #$00
-    sta $1c6c
-    inx
-    jmp L1d17
+    cpx $1cc9                   ;
+    beq L1d32                   ;
+    lda $1c6b                   ;
+    clc                         ;
+    adc #$80                    ;
+    sta $1c6b                   ;
+    lda $1c6c                   ;
+    adc #0                      ;
+    sta $1c6c                   ;
+    inx                         ;
+    jmp L1d17                   ;
 
 ; ***************************************************************************************
 L1d31
-    rts
+    rts                         ;
 
 ; ***************************************************************************************
 L1d32
-    jsr S1c58
-    lda currentLevel
-    cmp #$09
-    beq L1d3f
-    cmp #$0b
-    bcc L1d31
+    jsr S1c58                   ;
+    lda currentLevel            ;
+    cmp #$09                    ;
+    beq L1d3f                   ;
+    cmp #$0b                    ;
+    bcc L1d31                   ;
 
 L1d3f
-    ldx #8
-    lda #0
+    ldx #8                      ;
+    lda #0                      ;
 -
-    clc                     ;
-    adc #8                  ; multiplication through repeated addition
-    inx                     ;
-    cpx currentLevel        ;
-    bne -                   ;
+    clc                         ;
+    adc #8                      ; multiplication through repeated addition
+    inx                         ;
+    cpx currentLevel            ;
+    bne -                       ;
 
-    clc
-    adc #$78
-    sta S1d96 + 1
-    ldx #0
-    ldy #0
+    clc                         ;
+    adc #$78                    ;
+    sta S1d96 + 1               ;
+    ldx #0                      ;
+    ldy #0                      ;
 
 L1d55
-    jsr S1d96
-    cmp #$ff
-    beq L1d91
-    sta L1dad,y
-    iny
-    inx
-    jsr S1d96
-    sta L1dad,y
-    iny
-    sta L1dad,y
-    iny
-    sta L1dad,y
-    lda L1dad,y
-    and #$0f
-    asl
-    asl
-    asl
-    sta L1dad,y
-    dey
-    lda L1dad,y
-    and #$f0
-    lsr
-    sta L1dad,y
-    dey
-    sta L1dad,y
-    iny
-    iny
-    iny
-    inx
-    cpx #$08
-    bne L1d55
-    rts
+    jsr S1d96                   ;
+    cmp #$ff                    ;
+    beq L1d91                   ;
+    sta L1dad,y                 ;
+    iny                         ;
+    inx                         ;
+    jsr S1d96                   ;
+    sta L1dad,y                 ;
+    iny                         ;
+    sta L1dad,y                 ;
+    iny                         ;
+    sta L1dad,y                 ;
+    lda L1dad,y                 ;
+    and #$0f                    ;
+    asl                         ;
+    asl                         ;
+    asl                         ;
+    sta L1dad,y                 ;
+    dey                         ;
+    lda L1dad,y                 ;
+    and #$f0                    ;
+    lsr                         ;
+    sta L1dad,y                 ;
+    dey                         ;
+    sta L1dad,y                 ;
+    iny                         ;
+    iny                         ;
+    iny                         ;
+    inx                         ;
+    cpx #$08                    ;
+    bne L1d55                   ;
+    rts                         ;
 
 ; ***************************************************************************************
 L1d91
-    sta L1dad,y
-    rts
+    sta L1dad,y                 ;
+    rts                         ;
 
-    !byte $ea
+    !byte $ea                   ;
 
 ; ***************************************************************************************
 S1d96
-    lda $2480,x
-    rts
+    lda $2480,x                 ;
+    rts                         ;
 
 ; ***************************************************************************************
 S1d9a
-    lda L1dad,x
-    rts
+    lda L1dad,x                 ;
+    rts                         ;
 
 ; ***************************************************************************************
 S1d9e
-    sta L1dad,x
-    rts
+    sta L1dad,x                 ;
+    rts                         ;
 
     !byte $ea, $03, $00, $04, $05, $06, $00, $07, $0a, $08, $04
 L1dad
     !byte $ea, $ea, $ea
-    !byte $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $f0, $ff, $0f
-    !byte $f0, $ff, $66, $00, $24, $42, $24, $42, $24, $42, $24, $42, $24, $42, $00, $66
+    !byte $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea
+L1dbd
+    !byte $f0, $ff, $0f, $f0, $ff
+    !byte $66, $00, $24, $42, $24, $42, $24, $42, $24, $42, $24, $42, $00, $66
     !byte $ff, $ff, $66, $00, $42, $24, $42, $24, $42, $24, $42, $24, $42, $24, $00, $66
     !byte $ff, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $49
 
 ; ***************************************************************************************
 L1e00
-    jmp swapPagesC00andE00
+    jmp swapPagesC00andE00          ;
 
 ; ***************************************************************************************
 S1e03
-    lda $2280,x
-    rts
+    lda $2280,x                     ;
+    rts                             ;
 
 ; ***************************************************************************************
 L1e07
-    jsr drawMonsters
-    jmp L20fa
+    jsr drawMonsters                ;
+    jmp L20fa                       ;
 
 ; ***************************************************************************************
-; render monsters?
-L1e0d
-    nop
-    nop
-    nop
+; draws the monsters
+drawMonsters2
+    nop                             ;
+    nop                             ;
+    nop                             ;
 
     jsr S2e8c                       ;
 
@@ -3595,13 +3618,13 @@ drawMonsters
     tay                             ;
     tax                             ;
 
-L1e30
+drawMonstersLoop
     lda $0d80,y                     ;
     sta $8a,x                       ;
     iny                             ;
     inx                             ;
     cpx #4                          ;
-    bne L1e30                       ;
+    bne drawMonstersLoop            ;
 
     lda $8a                         ;
     cmp #$ff                        ;
@@ -3641,7 +3664,7 @@ L1e30
     rol                             ;
     tay                             ;
     ldx #0                          ;
-    jmp L1e30                       ;
+    jmp drawMonstersLoop            ;
 
 ; ***************************************************************************************
 S1e78
@@ -3657,109 +3680,109 @@ S1e78
     and #$40                        ;
     cmp #$40                        ;
     beq L1e8d                       ; if (bit 6 set) then branch
-    rts
+    rts                             ;
 
 ; ***************************************************************************************
 L1e8d
-    lda $8b
-    and #$80
-    cmp #$80
-    bne L1eef
-    lda $8a
-    clc
-    adc #$01
-    and #$7f
-    sta $1fa5
-    lda $8a
-    and #$03
-    asl
-    sta $8e
-    jsr S1f4b
-    lda $8e
-    cmp #$00
-    bne L1eb5
-    jsr S1f67
-    jsr S1f4b
+    lda $8b                         ;
+    and #$80                        ;
+    cmp #$80                        ;
+    bne L1eef                       ;
+    lda $8a                         ;
+    clc                             ;
+    adc #1                          ;
+    and #$7f                        ;
+    sta $1fa5                       ;
+    lda $8a                         ;
+    and #$03                        ;
+    asl                             ;
+    sta $8e                         ;
+    jsr S1f4b                       ;
+    lda $8e                         ;
+    cmp #0                          ;
+    bne L1eb5                       ;
+    jsr eraseBehindMonster          ;
+    jsr S1f4b                       ;
 
 L1eb5
-    lda #$e0
-    clc
-    adc $8e
-    jsr L20ad
-    lda #$e1
-    clc
-    adc $8e
-    jsr L20ad
-    lda #$0a
-    jsr OSWRCH
-    lda #$08
-    jsr OSWRCH
-    jsr OSWRCH
-    lda #$e8
-    clc
-    adc $8e
-    jsr L20ad
-    lda #$e9
-    clc
-    adc $8e
-    jsr L20ad
-    jmp L1fa7
+    lda #$e0                        ;
+    clc                             ;
+    adc $8e                         ;
+    jsr drawIfNotOverExit           ;
+    lda #$e1                        ;
+    clc                             ;
+    adc $8e                         ;
+    jsr drawIfNotOverExit           ;
+    lda #$0a                        ;
+    jsr OSWRCH                      ;
+    lda #$08                        ;
+    jsr OSWRCH                      ;
+    jsr OSWRCH                      ;
+    lda #$e8                        ;
+    clc                             ;
+    adc $8e                         ;
+    jsr drawIfNotOverExit           ;
+    lda #$e9                        ;
+    clc                             ;
+    adc $8e                         ;
+    jsr drawIfNotOverExit           ;
+    jmp L1fa7                       ;
 
 ; ***************************************************************************************
 L1ee5
-    lda $8a
-    and #$03
-    asl
-    sta $8e
-    jmp L1eb5
+    lda $8a                         ;
+    and #$03                        ;
+    asl                             ;
+    sta $8e                         ;
+    jmp L1eb5                       ;
 
 ; ***************************************************************************************
 L1eef
-    lda $8a
-    sec
-    sbc #$01
-    and #$7f
-    sta $1fa5
-    lda $8a
-    and #$03
-    eor #$03
-    asl
-    sta $8e
-    jsr S1f4b
-    lda $8e
-    cmp #$00
-    bne L1f11
-    jsr S1f81
-    jsr S1f4b
+    lda $8a                         ;
+    sec                             ;
+    sbc #$01                        ;
+    and #$7f                        ;
+    sta $1fa5                       ;
+    lda $8a                         ;
+    and #$03                        ;
+    eor #$03                        ;
+    asl                             ;
+    sta $8e                         ;
+    jsr S1f4b                       ;
+    lda $8e                         ;
+    cmp #0                          ;
+    bne L1f11                       ;
+    jsr S1f81                       ;
+    jsr S1f4b                       ;
 
 L1f11
-    lda currentLevel
-    cmp #19
-    beq L1ee5
-    cmp #15
-    beq L1ee5
-    lda #$f1
-    clc
-    adc $8e
-    jsr L20ad
-    lda #$f0
-    clc
-    adc $8e
-    jsr L20ad
+    lda currentLevel                ;
+    cmp #19                         ;
+    beq L1ee5                       ;
+    cmp #15                         ;
+    beq L1ee5                       ;
+    lda #$f1                        ;
+    clc                             ;
+    adc $8e                         ;
+    jsr drawIfNotOverExit           ;
+    lda #$f0                        ;
+    clc                             ;
+    adc $8e                         ;
+    jsr drawIfNotOverExit           ;
     lda #$08                        ;
-    jsr OSWRCH                      ; move back three places
-    jsr OSWRCH                      ;
+    jsr OSWRCH                      ; move back two places
+    jsr OSWRCH                      ; and down one
     lda #$0a                        ;
     jsr OSWRCH                      ;
-    lda #$f9
-    clc
-    adc $8e
-    jsr L20ad
-    lda #$f8
-    clc
-    adc $8e
-    jsr L20ad
-    jmp L1fa7
+    lda #$f9                        ;
+    clc                             ;
+    adc $8e                         ;
+    jsr drawIfNotOverExit           ;
+    lda #$f8                        ;
+    clc                             ;
+    adc $8e                         ;
+    jsr drawIfNotOverExit           ;
+    jmp L1fa7                       ;
 
 ; ***************************************************************************************
 S1f4b
@@ -3780,17 +3803,17 @@ S1f4b
     jmp OSWRCH                      ;
 
 ; ***************************************************************************************
-S1f67
-    lda #$08
-    jsr OSWRCH
-    lda #$20
-    jsr L20ad
-    lda #$0a
-    jsr OSWRCH
-    lda #$08
-    jsr OSWRCH
-    lda #$20
-    jsr L20ad
+eraseBehindMonster
+    lda #$08                        ;
+    jsr OSWRCH                      ;
+    lda #$20                        ;
+    jsr drawIfNotOverExit           ;
+    lda #$0a                        ;
+    jsr OSWRCH                      ;
+    lda #$08                        ;
+    jsr OSWRCH                      ;
+    lda #$20                        ;
+    jsr drawIfNotOverExit           ;
     rts
 
 ; ***************************************************************************************
@@ -3800,7 +3823,7 @@ S1f81
     jsr OSWRCH                      ; forward two spaces
 
     lda #$20                        ;
-    jsr L20ad                       ;
+    jsr drawIfNotOverExit           ;
 
     lda #$0a                        ; down
     jsr OSWRCH                      ;
@@ -3808,7 +3831,7 @@ S1f81
     jsr OSWRCH                      ;
 
     lda #$20                        ;
-    jsr L20ad                       ;
+    jsr drawIfNotOverExit           ;
     rts                             ;
 
 ; ***************************************************************************************
@@ -3816,21 +3839,21 @@ L1f9e
     lda $8b                         ;
     eor #$80                        ; toggle top bit
     sta $8b                         ;
-    rts
+    rts                             ;
 
-    !byte $ea
+    !byte $ea                       ;
 drawMonsterLoopCounter
-    !byte $ea
+    !byte $ea                       ;
 
 ; ***************************************************************************************
 L1fa7
-    lda $1fa5
-    sta $8a
-    cmp $8c
-    beq L1f9e
-    cmp $8d
-    beq L1f9e
-    rts
+    lda $1fa5                       ;
+    sta $8a                         ;
+    cmp $8c                         ;
+    beq L1f9e                       ;
+    cmp $8d                         ;
+    beq L1f9e                       ;
+    rts                             ;
 
 ; ***************************************************************************************
 L1fb5
@@ -3865,7 +3888,7 @@ L1fd7
     adc #$80                            ;
     sta S1e03 + 1                       ; add $80 for each X up to ($8a)
     lda S1e03 + 2                       ;
-    adc #$00                            ;
+    adc #0                              ;
     sta S1e03 + 2                       ;
     inx
     jmp L1fd7
@@ -3882,68 +3905,68 @@ L1ff0
 
     ldy #0                              ; loop counter
 L1fff
-    lda $0c00,y
-    sty $20a6
-    jsr L208a
-    ldy $20a6
-    sta $0c80,y
-    iny
-    cpy #$80
-    bne L1fff
+    lda $0c00,y                     ;
+    sty $20a6                       ;
+    jsr L208a                       ;
+    ldy $20a6                       ;
+    sta $0c80,y                     ;
+    iny                             ;
+    cpy #$80                        ;
+    bne L1fff                       ;
     lda #$ff                        ;
     sta S1e03 + 1                   ; address $22ff
     lda #$22                        ;
     sta S1e03 + 2                   ;
-    ldy #$00
-    ldx #$00
+    ldy #0                          ;
+    ldx #0                          ;
 L2021
-    lda S1e03 + 1
-    clc
-    adc #$01
-    sta S1e03 + 1
-    lda S1e03 + 2
-    adc #$00
-    sta S1e03 + 2
-    jsr S1e03
-    cmp #$ff
-    beq L203c
-    jmp L2021
+    lda S1e03 + 1                   ;
+    clc                             ;
+    adc #1                          ;
+    sta S1e03 + 1                   ;
+    lda S1e03 + 2                   ;
+    adc #0                          ;
+    sta S1e03 + 2                   ;
+    jsr S1e03                       ;
+    cmp #$ff                        ;
+    beq L203c                       ;
+    jmp L2021                       ;
 
 ; ***************************************************************************************
 L203c
-    iny
-    cpy currentLevel
-    bne L2021
-    ldy #0
-    ldx #1
+    iny                             ;
+    cpy currentLevel                ;
+    bne L2021                       ;
+    ldy #0                          ;
+    ldx #1                          ;
 
 L2045
-    jsr S1e03
-    jsr S2070
-    iny
-    iny
-    jsr S2070
-    inx
-    dey
-    jsr S1e03
-    jsr S2070
-    inx
-    iny
-    iny
-    jsr S1e03
-    jsr S2070
-    inx
-    jsr S1e03
-    iny
-    cmp #$ff
-    bne L2045
-    jsr S2070
-    jmp swapPagesC00andE00
+    jsr S1e03                       ;
+    jsr S2070                       ;
+    iny                             ;
+    iny                             ;
+    jsr S2070                       ;
+    inx                             ;
+    dey                             ;
+    jsr S1e03                       ;
+    jsr S2070                       ;
+    inx                             ;
+    iny                             ;
+    iny                             ;
+    jsr S1e03                       ;
+    jsr S2070                       ;
+    inx                             ;
+    jsr S1e03                       ;
+    iny                             ;
+    cmp #$ff                        ;
+    bne L2045                       ;
+    jsr S2070                       ;
+    jmp swapPagesC00andE00          ;
 
 ; ***************************************************************************************
 S2070
-    sta $0d80,y
-    rts
+    sta $0d80,y                     ;
+    rts                             ;
 
 ; ***************************************************************************************
 swapPagesC00andE00
@@ -3962,110 +3985,112 @@ L2076
 
 ; ***************************************************************************************
 L208a
-    sta $20a5
-    ldy #$00
-    ldx #$00
-L2091
-    lda $20a5
-    clc
-    rol
-    sta $20a5
-    bcs L20a7
-    txa
-    clc
+    sta $20a5                           ;
+    ldy #0                              ;
+    ldx #0                              ;
+reverseLoop
+    lda $20a5                           ;
+    clc                                 ;
+    rol                                 ;
+    sta $20a5                           ;
+    bcs L20a7                           ;
+    txa                                 ;
+    clc                                 ;
 L209d
-    ror
-    tax
-    iny
-    cpy #$08
-    bne L2091
-    rts
+    ror                                 ;
+    tax                                 ;
+    iny                                 ;
+    cpy #8                              ;
+    bne reverseLoop                     ;
+    rts                                 ;
 
 ; ***************************************************************************************
-    !byte $ea, $ea
+    !byte $ea, $ea                  ;
 
 ; ***************************************************************************************
 L20a7
-    txa
-    sec
-    jmp L209d
+    txa                             ;
+    sec                             ;
+    jmp L209d                       ;
 
 ; ***************************************************************************************
-    !byte $ea
+rememberCharacterToDraw
+    !byte $ea                       ;
 
 ; ***************************************************************************************
-L20ad
-    sta $20ac
-    lda vduTextCursorYPosition
-    clc
-    adc #2
-    cmp exitPositionY
-    bne L20d0
+drawIfNotOverExit
+    sta rememberCharacterToDraw     ;
+    lda vduTextCursorYPosition      ;
+    clc                             ;
+    adc #2                          ;
+    cmp exitPositionY               ;
+    bne L20d0                       ;
 L20bb
-    lda vduTextCursorXPosition
-    cmp exitPositionX
-    beq L20cb
-    sec
-    sbc #$01
-    cmp exitPositionX
-    bne L20db
-L20cb
-    lda #$09
-    jmp OSWRCH
+    lda vduTextCursorXPosition      ;
+    cmp exitPositionX               ;
+    beq moveForward                 ;
+    sec                             ;
+    sbc #1                          ;
+    cmp exitPositionX               ;
+    bne +                           ;
+moveForward
+    lda #9                          ; move forward
+    jmp OSWRCH                      ;
 
 L20d0
-    sec
-    sbc #$01
-    cmp exitPositionY
-    bne L20db
-    jmp L20bb
+    sec                             ;
+    sbc #1                          ;
+    cmp exitPositionY               ;
+    bne +                           ;
+    jmp L20bb                       ;
 
-L20db
-    lda $20ac
-    jmp OSWRCH
++
+    lda rememberCharacterToDraw     ;
+    jmp OSWRCH                      ;
 
 ; ***************************************************************************************
 colourTable
-    !byte $03, $02, $01, $03
+    !byte $03, $02, $01, $03        ;
+
     ; $20e5
     !byte $ea, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0a
     !byte $0b, $08, $0c, $00, $0d, $0e, $0f, $09, $10, $01
 
 ; ***************************************************************************************
 L20fa
-    jsr S2227
+    jsr S2227                       ;
 L20fd
-    ldx #$00
+    ldx #$00                        ;
 L20ff
-    lda $0d80,x
-    sta $0d90,x
-    inx
-    cpx #$05
+    lda $0d80,x                     ;
+    sta $0d90,x                     ;
+    inx                             ;
+    cpx #$05                        ;
 L2108
-    bne L20ff
+    bne L20ff                       ;
 L210a
-    lda $227c
-    sec
-    sbc #$05
-    asl
-    asl
-    sta $0d80
-    lda $227d
-    clc
-    adc #$01
-    sta $0d81
-    lda #$ff
-    sta $0d84
-    jsr S68df
-    ldx #$00
+    lda $227c                       ;
+    sec                             ;
+    sbc #5                          ;
+    asl                             ;
+    asl                             ;
+    sta $0d80                       ;
+    lda $227d                       ;
+    clc                             ;
+    adc #$01                        ;
+    sta $0d81                       ;
+    lda #$ff                        ;
+    sta $0d84                       ;
+    jsr S68df                       ;
+    ldx #$00                        ;
 L2128
-    lda $0d90,x
-    sta $0d80,x
-    inx
-    cpx #$05
-    bne L2128
-    jsr L2204
-    inc $227d
+    lda $0d90,x                     ;
+    sta $0d80,x                     ;
+    inx                             ;
+    cpx #$05                        ;
+    bne L2128                       ;
+    jsr L2204                       ;
+    inc $227d                       ;
 L2139
     lda #$11                        ;
     jsr OSWRCH                      ;
@@ -4090,192 +4115,192 @@ L2139
 
 ; ***************************************************************************************
 L2165
-    jsr OSWRCH
-    lda #$20
-    jsr S221a
+    jsr OSWRCH                      ;
+    lda #$20                        ;
+    jsr S221a                       ;
 L216d
-    lda $227d
-    cmp $227b
-    beq L2188
+    lda $227d                       ;
+    cmp $227b                       ;
+    beq L2188                       ;
 L2175
-    lda #$e0
-    clc
-    adc $3f
-    tay
-    jsr S221a
-    tya
-    clc
-    adc #2
-    jsr OSWRCH
-    jmp L2204
+    lda #$e0                        ;
+    clc                             ;
+    adc $3f                         ;
+    tay                             ;
+    jsr S221a                       ;
+    tya                             ;
+    clc                             ;
+    adc #2                          ;
+    jsr OSWRCH                      ;
+    jmp L2204                       ;
 
 ; ***************************************************************************************
 L2188
-    inc $227e
-    dec $227d
-    lda $227e
-    cmp #$04
-    beq L21aa
-    cmp #$01
-    beq L2175
-    cmp #$02
-    beq L21f7
-    lda #$e5
-    jsr S221a
-    lda #$e7
-    jsr OSWRCH
-    jmp L2204
+    inc $227e                       ;
+    dec $227d                       ;
+    lda $227e                       ;
+    cmp #$04                        ;
+    beq L21aa                       ;
+    cmp #$01                        ;
+    beq L2175                       ;
+    cmp #$02                        ;
+    beq L21f7                       ;
+    lda #$e5                        ;
+    jsr S221a                       ;
+    lda #$e7                        ;
+    jsr OSWRCH                      ;
+    jmp L2204                       ;
 
 ; ***************************************************************************************
 L21aa
-    lda #$00
-    sta $227e
-    lda #$ff
-    sta $227d
-    lda #$20
-    jsr S221a
-    lda #$20
-    jsr OSWRCH
-    inc $227f
-    lda $227f
-    and #$0f
-    tax
-    lda $2280,x
-    tay
-    and #$1f
-    clc
-    adc #$04
-    sta $227c
-    tya
-    and #$e0
-    lsr
-    lsr
-    lsr
-    lsr
-    lsr
-    clc
-    adc #$03
-    sta $227b
-    lda $227c
-    cmp #$19
-    beq L21ef
-    cmp #$1a
-    beq L21ef
-    jmp L2204
+    lda #0                          ;
+    sta $227e                       ;
+    lda #$ff                        ;
+    sta $227d                       ;
+    lda #$20                        ;
+    jsr S221a                       ;
+    lda #$20                        ;
+    jsr OSWRCH                      ;
+    inc $227f                       ;
+    lda $227f                       ;
+    and #$0f                        ;
+    tax                             ;
+    lda $2280,x                     ;
+    tay                             ;
+    and #$1f                        ;
+    clc                             ;
+    adc #$04                        ;
+    sta $227c                       ;
+    tya                             ;
+    and #$e0                        ;
+    lsr                             ;
+    lsr                             ;
+    lsr                             ;
+    lsr                             ;
+    lsr                             ;
+    clc                             ;
+    adc #$03                        ;
+    sta $227b                       ;
+    lda $227c                       ;
+    cmp #$19                        ;
+    beq L21ef                       ;
+    cmp #$1a                        ;
+    beq L21ef                       ;
+    jmp L2204                       ;
 
 ; ***************************************************************************************
 L21ef
-    lda #$0b
-    sta $227b
-    jmp L2204
+    lda #$0b                        ;
+    sta $227b                       ;
+    jmp L2204                       ;
 
 ; ***************************************************************************************
 L21f7
-    lda #$e4
-    jsr S221a
-    lda #$e6
-    jsr OSWRCH
-    jmp L2204
+    lda #$e4                        ;
+    jsr S221a                       ;
+    lda #$e6                        ;
+    jsr OSWRCH                      ;
+    jmp L2204                       ;
 
 ; ***************************************************************************************
 L2204
-    ldx #$00
+    ldx #$00                        ;
 L2206
-    lda $22c0,x
-    tay
-    lda $0c00,x
-    sta $22c0,x
-    tya
-    sta $0c00,x
-    inx
-    cpx #$40
-    bne L2206
-    rts
+    lda $22c0,x                     ;
+    tay                             ;
+    lda $0c00,x                     ;
+    sta $22c0,x                     ;
+    tya                             ;
+    sta $0c00,x                     ;
+    inx                             ;
+    cpx #$40                        ;
+    bne L2206                       ;
+    rts                             ;
 
 ; ***************************************************************************************
 S221a
-    jsr OSWRCH
-    lda #$0a
-    jsr OSWRCH
-    lda #$08
-    jmp OSWRCH
+    jsr OSWRCH                      ;
+    lda #$0a                        ;
+    jsr OSWRCH                      ;
+    lda #$08                        ;
+    jmp OSWRCH                      ;
 
 ; ***************************************************************************************
 S2227
-    lda $7eed
-    and #$10
-    cmp #$00
-    beq L223e
-    ldx #$3f
-    ldy #$f2
-    jsr S2241
-    ldx #$49
-    ldy #$f2
-    jsr S2241
+    lda $7eed                       ;
+    and #$10                        ;
+    cmp #$00                        ;
+    beq L223e                       ;
+    ldx #$3f                        ;
+    ldy #$f2                        ;
+    jsr S2241                       ;
+    ldx #$49                        ;
+    ldy #$f2                        ;
+    jsr S2241                       ;
 L223e
-    jmp L7e80
+    jmp L7e80                       ;
 
 ; ***************************************************************************************
 S2241
-    stx S2277 + 2
-    sty S2277 + 1
-    ldx #$00
-    jsr S2277
-    and #$80
-    cmp #$00
-    bne L2274
-    ldx #$07
-    jsr S2277
-    and #$01
-    cmp #$00
-    bne L2274
-    ldx #$90
-    jsr S2277
-    and #$80
-    cmp #$00
-    bne L2274
-    ldx #$97
-    jsr S2277
-    and #$01
-    cmp #$00
-    bne L2274
-    rts
+    stx S2277 + 2                   ;
+    sty S2277 + 1                   ;
+    ldx #$00                        ;
+    jsr S2277                       ;
+    and #$80                        ;
+    cmp #$00                        ;
+    bne L2274                       ;
+    ldx #$07                        ;
+    jsr S2277                       ;
+    and #$01                        ;
+    cmp #$00                        ;
+    bne L2274                       ;
+    ldx #$90                        ;
+    jsr S2277                       ;
+    and #$80                        ;
+    cmp #$00                        ;
+    bne L2274                       ;
+    ldx #$97                        ;
+    jsr S2277                       ;
+    and #$01                        ;
+    cmp #$00                        ;
+    bne L2274                       ;
+    rts                             ;
 
 ; ***************************************************************************************
 L2274
-    jmp death
+    jmp death                       ;
 
 ; ***************************************************************************************
 S2277
-    lda $ffff,x
-    rts
+    lda $ffff,x                     ;
+    rts                             ;
 
 ; ***************************************************************************************
     !byte $06, $08, $ff, $00, $00
     !byte $64, $1b, $28, $a9, $16, $1d, $02, $58, $65, $57, $27, $d9, $aa, $1c, $15, $63
 
 ; ***************************************************************************************
-S2290
-    lda #$60            ;
-    sta L2500           ; Store opcode for RTS
-    jsr drawRoomName    ;
-    jmp L2503           ;
+drawFooterText
+    lda #$60                        ;
+    sta drawFooterTextOrReturn      ; Store opcode for RTS
+    jsr drawRoomName                ;
+    jmp drawScoreLevelLives         ;
 
 ; ***************************************************************************************
 L229b
-    lda #$20            ;
-    sta L2500           ; store opcode for JSR
-    lda #8              ;
-    sta $227c           ;
-    lda #$ff            ;
-    sta $227d           ;
-    lda #6              ;
-    sta $227b           ;
-    lda #0              ;
-    sta $227f           ;
-    lda #$f0            ;
-    sta $7eed           ;
-    jmp L2427           ;
+    lda #$20                        ; }
+    sta drawFooterTextOrReturn      ; } store opcode for JSR
+    lda #8                          ;
+    sta $227c                       ;
+    lda #$ff                        ;
+    sta $227d                       ;
+    lda #6                          ;
+    sta $227b                       ;
+    lda #0                          ;
+    sta $227f                       ;
+    lda #$f0                        ;
+    sta $7eed                       ;
+    jmp L2427                       ;
 
 ; ***************************************************************************************
     !byte $7c, $6b, $4c, $e8
@@ -4369,12 +4394,12 @@ startGameJumper
 
 ; ***************************************************************************************
 L2427
-    lda #$ff
-    sta $6b7c
-    jmp L1ce8
+    lda #$ff                        ;
+    sta $6b7c                       ;
+    jmp L1ce8                       ;
 
 ; ***************************************************************************************
-    !byte $00
+    !byte $00                       ;
 
 ; ***************************************************************************************
 creditsMessage
@@ -4406,14 +4431,15 @@ bylineMessage
     !byte 31, 19, 7                 ; TAB(19,7)
 bylineMessageEnd
 
+; ***************************************************************************************
     !byte $00, $00, $00
     !byte $00, $00, $00, $00, $00, $00, $00, $00
 
 ; ***************************************************************************************
-L2500
-    jsr S2290
+drawFooterTextOrReturn
+    jsr drawFooterText              ;
 
-L2503
+drawScoreLevelLives
     lda currentLevel                ;
     cmp #10                         ; level 10
     bne nonLevel10                  ;
@@ -4515,13 +4541,13 @@ reverseConveyorDirection
 
 ; ***************************************************************************************
 conveyorX
-    !byte $ea
+    !byte $ea                       ;
 conveyorY
-    !byte $ea
+    !byte $ea                       ;
 conveyorLength
-    !byte $ea
+    !byte $ea                       ;
 conveyorSpriteOffset
-    !byte $ea
+    !byte $ea                       ;
 
 ; The fixed text under the play area: "Score         Lives     Level"
 ; but with the top bit being the conveyor direction for each level (for the first 20 bytes)
@@ -4533,27 +4559,27 @@ fixedText
     !text $09, $09, $20, $20, "Level"
 
 ; ***************************************************************************************
-    jsr $3831                   ; [unused]
+    jsr $3831                       ; [unused]
 
 showScoreLivesAndLevel
-    lda #$ff                    ; }
-    jsr addToScore              ; } add 0 to score
+    lda #$ff                        ; }
+    jsr addToScore                  ; } add 0 to score
 
     ; show lives
-    lda #$1f                    ; }
-    jsr OSWRCH                  ; }
-    lda #$22                    ; } TAB(34,19)
-    jsr OSWRCH                  ; }
-    lda #$13                    ; }
-    jsr OSWRCH                  ; }
+    lda #$1f                        ; }
+    jsr OSWRCH                      ; }
+    lda #$22                        ; } TAB(34,19)
+    jsr OSWRCH                      ; }
+    lda #$13                        ; }
+    jsr OSWRCH                      ; }
 
-    lda currentLevel            ; show current level
-    tax                         ; [redundant]
-    ldy #0                      ; counter for tens digit
-    jsr print10sDigit           ; print 10s digit
-    txa                         ; X is units
-    tay                         ;
-    jmp printY                  ; print units
+    lda currentLevel                ; show current level
+    tax                             ; [redundant]
+    ldy #0                          ; counter for tens digit
+    jsr print10sDigit               ; print 10s digit
+    txa                             ; X is units
+    tay                             ;
+    jmp printY                      ; print units
 
 ; ***************************************************************************************
 ;
@@ -4563,12 +4589,12 @@ showScoreLivesAndLevel
 ;
 ; ***************************************************************************************
 print10sDigit
-    cmp #10                     ;
-    bcc printY                  ;
-    iny                         ;
-    sec                         ;
-    sbc #10                     ;
-    jmp print10sDigit           ;
+    cmp #10                         ;
+    bcc printY                      ;
+    iny                             ;
+    sec                             ;
+    sbc #10                         ;
+    jmp print10sDigit               ;
 
 ; ***************************************************************************************
 ;
@@ -4579,49 +4605,49 @@ print10sDigit
 ;
 ; ***************************************************************************************
 printY
-    tax                         ;
-    tya                         ;
-    clc                         ;
-    adc #$30                    ;
-    jmp OSWRCH                  ;
+    tax                             ;
+    tya                             ;
+    clc                             ;
+    adc #$30                        ;
+    jmp OSWRCH                      ;
 
 ; ***************************************************************************************
-    !byte $74, $68
+    !byte $74, $68                  ;
 
 exitPositionX
-    !byte $13
+    !byte $13                       ;
 exitPositionY
-    !byte $07
+    !byte $07                       ;
 
 ; ***************************************************************************************
 S2600
-    lda $ffff,x
-    rts
+    lda $ffff,x                     ;
+    rts                             ;
 
 ; ***************************************************************************************
 ; unused?
 L2604
-    lda #$80
-    sta S2600 + 1
-    lda #$26
-    sta S2600 + 2
-    lda #$00
-    sta $2693
-    lda #$11
-    jsr OSWRCH
-    lda #$03
-    jsr OSWRCH
-    ldx #$00
+    lda #$80                        ;
+    sta S2600 + 1                   ;
+    lda #$26                        ;
+    sta S2600 + 2                   ;
+    lda #$00                        ;
+    sta $2693                       ;
+    lda #$11                        ;
+    jsr OSWRCH                      ;
+    lda #$03                        ;
+    jsr OSWRCH                      ;
+    ldx #$00                        ;
 L261f
-    jsr S2600
-    cmp #$20
-    bcc L2631
+    jsr S2600                       ;
+    cmp #$20                        ;
+    bcc L2631                       ;
 L2626
-    inx
-    cpx #$00
-    bne L261f
-    inc S2600 + 2
-    jmp L261f
+    inx                             ;
+    cpx #$00                        ;
+    bne L261f                       ;
+    inc S2600 + 2                   ;
+    jmp L261f                       ;
 
 ; ***************************************************************************************
 ; unused?
@@ -4697,13 +4723,13 @@ numbers
     !byte $0d                               ; terminator
 
 ; ***************************************************************************************
-    ; unused?
-    !byte $07, $54, $68
+    ; unused... (possibly a test level?)
+    !text 7, "Th"                   ;
 
 ; ***************************************************************************************
 levelNumberCounter
 tempCounter
-    !byte $ea
+    !byte $ea                       ;
 
 ; ***************************************************************************************
 setVerticalDisplayedCharacters
@@ -5258,7 +5284,7 @@ drawExit
 
     ; Draw: f1,f2
     ;       f3,f4
-    ldx #0
+    ldx #0                          ;
 L2af3
     lda L2aff,x                     ;
     jsr OSWRCH                      ;
@@ -5466,7 +5492,7 @@ drawPlatform
     sta levelFeature3                   ;
 
 +
-    jmp L2500                           ;
+    jmp drawFooterTextOrReturn          ;
 
     ; sprite numbers to draw (level specific)
 levelFeatureArray
@@ -5529,90 +5555,93 @@ drawSideWallsAndFloor
 
     !byte $0d, $03
 
-; this following code (up to $2d00) is kind of duplicated in miner4.a
+; ***************************************************************************************
+; this following code (up to $2d00) is overwritten before it gets a chance to be used, by very similar code in miner4.a
+; So this code is unused.
 S2c98
-    lda $7180
-    rts
+    lda $7180                           ; [unused]
+    rts                                 ; [unused]
 
 L2c9c
-    jsr L2500
-    jmp L2cb2
+    jsr drawFooterTextOrReturn          ; [unused]
+    jmp L2cb2                           ; [unused]
 
 L2ca2
-    lda #$00
-    sta $2e89
-    lda #$71
-    sta S2c98 + 2
-    lda currentLevel
-    cmp #18
-    beq L2c9c
+    lda #0                              ; [unused]
+    sta keyPositionCounter              ; [unused]
+    lda #$71                            ; [unused]
+    sta S2c98 + 2                       ; [unused]
+    lda currentLevel                    ; [unused]
+    cmp #18                             ; [unused]
+    beq L2c9c                           ; [unused]
 
 L2cb2
-    lda #$00
-    sta $2dfe
-    lda #$6f
-    sta S2c98 + 1
+    lda #0                              ; [unused]
+    sta decodeLevelByte                 ; [unused]
+    lda #$6f                            ; [unused]
+    sta S2c98 + 1                       ; [unused]
 
 L2cbc
-    jsr S2e18
-    jsr S2c98
-    cmp #$ff
-    beq L2cc9
-    jmp L2cbc
+    jsr S2e18                           ; [unused]
+    jsr S2c98                           ; [unused]
+    cmp #$ff                            ; [unused]
+    beq L2cc9                           ; [unused]
+    jmp L2cbc                           ; [unused]
 
 L2cc9
-    inc $2dfe
-    lda $2dfe
-    cmp currentLevel
-    bne L2cbc
-    jsr S2e18
-    jsr S2c98
-    sta $2e02
-    lda $2e02
-    and #$3f
-    sta L2e03
-    lda $2e02
-    and #$c0
-    clc
-    rol
-    rol
-    rol
-    sta $2e02
-    inc $2e02
-    lda #$f0
-    sta $2dfd
-    jsr S2df7
-    ldx #$00
-    jmp L2d69
+    inc decodeLevelByte                 ; [unused]
+    lda decodeLevelByte                 ; [unused]
+    cmp currentLevel                    ; [unused]
+    bne L2cbc                           ; [unused]
+    jsr S2e18                           ; [unused]
+    jsr S2c98                           ; [unused]
+    sta $2e02                           ; [unused]
+    lda $2e02                           ; [unused]
+    and #$3f                            ; [unused]
+    sta L2e03                           ; [unused]
+    lda $2e02                           ; [unused]
+    and #$c0                            ; [unused]
+    clc                                 ; [unused]
+    rol                                 ; [unused]
+    rol                                 ; [unused]
+    rol                                 ; [unused]
+    sta $2e02                           ; [unused]
+    inc $2e02                           ; [unused]
+    lda #$f0                            ; [unused]
+    sta keySprite                       ; [unused]
+    jsr S2df7                           ; [unused]
+    ldx #0                              ; [unused]
+    jmp L2d69                           ; [unused]
 }
 
     ;$2D00
+; ***************************************************************************************
 start
     ; *FX 13,4 - disable vsync event
-    lda #$0d
-    ldx #$04
-    ldy #$00
-    jsr OSBYTE
+    lda #$0d                            ;
+    ldx #$04                            ;
+    ldy #$00                            ;
+    jsr OSBYTE                          ;
 
-    jsr swapManicMinerGraphicWithC00
+    jsr swapManicMinerGraphicWithC00    ;
 
     ; *fx 200,3 - clear memory on BREAK
-    lda #$c8
-    ldx #$03
-    ldy #$00
-    jsr OSBYTE
+    lda #$c8                            ;
+    ldx #$03                            ;
+    ldy #$00                            ;
+    jsr OSBYTE                          ;
 
     ; print message (switch to MODE 1)
-    ldx #$00
+    ldx #0                              ;
 moreMessageLoop
-    lda mode1Message,x
-    cmp #$ff
-    beq output8Zeroes
-    jsr OSWRCH
+    lda mode1Message,x                  ;
+    cmp #$ff                            ;
+    beq output8Zeroes                   ;
+    jsr OSWRCH                          ;
 outputMessageLoop
-    inx
-    cpx #$37
-    bne moreMessageLoop
+    inx                                 ;
+    cpx #$37                            ;
+    bne moreMessageLoop                 ;
 
     ; VDU 31,12,3
     lda #$1f                            ;
@@ -5640,7 +5669,7 @@ vduLoop
     bne -                               ;
 
     ; store zero byte on screen
-    stx $393e
+    stx $393e                           ;
     jsr swapManicMinerGraphicWithC00    ; swap back character definitions
 
     ; fill in the background with RED
@@ -5718,7 +5747,7 @@ postFill
     lda setTextWindow,x                 ;
     jsr OSWRCH                          ;
     inx                                 ;
-    cpx #setTextWindowEnd - setTextWindow       ;
+    cpx #setTextWindowEnd - setTextWindow   ;
     bne -                               ;
 
     nop                                 ;
@@ -5741,7 +5770,7 @@ postFill
     ; *L.MINER3
     ldx #<loadMiner3                    ;
     ldy #>loadMiner3                    ;
-    jsr OSWORD
+    jsr OSWORD                          ;
 
     ; *L.MINER4
     ldx #<loadMiner4                    ;
@@ -5749,6 +5778,7 @@ postFill
     jsr OSWORD                          ;
     jmp afterLoads                      ;
 
+; ***************************************************************************************
     !byte $ea, $ea, $ea, $ea            ;
 
 show14Rows
@@ -5764,6 +5794,7 @@ loadMiner3
 loadMiner4
     !text "L.MINER4",13                 ; OSCLI command to load MINER 4
 
+; ***************************************************************************************
 afterLoads
     lda #$8c                            ;
     jsr OSWRCH                           ; VDU 140 - why?
@@ -5783,6 +5814,7 @@ copyMemoryLoop
     bne copyMemoryLoop                  ;
     jmp miner4EntryPoint                ;
 
+; ***************************************************************************************
     !byte $ea, $ea, $ea, $ea
 
 mode1Message
@@ -5814,6 +5846,7 @@ unused1
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
 
     ; $2f00
+; ***************************************************************************************
 manicMinerGraphic
     !byte $00, $00, $00, $03, $04, $04, $04, $03
     !byte $07, $03, $06, $0c, $98, $30, $60, $c0
@@ -5859,50 +5892,51 @@ miner2Entry
     sta $71                         ; reset scrolling message counter
 
     ; *FX 200,3 - clear memory on BREAK
-    lda #$c8
-    ldx #$03
-    ldy #$00
-    jsr OSBYTE
+    lda #$c8                        ;
+    ldx #$03                        ;
+    ldy #$00                        ;
+    jsr OSBYTE                      ;
 
     ; set MODE 7 and text window
-    ldx #0
+    ldx #0                          ;
 setModeStringLoop
-    lda setModeString,x
-    jsr OSWRCH
-    inx
-    cpx #setModeStringEnd - setModeString
-    bne setModeStringLoop
+    lda setModeString,x             ;
+    jsr OSWRCH                      ;
+    inx                             ;
+    cpx #setModeStringEnd - setModeString   ;
+    bne setModeStringLoop           ;
 
     ldx #0
 copyToScreen3
-    lda whiteBackgroundString,x
-    sta $7f23,x
-    inx
-    cpx #whiteBackgroundStringEnd - whiteBackgroundString
-    bne copyToScreen3
+    lda whiteBackgroundString,x     ;
+    sta $7f23,x                     ;
+    inx                             ;
+    cpx #whiteBackgroundStringEnd - whiteBackgroundString   ;
+    bne copyToScreen3               ;
 
     ; turn off cursor
-    lda #$0a
-    sta $fe00
-    lda #$20
-    sta $fe01
+    lda #$0a                        ;
+    sta $fe00                       ;
+    lda #$20                        ;
+    sta $fe01                       ;
 
     ; store original EventV address
-    lda $0220
-    sta eventVLow
-    lda $0221
-    sta eventVHigh
+    lda $0220                       ;
+    sta eventVLow                   ;
+    lda $0221                       ;
+    sta eventVHigh                  ;
 
     ; show 'Press Space'
-    ldx #0
+    ldx #0                          ;
 displayStringLoop
-    lda pressSpaceMessage,x
-    jsr OSWRCH
-    inx
-    cpx #pressSpaceMessageEnd - pressSpaceMessage
-    bne displayStringLoop
-    jmp fromMiner2
+    lda pressSpaceMessage,x         ;
+    jsr OSWRCH                      ;
+    inx                             ;
+    cpx #pressSpaceMessageEnd - pressSpaceMessage   ;
+    bne displayStringLoop           ;
+    jmp fromMiner2                  ;
 
+; ***************************************************************************************
 unused3
     !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
@@ -5952,6 +5986,7 @@ copyMemInner
     bne copyMem                     ; if not finished then branch back
     rts                             ;
 
+; ***************************************************************************************
 unused5
     !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
     !byte 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
