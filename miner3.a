@@ -242,7 +242,7 @@ incrementCheatCode
 
 toggleCheatMode
     lda cheatModeEnabled            ;
-    eor #$01                        ;
+    eor #1                          ;
     sta cheatModeEnabled            ;
 
     lda #$03                        ; }
@@ -268,7 +268,7 @@ cheatCodeEnd
     !byte $60, $60
 
 ; ***************************************************************************************
-L3146
+updateJumpAndFallSounds
     jsr $1980                       ;
     lda isInAir                     ;
     cmp #1                          ;
@@ -285,10 +285,10 @@ L3146
 L3160
     lda isInAir                     ;
     cmp #1                          ;
-    beq L318a                       ;
+    beq return5                     ;
     lda $6b7c                       ;
-    cmp #$00                        ;
-    bne L318a                       ;
+    cmp #0                          ;
+    bne return5                     ;
     lda #$ff                        ;
     sta $6b83                       ;
 
@@ -299,12 +299,12 @@ L3160
     eor #$7f                        ; } play descending falling sound
     tax                             ; }
     lda #$f1                        ; }
-    ldy #$01                        ; }
+    ldy #1                          ; }
     jsr playSoundAXY                ; }
 
     lda #0                          ;
     sta $6b83                       ;
-L318a
+return5
     rts                             ;
 
     ; unused?
@@ -314,7 +314,7 @@ miner3EntryPoint
     jsr clearScreen                 ;
     lda #17                         ; VDU 17,3 (COLOUR 3)
     jsr OSWRCH                      ;
-    lda #$03                        ;
+    lda #3                          ;
     jsr OSWRCH                      ;
 
     jsr pauseMusic             ;
@@ -358,7 +358,7 @@ miner3EntryPoint
     lda #$40                        ;
     sta $71                         ;
 rectLoop
-    ldy #$00                        ;
+    ldy #0                          ;
 -
     lda ($70),y                     ;
     ora #$f0                        ;
@@ -366,7 +366,8 @@ rectLoop
     iny                             ;
     bne -                           ;
     inc $71                         ;
-    ldy #$00                        ;
+
+    ldy #0                          ;
 -
     lda ($70),y                     ;
     ora #$f0                        ;
@@ -380,7 +381,7 @@ rectLoop
     adc #$80                        ;
     sta $70                         ;
     lda $71                         ;
-    adc #$01                        ;
+    adc #1                          ;
     sta $71                         ;
     cmp #$51                        ;
     bne rectLoop                    ;
@@ -422,7 +423,7 @@ plotLoop
     sta plotYLow                    ;
 
     ; PLOT
-    ldy #$00                        ;
+    ldy #0                          ; loop counter
 -
     lda plotMessageStart,y          ;
     jsr OSWRCH                      ;

@@ -26,12 +26,14 @@ OSWRCH                      = $ffee
 OSBYTE                      = $fff4
 OSWORD                      = $fff7
 
+channel3Frequency           = $3098                             ;
 screenStartAddress          = $3280                             ; start of visible screen
 screenEndAddress            = $6000                             ; end of visible screen
 levelDefinitions            = $6c00                             ; start of level definitions
 
 miner4EntryPoint            = $619a                             ; See miner4.a
 lives                       = $67be                             ; See miner4.a
+guardianGraphics            = $7280                             ; See miner4.a
 fromMiner2                  = $7475                             ; See miner1.a
 eventVLow                   = $74a7                             ; See miner1.a
 eventVHigh                  = $74ac                             ; See miner1.a
@@ -39,12 +41,13 @@ setModeString               = $74d4                             ; See miner1.a
 setModeStringEnd            = setModeString + 7                 ; See miner1.a
 whiteBackgroundString       = $74db                             ; See miner1.a
 whiteBackgroundStringEnd    = whiteBackgroundString + $1e       ; See miner1.a
+eugeneSprite                = $7b00
 
 L2e03 = $2e03
 S2e18 = $2e18
 L2d69 = $2d69
 S2df7 = $2df7
-S2e8c = $2e8c
+colourCycleKeys = $2e8c
 drawRoomName = $2ef0
 L3000 = $3000
 playGame = $309a
@@ -96,13 +99,13 @@ L7e80 = $7e80
 ;       ($77,$78) = source sprite address
 ;
 ;       A = mode:
-;           Mode            Operation                              Description
-;           2               0                                      erase
-;           3               source AND mask                        colour mask applied to source
-;           4               source (if not 255) otherwise screen   stencil alpha
-;           5               source (if not 255) otherwise black    copy, but 255=black
-;           10              (source AND $F0) EOR screen            tint source to colour 2, eor with screen
-;           anything else   source (AND mask) OR screen            additive with mask
+;           Mode            Operation                                   Description
+;           2               0                                           erase
+;           3               source AND mask                             colour mask applied to source
+;           4               if (screen not 255) then (source AND mask)  preserve solid colour 3
+;           5               if (screen not 255) then 0                  zero except solid colour 3
+;           10              (source AND $F0) EOR screen                 tint source to colour 2, eor with screen
+;           anything else   source (AND mask) OR screen                 additive with mask
 ;
 ;       X = x pixel coordinate
 ;       Y = y pixel coordinate
@@ -131,7 +134,7 @@ plot
     ror                                 ;
     ror                                 ;
     sta $72                             ; ($72) = (Y pixel / 8)     [can be improved]
-L0f20
+
     lda $70                             ;
     cmp #10                             ;
     beq setMode10Address                ;
@@ -188,13 +191,14 @@ setMode2Address
 calculateScreenAddrAndPlot
     lda #$00                            ; }
     sta $75                             ; }
-    lda #$30                            ; } set start screen address $3000
+    lda #$30                            ; } start at logical screen address $3000
     sta $76                             ; }
 
     lda #0                              ;
     sta spriteRowCounter                ;
 
-    ; calculate $3000 + 8*(X cell coordinate) by repeated addition
+    ; calculate $3000 + 8*(X cell coordinate)
+    ; multiplication by repeated addition
     ldx #0                              ;
 -
     cpx $71                             ;
@@ -203,7 +207,7 @@ calculateScreenAddrAndPlot
     lda $75                             ; }
     clc                                 ; }
     adc #8                              ; }
-    sta $75                             ; } add eight to address ($75,$76)
+    sta $75                             ; } add eight to screen address ($75,$76)
     lda $76                             ; }
     adc #0                              ; }
     sta $76                             ; }
@@ -212,17 +216,18 @@ calculateScreenAddrAndPlot
     jmp -                               ;
 
 ; ***************************************************************************************
+; add the Y cells component
 ; add $280*($72) to ($75,$76)
 +
-    ldx #0                              ;
+    ldx #0                              ; loop counter
 -
-    cpx $72                             ;
+    cpx $72                             ; multiplication by repeated addition
     beq +                               ;
 
     lda $75                             ; }
     clc                                 ; }
     adc #$80                            ; }
-    sta $75                             ; } $0280 to ($75, $76)
+    sta $75                             ; } $0280 to screen address ($75, $76)
     lda $76                             ; }
     adc #$02                            ; }
     sta $76                             ; }
@@ -231,6 +236,7 @@ calculateScreenAddrAndPlot
     jmp -                               ;
 
 ; ***************************************************************************************
+; add the Y offset within a cell
 +
     lda $75                             ; }
     clc                                 ; }
@@ -266,7 +272,7 @@ L0fe9
     lda $75                             ; }
     clc                                 ; }
     adc #1                              ; }
-    sta $75                             ; } add 1 to ($75,$76)
+    sta $75                             ; } add 1 to ($75,$76), the screen address
     lda $76                             ; }
     adc #0                              ; }
     sta $76                             ; }
@@ -274,7 +280,7 @@ L0fe9
     lda $77                             ; }
     clc                                 ; }
     adc #1                              ; }
-    sta $77                             ; } add 1 to ($77,$78)
+    sta $77                             ; } add 1 to ($77,$78), the source sprite
     lda $78                             ; }
     adc #0                              ; }
     sta $78                             ; }
@@ -294,9 +300,9 @@ L0fe9
 
 ; ***************************************************************************************
 getSpriteDefaultModeByte
-    lda ($77),y                         ;
-    and spriteColourMask                ;
-    ora ($75),y                         ;
+    lda ($77),y                         ; read source sprite
+    and spriteColourMask                ; AND with mask
+    ora ($75),y                         ; OR with screen
     rts                                 ;
 
 ; ***************************************************************************************
@@ -306,29 +312,29 @@ getSpriteMode2Byte
 
 ; ***************************************************************************************
 getSpriteMode10Byte
-    lda ($77),y                         ;
-    and #$f0                            ;
-    eor ($75),y                         ;
+    lda ($77),y                         ; read source sprite
+    and #$f0                            ; AND with bit pattern for colour 2
+    eor ($75),y                         ; EOR with screen
     rts                                 ;
 
 ; ***************************************************************************************
 getSpriteMode3Byte
-    lda ($77),y                         ;
-    and spriteColourMask                ;
+    lda ($77),y                         ; read source sprite
+    and spriteColourMask                ; AND with mask
     rts                                 ;
 
 ; ***************************************************************************************
 getSpriteMode4Byte
-    lda ($75),y                         ;
+    lda ($75),y                         ; read screen
     cmp #$ff                            ;
-    bne getSpriteMode3Byte              ;
+    bne getSpriteMode3Byte              ; if (not four pixels of colour 3) then use mode 3
     rts                                 ;
 
 ; ***************************************************************************************
 getSpriteMode5Byte
-    lda ($75),y                         ;
+    lda ($75),y                         ; read screen
     cmp #$ff                            ;
-    bne getSpriteMode2Byte              ;
+    bne getSpriteMode2Byte              ; if (not four pixels of colour 3) then use mode 2
     rts                                 ;
 
 ; ***************************************************************************************
@@ -372,8 +378,8 @@ spriteMoveToNextRow
     jmp spriteDrawRow                   ;
 
 ; ***************************************************************************************
-S1074
-    ldy #7                              ;
+showCrumble
+    ldy #7                              ; loop counter
 -
     lda ($75),y                         ;
     iny                                 ;
@@ -409,8 +415,8 @@ updatePlayer
     lda #$ff                            ;
     sta spriteColourMask                ; colour 3
     lda #0                              ;
-    sta $183e                           ;
-    sta $1848                           ;
+    sta willyDeltaX                     ;
+    sta willyJustLandedOnConveyor       ;
     lda isInAir                         ;
     cmp #0                              ;
     beq handleOnGround                  ;
@@ -420,13 +426,13 @@ updatePlayer
 handleOnGround
     ldx #0                                  ; loop counter
 -
-    lda $1842,x                             ;
-    sta $77,x                               ;
-    inx                                     ;
-    cpx #5                                  ;
-    bne -                                   ;
+    lda $1842,x                             ; }
+    sta $77,x                               ; }
+    inx                                     ; } copy 5 bytes from ($1842-$1846) to ($77-$7B)
+    cpx #5                                  ; }
+    bne -                                   ; }
 
-    lda #$1f                                ; }
+    lda #31                                 ; }
     jsr OSWRCH                              ; }
     lda playerPixelX                        ; }
     lsr                                     ; }
@@ -446,6 +452,7 @@ handleOnGround
     cmp #0                                  ;
     bne handleInAirMovement                 ; if (not on the ground) then branch
 
+    ; Update crumble bars next
     lda $75                                 ; }
     clc                                     ; }
     adc #$78                                ; }
@@ -463,7 +470,7 @@ afterUpdateCrumberBar
     clc                                     ;
     adc #16                                 ;
 
-    ; this code after the following graphics at $1100
+    ; this code continues after the following graphics at $1100
     }
 }
 
@@ -487,26 +494,26 @@ afterUpdateCrumberBar
 
     ; data for pseudo pc $0900-$0cff is EORing with #$AA
 !xor $aa {
-    ; smiley face
-    !byte %.....###
-    !byte %....####
-    !byte %....#..#
-    !byte %....#..#
-    !byte %....####
-    !byte %.....#.#
-    !byte %.....##.
-    !byte %......##
 
-    !byte %###.....
-    !byte %####....
-    !byte %#..#....
-    !byte %#..#....
-    !byte %####....
-    !byte %#.#.....
-    !byte %.##.....
+    ; skull and crossbones
+    !byte %.....###            ;      ######
+    !byte %....####            ;     ########
+    !byte %....#..#            ;     #  ##  #
+    !byte %....#..#            ;     #  ##  #
+    !byte %....####            ;     ########
+    !byte %.....#.#            ;      # ## #
+    !byte %.....##.            ;      ##  ##
+    !byte %......##            ;       ####
+                               ;  ###   ## #####
+    !byte %###.....            ; #####    #######
+    !byte %####....            ; ####### ########
+    !byte %#..#....            ;     ## ###  ###
+    !byte %#..#....            ;  ###  ### ##
+    !byte %####....            ; ######## #######
+    !byte %#.#.....            ; #######    #####
+    !byte %.##.....            ;  #####      ###
     !byte %##......
 
-    ; bones
     !byte %.###...#
     !byte %#####...
     !byte %#######.
@@ -544,7 +551,6 @@ afterUpdateCrumberBar
     !byte %######.#
     !byte %##...#.#
 
-    ; star box (bottom)
     !byte %#.#...##
     !byte %#..#.#.#
     !byte %#.##.###
@@ -1247,7 +1253,7 @@ afterUpdateCrumberBar
     !byte %..#...#.
     !byte %#...#...
 
-    !byte %#######.
+    !byte %#######.                 ; conveyor 1
     !byte %.##..##.
     !byte %#######.
     !byte %........
@@ -1283,7 +1289,7 @@ afterUpdateCrumberBar
     !byte %........
     !byte %........
 
-    !byte %##....##
+    !byte %##....##                 ; conveyor 2
     !byte %.##..##.
     !byte %...##...
     !byte %.##..##.
@@ -1319,7 +1325,7 @@ afterUpdateCrumberBar
     !byte %########
     !byte %........
 
-    !byte %##....##
+    !byte %##....##                 ; conveyor 3
     !byte %.##..##.
     !byte %...##...
     !byte %.##..##.
@@ -1650,106 +1656,107 @@ afterUpdateCrumberBar
 
     ; $1100
 L1100
-    sta $75                     ;
-    lda $76                     ;
-    adc #0                      ;
-    sta $76                     ;
-    lda screenCharacterB        ;
-    jsr isCrumbleBar            ;
-    cmp #1                      ;
-    bne skipCrumbleBarUpdate    ;
+    sta $75                             ;
+    lda $76                             ;
+    adc #0                              ;
+    sta $76                             ;
+    lda screenCharacterB                ;
+    jsr isCrumbleBar                    ;
+    cmp #1                              ;
+    bne checkForConveyors               ;
 
-    ldx #7                      ; loop counter
+    ; crumble the crumble bar (in the cache)
+    ldx #7                              ; loop counter
 -
-    lda $6bef,x                 ;
-    sta $6bf0,x                 ;
-    lda $6bf7,x                 ;
-    sta $6bf8,x                 ;
-    dex                         ;
-    bne -                       ;
+    lda $6bef,x                         ;
+    sta $6bf0,x                         ; copy one row to the next
+    lda $6bf7,x                         ;
+    sta $6bf8,x                         ;
+    dex                                 ;
+    bne -                               ;
 
-    lda #0                      ;
-    sta $6bf0                   ;
-    sta $6bf8                   ;
-    jsr S1074                   ;
-    jmp skipCrumbleBarUpdate    ;
+    lda #0                              ;
+    sta $6bf0                           ; zero the top row of crumble bar
+    sta $6bf8                           ;
+    jsr showCrumble                     ;
+    jmp checkForConveyors               ;
 
 ; ***************************************************************************************
 updateCrumberBar
-    ldx #7                      ;
-L1133
-    lda $6bdf,x                 ;
-    sta $6be0,x                 ;
-    lda $6be7,x                 ;
-    sta $6be8,x                 ;
-    dex                         ;
-    bne L1133                   ;
-    lda #0                      ;
-    sta $6be0                   ;
-    sta $6be8                   ;
-    jsr S1074                   ;
-    jmp afterUpdateCrumberBar   ;
+    ldx #7                              ;
+-
+    lda $6bdf,x                         ;
+    sta $6be0,x                         ;
+    lda $6be7,x                         ;
+    sta $6be8,x                         ;
+    dex                                 ;
+    bne -                               ;
+    lda #0                              ;
+    sta $6be0                           ;
+    sta $6be8                           ;
+    jsr showCrumble                     ;
+    jmp afterUpdateCrumberBar           ;
 
 ; ***************************************************************************************
-skipCrumbleBarUpdate
-    lda $75                     ;
-    sec                         ;
-    sbc #$88                    ;
-    sta $75                     ; ($75,76) -= $288
-    lda $76                     ; move to previous character row
-    sbc #$02                    ;
-    sta $76                     ;
+checkForConveyors
+    lda $75                             ;
+    sec                                 ;
+    sbc #$88                            ;
+    sta $75                             ; ($75,76) -= $288
+    lda $76                             ; move to previous character row
+    sbc #$02                            ;
+    sta $76                             ;
 handleInAirMovement
-    lda screenCharacterA        ;
-    jsr isConveyor              ;
-    cmp #0                      ;
-    bne onConveyor              ;
-    lda screenCharacterB        ;
-    jsr isConveyor              ;
-    cmp #0                      ;
-    bne onConveyor              ;
-    lda #0                      ;
-    sta $1852                   ;
-onConveyor                      ;
-    lda $1852                   ;
-    cmp #$01                    ;
-    bne L1187                   ;
-    lda $1853                   ;
-    cmp #0                      ;
-    bne L1187                   ;
+    lda screenCharacterA                ;
+    jsr isConveyor                      ;
+    cmp #0                              ;
+    bne onConveyor                      ;
+    lda screenCharacterB                ;
+    jsr isConveyor                      ;
+    cmp #0                              ;
+    bne onConveyor                      ;
+    lda #0                              ;
+    sta willyIsOnConveyor               ;
+onConveyor                              ;
+    lda willyIsOnConveyor               ;
+    cmp #1                              ;
+    bne checkPlayerY                    ;
+    lda $1853                           ;
+    cmp #0                              ;
+    bne checkPlayerY                    ;
     jmp checkForUpdatePlayerOnConveyor  ;
 
 ; ***************************************************************************************
-L1187
-    lda playerPixelY            ;
-    and #7                      ;
-    cmp #0                      ;
-    beq L119c                   ;
-L1190
-    lda newPlayerPixelY         ;
-    clc                         ;
-    adc #$02                    ;
-    sta newPlayerPixelY         ;
-    jmp L1375                   ;
+checkPlayerY
+    lda playerPixelY                    ;
+    and #7                              ;
+    cmp #0                              ;
+    beq checkIfSupported                ;
+updatePlayerFalling
+    lda newPlayerPixelY                 ;
+    clc                                 ;
+    adc #2                              ;
+    sta newPlayerPixelY                 ;
+    jmp L1375                           ;
 
 ; ***************************************************************************************
-L119c
-    lda screenCharacterA        ;
-    jsr isSupporting            ;
-    cmp #1                      ;
-    beq L11b8                   ;
-    lda screenCharacterB        ;
-    jsr isSupporting            ;
-    cmp #1                      ;
-    beq L11b8                   ;
-    lda #1                      ;
-    sta $1847                   ;
-    jmp L1190                   ;
+checkIfSupported
+    lda screenCharacterA                ;
+    jsr isSupporting                    ;
+    cmp #1                              ;
+    beq onGround                        ;
+    lda screenCharacterB                ;
+    jsr isSupporting                    ;
+    cmp #1                              ;
+    beq onGround                        ;
+    lda #1                              ;
+    sta willyFalling                    ;
+    jmp updatePlayerFalling             ;
 
 ; ***************************************************************************************
-L11b8
+onGround
     lda #0                                  ;
-    sta $1841                               ;
+    sta willyChangedDirection               ;
 
     ldy #$ff                                ;
     ldx #$9e                                ;
@@ -1763,7 +1770,7 @@ L11b8
     cmp #3                                  ;
     bne L11e2                               ;
     lda #$ff                                ;
-    sta $183e                               ;
+    sta willyDeltaX                         ;
     lda newPlayerPixelX                     ;
     sec                                     ; move left
     sbc #1                                  ;
@@ -1777,10 +1784,10 @@ L11e2
     lda #willyPageLeft                      ; } look left
     sta willyGraphicsPage                   ; }
     lda #1                                  ;
-    sta $1841                               ;
+    sta willyChangedDirection               ;
     jsr L1375                               ;
     lda #0                                  ;
-    sta $183e                               ;
+    sta willyDeltaX                         ;
     jmp checkForUpdatePlayerOnConveyor      ;
 
 ; ***************************************************************************************
@@ -1792,11 +1799,12 @@ checkForXKey
     cpy #$ff                                ; }
     bne checkForUpdatePlayerOnConveyor      ; }
 
+    ; handle X pressed
     lda willyAnimationEOR                   ;
     cmp #0                                  ;
     bne L1221                               ;
     lda #1                                  ;
-    sta $183e                               ;
+    sta willyDeltaX                         ;
 
     lda newPlayerPixelX                     ;
     clc                                     ;
@@ -1811,14 +1819,14 @@ L1221
     sta willyAnimationEOR                   ; }
     lda #willyPageRight                     ; } look right
     sta willyGraphicsPage                   ; }
-    lda #$01
-    sta $1841
-    jsr L1375
-    lda #0
-    sta $183e
+    lda #1                                  ;
+    sta willyChangedDirection               ;
+    jsr L1375                               ;
+    lda #0                                  ;
+    sta willyDeltaX                         ;
 
 checkForUpdatePlayerOnConveyor
-    lda #$1f                                ; }
+    lda #31                                 ; }
     jsr OSWRCH                              ; }
     lda playerPixelX                        ; }
     lsr                                     ; }
@@ -1833,7 +1841,7 @@ checkForUpdatePlayerOnConveyor
     jsr OSWRCH                              ; }
 
     jsr readTwoCharactersFromScreen         ; read the two characters immediately lower on screen than the player
-    lda $1852                               ;
+    lda willyIsOnConveyor                   ;
     cmp #0                                  ;
     bne L127a                               ;
     lda screenCharacterA                    ;
@@ -1845,25 +1853,27 @@ checkForUpdatePlayerOnConveyor
     cmp #1                                  ;
     bne L127a                               ;
 L126f
-    lda $183e                               ;
+    lda willyDeltaX                         ;
     sta $1853                               ;
     lda #1                                  ;
-    sta $1852                               ;
+    sta willyIsOnConveyor                   ;
 L127a
-    lda $1852                               ;
+    lda willyIsOnConveyor                   ;
     cmp #1                                  ;
     bne L12c4                               ;
-    lda $1847                               ;
+
+    ; handle on conveyor
+    lda willyFalling                        ;
     cmp #1                                  ;
     bne L1297                               ;
-    lda $183e                               ;
+    lda willyDeltaX                         ;
     eor #$fe                                ;
-    cmp $1854                               ;
+    cmp conveyorDirection                   ;
     bne L1297                               ;
     lda #$fe                                ;
     sta $1853                               ;
 L1297
-    lda $1847                               ;
+    lda willyFalling                        ;
     cmp #1                                  ;
     bne L12b0                               ;
     lda #$fe                                ;
@@ -1871,7 +1881,7 @@ L1297
 L12a3
     lda newPlayerPixelX                     ;
     sec                                     ;
-    sbc $183e                               ;
+    sbc willyDeltaX                         ;
     sta newPlayerPixelX                     ;
     jmp checkForJump                        ;
 
@@ -1880,19 +1890,19 @@ L12b0
     lda $1853                       ;
     cmp #$fe                        ;
     bne L12c4                       ;
-    lda $183e                       ;
+    lda willyDeltaX                 ;
     eor #$fe                        ;
-    cmp $1854                       ;
+    cmp conveyorDirection           ;
     bne L12c4                       ;
     jmp L12a3                       ;
 
 ; ***************************************************************************************
 L12c4
-    lda $183e                       ;
+    lda willyDeltaX                 ;
     cmp #0                          ;
     beq L12d3                       ;
-    lda $183e                       ;
-    cmp $1854                       ;
+    lda willyDeltaX                 ;
+    cmp conveyorDirection           ;
     bne L12d8                       ;
 L12d3
     lda #0                          ;
@@ -1901,12 +1911,12 @@ L12d8
     lda $1853                       ;
     cmp #0                          ;
     bne L12e9                       ;
-    lda $1852                       ;
-    cmp #$01                        ;
+    lda willyIsOnConveyor           ;
+    cmp #1                          ;
     bne L12e9                       ;
     jsr S17db                       ;
 L12e9
-    lda $183e                       ;
+    lda willyDeltaX                 ;
     sta jumpDirection               ;
     cmp #0                          ;
     beq checkForJump                ;
@@ -1920,10 +1930,10 @@ checkForJump
     bne cancelJump                  ; if (return not pressed) then branch (no jump)
 
     ; handle jump
-    lda $1848                       ;
+    lda willyJustLandedOnConveyor   ;
     cmp #0                          ;
     bne cancelJump                  ;
-    lda $1847                       ;
+    lda willyFalling                ;
     cmp #0                          ;
     bne cancelJump                  ;
     jmp checkForWallOnJump          ;
@@ -1931,15 +1941,15 @@ checkForJump
 ; ***************************************************************************************
 cancelJump
     lda #0                          ;
-    sta $183e                       ;
-    sta $1851                       ;
-    sta $1847                       ;
+    sta willyDeltaX                 ;
+    sta playerYNegativeOffsetWithinCell     ;
+    sta willyFalling                ;
     sta jumpDirection               ;
-    lda $1846                       ;
+    lda hasDrawnConveyors           ;
     cmp #0                          ;
     beq L132f                       ;
     lda #0                          ;
-    sta $1846                       ;
+    sta hasDrawnConveyors           ;
     rts                             ;
 
 ; ***************************************************************************************
@@ -1950,7 +1960,7 @@ L132f
     ; $1335
 ; ***************************************************************************************
 checkForWallOnJump
-    lda #$1f                        ;
+    lda #31                         ;
     jsr OSWRCH                      ;
     lda newPlayerPixelX             ;
     lsr                             ;
@@ -1989,29 +1999,29 @@ foundWallSoCancelJump
 L1375
     lda #0                          ;
     sta $105f                       ;
-    sta $1851                       ;
+    sta playerYNegativeOffsetWithinCell ;
     lda newPlayerPixelY             ;
-    and #$07                        ;
+    and #7                          ;
     cmp #0                          ;
     beq L1392                       ;
-    sta $1850                       ;
+    sta playerXOffsetWithinCell     ; just used as temporary storage
     lda #$ff                        ;
     clc                             ;
-    sbc $1850                       ;
-    sta $1851                       ;
+    sbc playerXOffsetWithinCell     ;
+    sta playerYNegativeOffsetWithinCell ;
 L1392
     lda newPlayerPixelX             ;
-    and #$03                        ;
-    sta $1850                       ;
-    lda $1850                       ;
-    cmp #$03                        ;
-    bne L13ab                       ;
-    lda $183e                       ;
+    and #3                          ;
+    sta playerXOffsetWithinCell     ;
+    lda playerXOffsetWithinCell     ;
+    cmp #3                          ;
+    bne +                           ;
+    lda willyDeltaX                 ;
     cmp #$ff                        ;
-    bne L13ab                       ;
-    jsr S1709                       ;
-L13ab
-    lda $183e                       ;
+    bne +                           ;
+    jsr checkWhatsLeftOfThePlayer   ;
++
+    lda willyDeltaX                 ;
     cmp #$fd                        ;
     bne L13c3                       ;
     lda newPlayerPixelX             ;
@@ -2019,28 +2029,28 @@ L13ab
     adc #1                          ;
     sta newPlayerPixelX             ;
     lda #0                          ;
-    sta $183e                       ;
+    sta willyDeltaX                 ;
     jmp L13ef                       ;
 
 ; ***************************************************************************************
 L13c3
-    lda $1850                       ;
+    lda playerXOffsetWithinCell     ;
     cmp #0                          ;
     bne L13d4                       ;
-    lda $183e                       ;
-    cmp #$01                        ;
+    lda willyDeltaX                 ;
+    cmp #1                          ;
     bne L13d4                       ;
-    jsr S1772                       ;
+    jsr checkWhatsRightOfThePlayer  ;
 L13d4
-    lda $183e                       ;
+    lda willyDeltaX                 ;
     cmp #$fe                        ;
     bne L13ec                       ;
     lda newPlayerPixelX             ;
     sec                             ;
-    sbc #$01                        ;
+    sbc #1                          ;
     sta newPlayerPixelX             ;
     lda #0                          ;
-    sta $183e                       ;
+    sta willyDeltaX                 ;
     jmp L13ef                       ;
 
 ; ***************************************************************************************
@@ -2070,7 +2080,7 @@ movePlayer
     jsr drawConveyors                   ; animate conveyors
 
     lda #1                              ;
-    sta $1846                           ; ?
+    sta hasDrawnConveyors               ;
 
     ldx newPlayerPixelX                 ; }
     ldy newPlayerPixelY                 ; }
@@ -2083,13 +2093,13 @@ L1423
     lda willyGraphicsPage               ; ($77,$78) = $0500 or $0600 for willy looking right or left
     sta $78                             ;
 
-    lda #0                              ;
-    sta $79                             ;
-    lda #$0d                            ; $0d00?
-    sta $7a                             ;
+    lda #$00                            ;
+    sta $79                             ; }
+    lda #$0d                            ; } $0d00?
+    sta $7a                             ; }
 
     lda newPlayerPixelX                 ;
-    and #$03                            ;
+    and #3                              ;
     eor willyAnimationEOR               ;
     sta $75                             ;
 
@@ -2099,7 +2109,7 @@ L1423
     beq L1455                           ; }
     lda $77                             ; }
     clc                                 ; } add $40 to ($77,$78) for ($75) times
-    adc #$40                            ; }
+    adc #$40                            ; } multiplication by repeated addition
     sta $77                             ; }
     lda $78                             ; }
     adc #0                              ; }
@@ -2155,7 +2165,7 @@ readTwoCharactersFromScreen
     jsr OSBYTE              ; read character at cursor position
     stx screenCharacterA    ; store result
 
-    lda #$09                ;
+    lda #9                  ;
     jsr OSWRCH              ; move forward one space
 
     lda #$87                ;
@@ -2180,11 +2190,11 @@ readTwoCharactersVertically
 ; ***************************************************************************************
 checkSpikeKeySwitch
     jsr readTwoCharactersFromScreen                 ;
-    lda #$08                                        ;
+    lda #8                                          ;
     jsr OSWRCH                                      ; move back one character
     lda screenCharacterA                            ; first character
     jsr checkForSpikeKeySwitchCollisions            ;
-    lda #$09                                        ; tab forwards
+    lda #9                                          ; tab forwards
     jsr OSWRCH                                      ;
     lda screenCharacterB                            ; second character
     jmp checkForSpikeKeySwitchCollisions            ;
@@ -2204,7 +2214,7 @@ checkForSpikeKeySwitchCollisions
 ; ***************************************************************************************
 ; is this checking an 'offscreen cache' for spikes?
 checkForLandingOnSpike
-    lda #$1f                    ;
+    lda #31                     ;
     jsr OSWRCH                  ;
     lda #$22                    ; TAB(34, 23)
     jsr OSWRCH                  ;
@@ -2303,7 +2313,7 @@ outerLoop
     lda #$60
     sta $19ee
 L159b
-    lda #$1f                        ;
+    lda #31                         ;
     jsr OSWRCH                      ;
     lda textCursorX                 ; TAB(X, Y)
     jsr OSWRCH                      ;
@@ -2345,8 +2355,8 @@ L15d4
 
 ; ***************************************************************************************
 notCrumbleBar
-    lda #0
-    rts
+    lda #0                          ;
+    rts                             ;
 
 ; ***************************************************************************************
 isConveyor
@@ -2368,12 +2378,12 @@ checkUpdateConveyor
     cmp #0                          ;
     bne updateConveyor              ;
     lda #1                          ;
-    sta $1847                       ;
+    sta willyFalling                ;
     rts                             ;
 
 ; ***************************************************************************************
 updateConveyor
-    lda #$1f                        ; }
+    lda #31                         ; }
     jsr OSWRCH                      ; }
     lda playerPixelX                ; }
     lsr                             ; }
@@ -2402,9 +2412,9 @@ updateConveyor
 ; ***************************************************************************************
 foundConveyor
     lda #1                              ;
-    sta $1848                           ;
+    sta willyJustLandedOnConveyor       ;
     lda jumpDirection                   ;
-    sta $183e                           ;
+    sta willyDeltaX                     ;
     jmp checkForUpdatePlayerOnConveyor  ;
 
 ; ***************************************************************************************
@@ -2424,7 +2434,7 @@ updatePlayerWhenJumping
 
 ; ***************************************************************************************
 checkForLanding
-    lda #$1f                        ;
+    lda #31                         ;
     jsr OSWRCH                      ;
     lda playerPixelX                ;
     lsr                             ;
@@ -2453,7 +2463,7 @@ hitWall
     lda jumpPhase                   ;
     cmp #9                          ;
     bcs updateInAir                 ;
-    lda #$11                        ;
+    lda #17                         ;
     sec                             ;
     sbc jumpPhase                   ;
     sta jumpPhase                   ;
@@ -2468,7 +2478,7 @@ updateInAir
     cmp #8                          ;
     bcc updateJump                  ;
 
-    lda #$1f                        ;
+    lda #31                         ;
     jsr OSWRCH                      ;
     lda playerPixelX                ;
     lsr                             ;
@@ -2512,7 +2522,7 @@ updateJump
     adc jumpDirection               ;
     sta newPlayerPixelX             ;
     lda jumpDirection               ;
-    sta $183e                       ;
+    sta willyDeltaX                 ;
     jmp L1375                       ;
 
 ; ***************************************************************************************
@@ -2525,18 +2535,18 @@ updatePlayerWhenSupported
     jmp updatePlayer                ;
 
 ; ***************************************************************************************
-S1709
-    lda #$1f                        ;
+checkWhatsLeftOfThePlayer
+    lda #31                         ;
     jsr OSWRCH                      ;
     lda playerPixelX                ;
     lsr                             ;
     lsr                             ;
     sec                             ;
     sbc #1                          ;
-    jsr OSWRCH                      ; TAB(playerX/4 - 1, (newPlayerPixelY + $1851) / 8)
+    jsr OSWRCH                      ; TAB(playerX/4 - 1, (newPlayerPixelY + playerYNegativeOffsetWithinCell) / 8)
     lda newPlayerPixelY             ;
     clc                             ;
-    adc $1851                       ;
+    adc playerYNegativeOffsetWithinCell ;
     lsr                             ;
     lsr                             ;
     lsr                             ;
@@ -2548,6 +2558,7 @@ S1709
     cmp #0                          ;
     beq +                           ;
 
+    ; if we are not vertically aligned with a cell then we need to check another cell
     lda screenCharacterB            ;
     sta $105f                       ;
     lda #$0a                        ; move down one line
@@ -2586,22 +2597,22 @@ L1756
 ; ***************************************************************************************
 L176c
     lda #$fd                        ;
-    sta $183e                       ;
+    sta willyDeltaX                 ;
     rts                             ;
 
 ; ***************************************************************************************
-S1772
-    lda #$1f                        ; }
+checkWhatsRightOfThePlayer
+    lda #31                         ; }
     jsr OSWRCH                      ; }
     lda playerPixelX                ; }
     lsr                             ; }
     lsr                             ; }
     clc                             ; }
     adc #2                          ; }
-    jsr OSWRCH                      ; } TAB(playerX/4 + 2, (newPlayerPixelY + $1851)/8)
+    jsr OSWRCH                      ; } TAB(playerX/4 + 2, (newPlayerPixelY + playerYNegativeOffsetWithinCell)/8)
     lda newPlayerPixelY             ; }
     clc                             ; }
-    adc $1851                       ; }
+    adc playerYNegativeOffsetWithinCell     ; }
     lsr                             ; }
     lsr                             ; }
     lsr                             ; }
@@ -2625,7 +2636,7 @@ S1772
     cmp #$20                        ;
     bne L17bf                       ;
     lda jumpPhase                   ;
-    cmp #$05                        ;
+    cmp #5                          ;
     bne L17bf                       ;
     rts                             ;
 
@@ -2645,16 +2656,16 @@ L17bf
 ; ***************************************************************************************
 L17d5
     lda #$fe                        ;
-    sta $183e                       ;
+    sta willyDeltaX                 ;
     rts                             ;
 
 ; ***************************************************************************************
 S17db
-    lda $1854                       ;
-    cmp #$01                        ;
+    lda conveyorDirection           ;
+    cmp #1                          ;
     bne L17f6                       ;
     lda willyAnimationEOR           ;
-    cmp #$03                        ;
+    cmp #3                          ;
     bne L17f6                       ;
 
     lda #willyPageRight             ; }
@@ -2666,20 +2677,20 @@ S17db
 
 ; ***************************************************************************************
 L17f6
-    lda $1854                       ;
-    cmp #$01                        ;
+    lda conveyorDirection           ;
+    cmp #1                          ;
     bne L180e                       ;
-    lda $1854                       ;
-    sta $183e                       ;
+    lda conveyorDirection           ;
+    sta willyDeltaX                 ;
     lda newPlayerPixelX             ;
     clc                             ;
-    adc $1854                       ;
+    adc conveyorDirection           ;
     sta newPlayerPixelX             ;
     rts                             ;
 
 ; ***************************************************************************************
 L180e
-    lda $1854                       ;
+    lda conveyorDirection                       ;
     cmp #$ff                        ;
     bne L1829                       ;
     lda willyAnimationEOR           ;
@@ -2693,11 +2704,11 @@ L180e
 
 ; ***************************************************************************************
 L1829
-    lda $1854                       ;
-    sta $183e                       ;
+    lda conveyorDirection           ;
+    sta willyDeltaX                 ;
     lda newPlayerPixelX             ;
     clc                             ;
-    adc $1854                       ;
+    adc conveyorDirection           ;
     sta newPlayerPixelX             ;
     rts                             ;
 
@@ -2711,17 +2722,23 @@ newPlayerPixelX
 newPlayerPixelY
     !byte $20
 
+willyDeltaX
     !byte $ea
-
-;
 willyAnimationEOR
     !byte $03
 willyGraphicsPage
     !byte $06
+willyChangedDirection
     !byte $ea
 
-    !byte $00, $00, $00, $00, $ea
-    !byte $ea, $ea
+    !byte $00, $00, $00, $00
+
+hasDrawnConveyors
+    !byte $ea
+willyFalling
+    !byte $ea
+willyJustLandedOnConveyor
+    !byte $ea
 
     ; $1849
 screenCharacterA
@@ -2740,11 +2757,23 @@ jumpDirection
     !byte $ea
 spriteRowCounter
     !byte $ea
-    !byte $ea, $ea, $ea, $ea, $ff
+
+    ; $1850
+playerXOffsetWithinCell
+    !byte $ea
+playerYNegativeOffsetWithinCell
+    !byte $ea
+willyIsOnConveyor
+    !byte $ea
+
+    !byte $ea
+
+conveyorDirection
+    !byte $ff
+
     !byte $ea
 
     ; $1856
-
     ; vertical movements at each stage of a jump
 jumpMovementArray
     !byte $04, $04, $03, $03, $02, $02, $01, $00, $00, $00, $ff, $fe, $fe, $fd, $fd, $fc, $fc
@@ -2756,11 +2785,14 @@ textCursorY
 
 ;   $1869
 ; ***************************************************************************************
+;
 ; On Entry:
 ;   A = 0   means read from cache and write to screen
 ;   A = 1   means read from screen and write to cache
 ;   X = x pixel position
 ;   Y = Y pixel position
+;
+; ***************************************************************************************
 readOrWriteCachedBackground
     stx $71                         ;
     sty $72                         ;
@@ -2774,18 +2806,19 @@ readOrWriteCachedBackground
     lsr                             ;
     sta $72                         ;
     lda #$00                        ; }
-    sta $196b                       ; } $3000 screen address to read
+    sta readOrWriteScreen + 1       ; } $3000 screen address
     lda #$30                        ; }
-    sta $196c                       ; }
+    sta readOrWriteScreen + 2       ; }
+
     ldx #0                          ; loop counter
 -
-    lda $196b                       ; }
+    lda readOrWriteScreen + 1       ; }
     clc                             ; }
     adc $71                         ; }
-    sta $196b                       ; } add $71 to ($196b,$196c)
-    lda $196c                       ; }
+    sta readOrWriteScreen + 1       ; } add $71 to to screen address
+    lda readOrWriteScreen + 2       ; } multiplication by repeated addition
     adc #0                          ; }
-    sta $196c                       ; }
+    sta readOrWriteScreen + 2       ; }
     inx                             ;
     cpx #4                          ; loop four times
     bne -                           ;
@@ -2794,122 +2827,133 @@ readOrWriteCachedBackground
     ldx #0                          ; loop counter
 -
     cpx $72                         ;
-    beq L18b7                       ;
-    lda $196b                       ; }
-    clc                             ; }
+    beq readOrWriteCachedBackgroundInternal ;
+    lda readOrWriteScreen + 1       ; }
+    clc                             ; } multiplication by repeated addition
     adc #$80                        ; }
-    sta $196b                       ; } Add $0280 to ($196b,$196c)
-    lda $196c                       ; }
+    sta readOrWriteScreen + 1       ; } Add $0280 to screen address
+    lda readOrWriteScreen + 2       ; }
     adc #2                          ; }
-    sta $196c                       ; }
+    sta readOrWriteScreen + 2       ; }
     inx                             ;
     jmp -                           ;
 
 ; ***************************************************************************************
+;
 ; On Entry:
 ;   $70 = 0   means read from cache and write to screen
 ;   $70 = 1   means read from screen and write to cache
-L18b7
-    lda #<readScreenWriteCache      ;
-    sta L1932 + 1                   ; $1978 is the address of the routine to call
-    lda #>readScreenWriteCache      ;
-    sta L1932 + 2                   ;
+;
+; ***************************************************************************************
+readOrWriteCachedBackgroundInternal
+    ; set up for reading from the screen and writing to the background cache
+    lda #<readScreenWriteCache              ; }
+    sta readWriteBackgroundCacheLoop + 1    ; } address of the routine to call to copy a byte
+    lda #>readScreenWriteCache              ; }
+    sta readWriteBackgroundCacheLoop + 2    ; }
 
-    lda #$bd                        ; store opcode for LDA abs,X
-    sta readOrWriteScreen           ;
+    lda #$bd                                ; store opcode for LDA abs,X
+    sta readOrWriteScreen                   ;
 
-    lda #$99                        ; store opcode for STA abs,Y
-    sta $196e                       ;
-    lda $70
-    cmp #1
-    beq +
+    lda #$99                                ; store opcode for STA abs,Y
+    sta readOrWriteCache                    ;
 
-    lda #<readCacheWriteScreen      ; }
-    sta L1932 + 1                   ; } $1972 is the address of the routine to call
-    lda #>readCacheWriteScreen      ; }
-    sta L1932 + 2                   ; }
+    ; test which direction we want to read/write
+    lda $70                                 ;
+    cmp #1                                  ;
+    beq +                                   ;
+
+    ; set up for reading from the background cache and writing to the screen
+    lda #<readCacheWriteScreen              ; }
+    sta readWriteBackgroundCacheLoop + 1    ; } address of the routine to call to copy a byte
+    lda #>readCacheWriteScreen              ; }
+    sta readWriteBackgroundCacheLoop + 2    ; }
 
     lda #$9d                        ; } store opcode for STA abs,X
     sta readOrWriteScreen           ; }
 
     lda #$b9                        ; } store opcode for LDA abs,Y
-    sta $196e                       ; }
+    sta readOrWriteCache            ; }
 
 +
-    lda #$20                        ;
-    sta $1938                       ;
+    lda #32                         ;
+    sta cacheLoopXLimit             ; copy two character columns by default
 
-    lda $1852                       ;
+    lda willyIsOnConveyor           ;
     cmp #1                          ;
-    beq L192b                       ;
+    beq copyCache                   ;
     lda switchTriggered             ;
     cmp #1                          ;
-    beq L192b                       ;
+    beq copyCache                   ;
 
-    lda $1841                       ;
-    cmp #0                          ;
-    bne L192b                       ;
+    lda willyChangedDirection       ;
+    cmp #0                          ; [redundant]
+    bne copyCache                   ;
 
     lda $70                         ;
-    cmp #0                          ;
-    bne L192b                       ;
+    cmp #0                          ; [redundant]
+    bne copyCache                   ;
 
     lda playerPixelX                ;
     and #3                          ;
     eor willyAnimationEOR           ;
     cmp #0                          ;
-    bne L192b                       ;
+    bne copyCache                   ;
     lda willyAnimationEOR           ;
     cmp #3                          ;
-    beq L191f                       ;
-    lda #$10                        ;
-    sta $1938                       ;
-    jmp L192b                       ;
+    beq copyCache1x1                ;
+    lda #16                         ;
+    sta cacheLoopXLimit             ; copy one character column
+    jmp copyCache                   ;
 
 ; ***************************************************************************************
-L191f
-    ldx #$10                        ;
-    ldy #$10                        ;
-    lda #$10                        ;
-    sta L194e + 1                   ;
-    jmp L1932                       ;
+copyCache1x1
+    ldx #16                             ;
+    ldy #16                             ;
+    lda #16                             ;
+    sta cacheGotoNextRow + 1            ; copy 1x1 characters
+    jmp readWriteBackgroundCacheLoop    ;
 
 ; ***************************************************************************************
-L192b
-    ldx #0                          ;
-    ldy #0                          ;
-    stx L194e + 1                   ;
-L1932
-    jsr $ffff                       ;
-    inx                             ;
-    iny                             ;
-    cpx #$20                        ;
-    bne L1932                       ;
-    lda L194e + 1                   ;
-    cmp #$10
-    beq L1949
-    lda $1938
-    cmp #$20
-    beq L194e
-L1949
-    tya
-    clc
-    adc #$10
-    tay
-L194e
-    ldx #0
-    lda $196b
-    clc
-    adc #$80
-    sta $196b
-    lda $196c
-    adc #$02
-    sta $196c
-    cpy #$5f
-    bcc L1932
-    lda #0
-    sta switchTriggered
-    rts
+copyCache
+    ldx #0                              ; inner loop counter (within one row)
+    ldy #0                              ; outer loop counter (number of rows * 32)
+    stx cacheGotoNextRow + 1            ; copy two by two characters worth
+readWriteBackgroundCacheLoop
+    jsr $ffff                           ;
+    inx                                 ;
+    iny                                 ;
+cacheLoopXLimit = * + 1
+    cpx #32                             ;
+    bne readWriteBackgroundCacheLoop    ;
+    lda cacheGotoNextRow + 1            ;
+    cmp #16                             ;
+    beq +                               ;
+    lda cacheLoopXLimit                 ;
+    cmp #32                             ;
+    beq cacheGotoNextRow                ; if (copying two columns) then branch
++
+    tya                                 ; }
+    clc                                 ; }
+    adc #16                             ; } Y += 16
+    tay                                 ; }
+
+cacheGotoNextRow
+    ldx #0                              ;
+
+    lda readOrWriteScreen + 1           ; }
+    clc                                 ; }
+    adc #$80                            ; }
+    sta readOrWriteScreen + 1           ; } add $0280 to screen address (goto next row)
+    lda readOrWriteScreen + 2           ; }
+    adc #$02                            ; }
+    sta readOrWriteScreen + 2           ; }
+
+    cpy #95                             ;
+    bcc readWriteBackgroundCacheLoop    ; if (Y < 95) then branch (loop back)
+    lda #0                              ;
+    sta switchTriggered                 ;
+    rts                                 ;
 
 ; ***************************************************************************************
 readOrWriteScreen
@@ -2963,7 +3007,7 @@ L199e
     and #$7f                            ;
     cmp #$60                            ;
     beq L19e3                           ;
-    cmp #$08                            ;
+    cmp #8                              ;
     beq L19e3                           ;
 L19b0
     lda $1c48                           ;
@@ -2983,14 +3027,14 @@ L19c2
     tay                         ;
     jsr S19d2                   ;
     lda #3                      ;
-    jmp plot                    ;   ?
+    jmp plot                    ; plot Eugene
 
 ; ***************************************************************************************
 S19d2
-    lda #0
-    sta $77
-    lda #4
-    sta $78
+    lda #$00                    ; }
+    sta $77                     ; } address $0400, source address for Eugene
+    lda #$04                    ; }
+    sta $78                     ; }
     lda #0                      ;
     sta $79                     ;
     lda #$2f                    ; $2f00?
@@ -3010,8 +3054,8 @@ L19ee
     sta spriteColourMask        ; colour 2
     inc $1c49                   ;
     lda $1c49                   ;
-    and #$08                    ;
-    cmp #$08                    ;
+    and #8                      ;
+    cmp #8                      ;
     beq L1a0a                   ;
     lda #$00                    ; }
     sta $77                     ; }
@@ -3021,90 +3065,90 @@ L19ee
 
 ; ***************************************************************************************
 L1a0a
-    lda #$40
-    sta $77
-    lda #$04
-    sta $78
+    lda #$40                    ; }
+    sta $77                     ; } address $0440
+    lda #$04                    ; }
+    sta $78                     ; }
 L1a12
-    ldx #$4e
-    ldy #$08
-    lda #3
-    jmp plot
+    ldx #$4e                    ;
+    ldy #$08                    ;
+    lda #3                      ;
+    jmp plot                    ;
 
 ; ***************************************************************************************
 L1a1b
-    rts
+    rts                         ;
 
 ; ***************************************************************************************
 L1a1c
-    lda #$04
-    sta $1b2a
-    lda #$05
-    sta $1ae9
-    jmp L1a39
+    lda #4                      ;
+    sta $1b2a                   ;
+    lda #5                      ;
+    sta $1ae9                   ;
+    jmp L1a39                   ;
 
 ; ***************************************************************************************
 L1a29
-    lda currentLevel
-    cmp #19
-    beq L1a1c
-    lda #$02
-    sta $1ae9
-    lda #$03
-    sta $1b2a
+    lda currentLevel            ;
+    cmp #19                     ;
+    beq L1a1c                   ;
+    lda #2                      ;
+    sta $1ae9                   ;
+    lda #3                      ;
+    sta $1b2a                   ;
 L1a39
-    inc $1c4a
-    lda $1c4a
-    and #3
-    sta $1c48
-    ldx #0
-    lda #0
-    sta $1c54
-    lda #$04
-    sta $1c55
+    inc $1c4a                   ;
+    lda $1c4a                   ;
+    and #3                      ;
+    sta $1c48                   ;
+    ldx #0                      ;
+    lda #$00                    ; }
+    sta $1c54                   ; } address $0400
+    lda #$04                    ; }
+    sta $1c55                   ; }
 L1a50
-    cpx $1c48
-    beq L1a62
-    inx
-    lda $1c54
-    clc
-    adc #$40
-    sta $1c54
-    jmp L1a50
+    cpx $1c48                   ;
+    beq L1a62                   ;
+    inx                         ;
+    lda $1c54                   ;
+    clc                         ;
+    adc #$40                    ;
+    sta $1c54                   ;
+    jmp L1a50                   ;
 
 ; ***************************************************************************************
 L1a62
-    lda currentLevel
-    cmp #14
-    bne L1a6d
-    lda #0
-    sta $1c54
+    lda currentLevel            ;
+    cmp #14                     ;
+    bne L1a6d                   ;
+    lda #0                      ;
+    sta $1c54                   ;
 L1a6d
-    lda #0
-    sta $1d95
-    ldx #0
-    stx $1c4f
+    lda #0                      ;
+    sta $1d95                   ;
+    ldx #0                      ;
+    stx $1c4f                   ;
 L1a77
-    lda L1dad,x
-    cmp #$ff
-    beq L1a1b
-    sta $1c4b
-    inx
-    jsr S1d9a
-    sta $1c4c
-    inx
-    jsr S1d9a
-    sta $1c4d
-    inx
-    jsr S1d9a
-    sta $1c4e
-    stx $1c4f
-    lda $1c4b
-    and #$40
-    cmp #$40
-    beq L1aa7
-    lda #$02
-    jmp L1aa9
+    lda L1dad,x                 ;
+    cmp #$ff                    ;
+    beq L1a1b                   ;
+    sta $1c4b                   ;
+    inx                         ;
+    jsr S1d9a                   ;
+    sta $1c4c                   ;
+    inx                         ;
+    jsr S1d9a                   ;
+    sta $1c4d                   ;
+    inx                         ;
+    jsr S1d9a                   ;
+    sta $1c4e                   ;
+    stx $1c4f                   ;
+    lda $1c4b                   ;
+    and #$40                    ;
+    cmp #$40                    ;
+    beq L1aa7                   ;
+    lda #2                      ;
+    jmp L1aa9                   ;
 
 ; ***************************************************************************************
 L1aa7
@@ -3112,7 +3156,7 @@ L1aa7
 L1aa9
     sta $1c57                   ;
     lda $1d95                   ;
-    and #$03                    ;
+    and #3                      ;
     tax                         ;
     lda L1dbd,x                 ;
     sta spriteColourMask        ; set sprite colour
@@ -3133,115 +3177,115 @@ L1ac4
     lda #$f0                    ; sprite colour 2
     sta spriteColourMask        ;
 L1ad6
-    lda $1c4b
-    and #$3f
-    asl
-    asl
-    clc
-    adc #$10
-    tax
-    lda $1c4c
-    clc
-    adc #$08
-    tay
-    lda #5
-    jsr plot
-    lda $1c4b
-    and #$80
-    cmp #$80
-    beq L1b03
-    lda $1c4c
-    sec
-    sbc $1c57
-    sta $1c4c
-    jmp L1b0d
+    lda $1c4b                   ;
+    and #$3f                    ;
+    asl                         ;
+    asl                         ;
+    clc                         ;
+    adc #$10                    ;
+    tax                         ;
+    lda $1c4c                   ;
+    clc                         ;
+    adc #8                      ;
+    tay                         ;
+    lda #5                      ;
+    jsr plot                    ;
+    lda $1c4b                   ;
+    and #$80                    ;
+    cmp #$80                    ;
+    beq L1b03                   ;
+    lda $1c4c                   ;
+    sec                         ;
+    sbc $1c57                   ;
+    sta $1c4c                   ;
+    jmp L1b0d                   ;
 
 ; ***************************************************************************************
 L1b03
-    lda $1c4c
-    clc
-    adc $1c57
-    sta $1c4c
+    lda $1c4c                   ;
+    clc                         ;
+    adc $1c57                   ;
+    sta $1c4c                   ;
 L1b0d
-    lda $1c4b
-    and #$3f
-    asl
-    asl
-    clc
-    adc #$10
-    tax
-    lda $1c4c
-    clc
-    adc #$08
-    tay
-    lda $1c54
-    sta $77
-    lda $1c55
-    sta $78
-    lda #4
-    jsr plot
-    lda $1c4c
-    cmp $1c4d
-    beq L1b73
-    cmp $1c4e
-    beq L1b73
+    lda $1c4b                   ;
+    and #$3f                    ;
+    asl                         ;
+    asl                         ;
+    clc                         ;
+    adc #$10                    ;
+    tax                         ;
+    lda $1c4c                   ;
+    clc                         ;
+    adc #8                      ;
+    tay                         ;
+    lda $1c54                   ;
+    sta $77                     ;
+    lda $1c55                   ;
+    sta $78                     ;
+    lda #4                      ;
+    jsr plot                    ;
+    lda $1c4c                   ;
+    cmp $1c4d                   ;
+    beq L1b73                   ;
+    cmp $1c4e                   ;
+    beq L1b73                   ;
 L1b3b
-    ldx $1c4f
-    dex
-    dex
-    dex
-    lda $1c4b
-    jsr S1d9e
-    inx
-    lda $1c4c
-    jsr S1d9e
-    inx
-    lda $1c4d
-    jsr S1d9e
-    inx
-    lda $1c4e
-    jsr S1d9e
-    inx
-    stx $1c4f
-    lda $1d95
-    clc
-    adc #$01
-    and #$03
-    sta $1d95
-    cpx #$10
-    beq L1b72
-    jmp L1a77
+    ldx $1c4f                   ;
+    dex                         ;
+    dex                         ;
+    dex                         ;
+    lda $1c4b                   ;
+    jsr S1d9e                   ;
+    inx                         ;
+    lda $1c4c                   ;
+    jsr S1d9e                   ;
+    inx                         ;
+    lda $1c4d                   ;
+    jsr S1d9e                   ;
+    inx                         ;
+    lda $1c4e                   ;
+    jsr S1d9e                   ;
+    inx                         ;
+    stx $1c4f                   ;
+    lda $1d95                   ;
+    clc                         ;
+    adc #1                      ;
+    and #3                      ;
+    sta $1d95                   ;
+    cpx #$10                    ;
+    beq L1b72                   ;
+    jmp L1a77                   ;
 
 ; ***************************************************************************************
 L1b72
-    rts
+    rts                         ;
 
 ; ***************************************************************************************
 L1b73
-    lda currentLevel
-    cmp #14
-    beq L1b84
-    lda $1c4b
-    eor #$80
-    sta $1c4b
-    jmp L1b3b
+    lda currentLevel            ;
+    cmp #14                     ;
+    beq L1b84                   ;
+    lda $1c4b                   ;
+    eor #$80                    ;
+    sta $1c4b                   ;
+    jmp L1b3b                   ;
 
 ; ***************************************************************************************
 L1b84
-    lda $1c4d
-    eor #$80
-    sta $1c4d
-    jsr S1bf6
-    lda #0
-    sta $1c51,y
-    jmp L1b3b
+    lda $1c4d                   ;
+    eor #$80                    ;
+    sta $1c4d                   ;
+    jsr S1bf6                   ;
+    lda #0                      ;
+    sta $1c51,y                 ;
+    jmp L1b3b                   ;
 
 ; ***************************************************************************************
 L1b97
     jsr S1bf6
     lda $1c51,y
     clc
-    adc #$01
+    adc #1
     sta $1c51,y
     asl
     asl
@@ -3261,13 +3305,13 @@ L1b97
     tax
     lda $1c4c
     clc
-    adc #$08
+    adc #8
     tay
     lda #3
     jsr plot
     ldy $1c50
     lda $1c51,y
-    cmp #$06
+    cmp #6
     beq L1bd5
     jmp L1b3b
 
@@ -3295,7 +3339,7 @@ S1bf6
     beq L1c04
     cmp #$38
     beq L1c07
-    ldy #$02
+    ldy #2
     rts
 
 ; ***************************************************************************************
@@ -3320,13 +3364,13 @@ L1c0a
 S1c16
     jsr S1bf6
     lda $1c51,y
-    cmp #$04
+    cmp #4
     beq L1c2d
-    cmp #$05
+    cmp #5
     beq L1c36
-    cmp #$06
+    cmp #6
     beq L1c3f
-    lda #$04
+    lda #4
     sta $78
     rts
 
@@ -3358,190 +3402,204 @@ L1c3f
     !byte $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea
 
 ; ***************************************************************************************
-S1c58
-    ldy #0
-    lda #0
-    sta S1cc4 + 1
-    sta $1cca
-    lda #$04
-    sta S1cc4 + 2
+copyEugeneIntoMODE1Format
+    ldy #0                          ; loop counter
+    lda #$00                        ; }
+    sta storeByte + 1               ; }
+    sta copyEugeneByteCounter       ; } address $0400
+    lda #$04                        ; }
+    sta storeByte + 2               ; }
 
-L1c67
-    ldx $1cca
-    lda $7b00,x
-    sta $1cc8
-    stx $1cca
-    and #$f0
-    sta $1cc9
-    lsr
-    lsr
-    lsr
-    lsr
-    clc
-    adc $1cc9
-    jsr S1cc4
-    lda $1cc8
-    and #$0f
-    sta $1cc9
-    asl
-    asl
-    asl
-    asl
-    clc
-    adc $1cc9
-    sta $1cc9
-    tya
-    clc
-    adc #$08
-    tay
-    lda $1cc9
-    jsr S1cc4
-    ldx $1cca
-    inx
-    stx $1cca
-    tya
-    sec
-    sbc #$07
-    tay
-    cmp #$08
-    bne L1c67
-    ldy #$00
-    lda S1cc4 + 1
-    clc
-    adc #$10
-    sta S1cc4 + 1
-    ldx $1cca
-    cpx #$80
-    bne L1c67
-    rts
+-
+    ldx copyEugeneByteCounter       ;
+specialSpriteSourceAddress = * + 1
+    lda eugeneSprite,x              ;
+    sta copyEugeneSourceByte        ; store source byte
+    stx copyEugeneByteCounter       ; [redundant]
+    and #$f0                        ; top nybble
+    sta copyEugeneTempByte          ;
+    lsr                             ;
+    lsr                             ;
+    lsr                             ;
+    lsr                             ; shift to lower nybble
+    clc                             ;
+    adc copyEugeneTempByte          ; add original to get a Eugene in colour 3
 
-; ***************************************************************************************
-S1cc4
-    sta $ffff,y
-    rts
+    jsr storeByte                   ;
 
-    !byte $ea, $ea, $ea
+    lda copyEugeneSourceByte        ; recall source byte
+    and #$0f                        ; lower nybble
+    sta copyEugeneTempByte          ;
+    asl                             ;
+    asl                             ;
+    asl                             ;
+    asl                             ;
+    clc                             ;
+    adc copyEugeneTempByte          ; add lower byte to get white Eugene in colour 3
+    sta copyEugeneTempByte          ; store
+    tya                             ; }
+    clc                             ; } Y += 8
+    adc #8                          ; }
+    tay                             ; }
+    lda copyEugeneTempByte          ;
+    jsr storeByte                   ; store right hand side byte of Eugene
+    ldx copyEugeneByteCounter       ;
+    inx                             ; increment source counter
+    stx copyEugeneByteCounter       ;
+    tya                             ; }
+    sec                             ; }
+    sbc #7                          ; } Y -= 7
+    tay                             ; }
+    cmp #8                          ;
+    bne -                           ; loop 8 times
+    ldy #$00                        ; reset loop counter
+    lda storeByte + 1               ;
+    clc                             ;
+    adc #$10                        ; add 16 to destination byte
+    sta storeByte + 1               ;
+    ldx copyEugeneByteCounter       ;
+    cpx #$80                        ; check if we are done
+    bne -                           ; if (not done) then branch (loop back)
+    rts                             ;
 
 ; ***************************************************************************************
-L1ccb
-    lda #$02
-    sta $1cc9
-    jmp L1d15
+storeByte
+    sta $ffff,y                     ;
+    rts                             ;
+
+copyEugeneSourceByte
+    !byte $ea                       ;
+copyEugeneTempByte
+copyWhichSprite
+    !byte $ea                       ;
+copyEugeneByteCounter
+    !byte $ea                       ;
+
+; ***************************************************************************************
+levelWithKongBeast
+    lda #2                          ;
+    sta copyWhichSprite             ;
+    jmp L1d15                       ;
 
 ; ***************************************************************************************
 L1cd3
-    lda #$09
-    sta $1cc9
-    jmp L1d15
+    lda #9                          ;
+    sta copyWhichSprite             ;
+    jmp L1d15                       ;
 
 ; ***************************************************************************************
-L1cdb
-    lda #$01
-    sta $1cc9
-    lda #$08
-    sta $1c48
-    jmp L1d15
+levelEugenesLair
+    lda #1                          ;
+    sta copyWhichSprite             ; copy Eugene
+    lda #8                          ;
+    sta $1c48                       ;
+    jmp L1d15                       ;
 
 ; ***************************************************************************************
-L1ce8
-    lda #0                      ;
-    sta $1c4a                   ;
-    lda #$7b                    ;
-    sta $1c6c                   ;
-    lda #0                      ;
-    sta $1c6b                   ;
-    lda currentLevel            ;
-    cmp #12                     ;
-    beq L1ccb                   ;
-    cmp #8                      ;
-    beq L1ccb                   ;
-    cmp #9                      ;
-    beq L1cd3                   ;
-    cmp #5                      ;
-    beq L1cdb                   ;
-    lda currentLevel            ;
-    sec                         ;
-    sbc #$0a                    ;
-    tax                         ;
-    lda $1da2,x                 ;
-    sta $1cc9                   ;
+copyVerticalSprites
+    lda #0                              ;
+    sta $1c4a                           ;
+    lda #>eugeneSprite                  ;
+    sta specialSpriteSourceAddress + 1  ;
+    lda #<eugeneSprite                  ;
+    sta specialSpriteSourceAddress      ; default to copying Eugene
+    lda currentLevel                    ;
+    cmp #12                             ;
+    beq levelWithKongBeast              ;
+    cmp #8                              ;
+    beq levelWithKongBeast              ;
+    cmp #9                              ;
+    beq L1cd3                           ;
+    cmp #5                              ;
+    beq levelEugenesLair                ;
+    lda currentLevel                    ;
+    sec                                 ;
+    sbc #10                             ;
+    tax                                 ;
+    lda verticalGuardiansSpritesArray,x ;
+    sta copyWhichSprite                 ; copy based on level number - 10
 L1d15
-    ldx #1                      ;
+    ldx #1                              ;
 
-L1d17
-    cpx $1cc9                   ;
-    beq L1d32                   ;
-    lda $1c6b                   ;
-    clc                         ;
-    adc #$80                    ;
-    sta $1c6b                   ;
-    lda $1c6c                   ;
-    adc #0                      ;
-    sta $1c6c                   ;
-    inx                         ;
-    jmp L1d17                   ;
+-
+    cpx copyWhichSprite                 ; multiplication by repeated addition
+    beq L1d32                           ;
+
+    lda specialSpriteSourceAddress      ; }
+    clc                                 ; }
+    adc #$80                            ; }
+    sta specialSpriteSourceAddress      ; } add $80 to address
+    lda specialSpriteSourceAddress + 1  ; }
+    adc #0                              ; }
+    sta specialSpriteSourceAddress + 1  ; }
+
+    inx                                 ;
+    jmp -                               ;
 
 ; ***************************************************************************************
-L1d31
+return4
     rts                         ;
 
 ; ***************************************************************************************
 L1d32
-    jsr S1c58                   ;
+    jsr copyEugeneIntoMODE1Format   ;
     lda currentLevel            ;
-    cmp #$09                    ;
-    beq L1d3f                   ;
-    cmp #$0b                    ;
-    bcc L1d31                   ;
+    cmp #9                      ; Levels 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20
+    beq laterLevelsSpecialStuff ; have this feature
+    cmp #11                     ;
+    bcc return4                 ;
 
-L1d3f
+laterLevelsSpecialStuff
     ldx #8                      ;
     lda #0                      ;
 -
     clc                         ;
-    adc #8                      ; multiplication through repeated addition
+    adc #8                      ; multiplication by repeated addition
     inx                         ;
     cpx currentLevel            ;
     bne -                       ;
 
-    clc                         ;
-    adc #$78                    ;
-    sta S1d96 + 1               ;
-    ldx #0                      ;
+    clc                             ;
+    adc #<specialLevelData          ;
+    sta readSpecialLevelData + 1    ;
+    ldx #0                      ; loop counter
     ldy #0                      ;
 
-L1d55
-    jsr S1d96                   ;
+-
+    jsr readSpecialLevelData    ;
     cmp #$ff                    ;
-    beq L1d91                   ;
-    sta L1dad,y                 ;
+    beq L1d91                   ; if (terminator) then branch
+    sta L1dad,y                 ; copy
     iny                         ;
     inx                         ;
-    jsr S1d96                   ;
-    sta L1dad,y                 ;
+    jsr readSpecialLevelData    ;
+    sta L1dad,y                 ; copy
     iny                         ;
-    sta L1dad,y                 ;
+    sta L1dad,y                 ; copy
     iny                         ;
-    sta L1dad,y                 ;
-    lda L1dad,y                 ;
+    sta L1dad,y                 ; copy
+
+    lda L1dad,y                 ; [redundant]
     and #$0f                    ;
     asl                         ;
     asl                         ;
     asl                         ;
-    sta L1dad,y                 ;
+    sta L1dad,y                 ; bottom nybble multiplied by eight
+
     dey                         ;
     lda L1dad,y                 ;
     and #$f0                    ;
-    lsr                         ;
+    lsr                         ; top nybble divided by two
     sta L1dad,y                 ;
+
     dey                         ;
     sta L1dad,y                 ;
     iny                         ;
     iny                         ;
     iny                         ;
     inx                         ;
-    cpx #$08                    ;
-    bne L1d55                   ;
+    cpx #8                      ; loop eight times
+    bne -                       ;
     rts                         ;
 
 ; ***************************************************************************************
@@ -3552,8 +3610,8 @@ L1d91
     !byte $ea                   ;
 
 ; ***************************************************************************************
-S1d96
-    lda $2480,x                 ;
+readSpecialLevelData
+    lda specialLevelData + 8,x  ;
     rts                         ;
 
 ; ***************************************************************************************
@@ -3566,30 +3624,69 @@ S1d9e
     sta L1dad,x                 ;
     rts                         ;
 
+; ***************************************************************************************
+verticalGuardiansSpritesArray
+    ; vertical guardians for the later levels
+    ; Level     11,  12,  13,  14,  15,  16,  17,  18,  19,  20
     !byte $ea, $03, $00, $04, $05, $06, $00, $07, $0a, $08, $04
 L1dad
     !byte $ea, $ea, $ea
     !byte $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea
 L1dbd
-    !byte $f0, $ff, $0f, $f0, $ff
-    !byte $66, $00, $24, $42, $24, $42, $24, $42, $24, $42, $24, $42, $00, $66
-    !byte $ff, $ff, $66, $00, $42, $24, $42, $24, $42, $24, $42, $24, $42, $24, $00, $66
-    !byte $ff, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $49
+    !byte $f0, $ff, $0f, $f0
+
+energyFieldSprites
+    !byte %########
+    !byte %.##..##.
+    !byte %........
+    !byte %..#..#..
+    !byte %.#....#.
+    !byte %..#..#..
+    !byte %.#....#.
+    !byte %..#..#..
+    !byte %.#....#.
+    !byte %..#..#..
+    !byte %.#....#.
+    !byte %..#..#..
+    !byte %.#....#.
+    !byte %........
+    !byte %.##..##.
+    !byte %########
+
+    !byte %########
+    !byte %.##..##.
+    !byte %........
+    !byte %.#....#.
+    !byte %..#..#..
+    !byte %.#....#.
+    !byte %..#..#..
+    !byte %.#....#.
+    !byte %..#..#..
+    !byte %.#....#.
+    !byte %..#..#..
+    !byte %.#....#.
+    !byte %..#..#..
+    !byte %........
+    !byte %.##..##.
+    !byte %########
+
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $49
 
 ; ***************************************************************************************
 L1e00
     jmp swapPagesC00andE00          ;
 
 ; ***************************************************************************************
-S1e03
+readGuardianByte
     lda $2280,x                     ;
     rts                             ;
 
 ; ***************************************************************************************
 L1e07
     jsr drawMonsters                ;
-    jmp L20fa                       ;
+    jmp updateLevel19Special                       ;
 
 ; ***************************************************************************************
 ; draws the monsters
@@ -3598,7 +3695,7 @@ drawMonsters2
     nop                             ;
     nop                             ;
 
-    jsr S2e8c                       ;
+    jsr colourCycleKeys             ;
 
     lda #17                         ;
     jsr OSWRCH                      ;
@@ -3614,7 +3711,7 @@ drawMonsters2
 drawMonsters
     jsr swapPagesC00andE00          ; swap in monster definitions
     lda #0                          ;
-    sta drawMonsterLoopCounter      ;
+    sta drawGuardianLoopCounter     ;
     tay                             ;
     tax                             ;
 
@@ -3632,7 +3729,7 @@ drawMonstersLoop
 
     jsr S1e78                       ; update and draw monster
 
-    lda drawMonsterLoopCounter      ;
+    lda drawGuardianLoopCounter     ;
     clc                             ;
     rol                             ;
     rol                             ;
@@ -3641,24 +3738,24 @@ drawMonstersLoop
 
 -
     lda $8a,x                       ;
-    sta $0d80,y                     ; store $8a,$8b,$8d,$8e into $0d80+y, $0d80+y+1 etc
+    sta $0d80,y                     ; store $8a,$8b,$8d,$8e back into $0d80+y, $0d80+y+1 etc
     inx                             ;
     iny                             ;
     cpx #4                          ;
     bne -                           ;
 
-    inc drawMonsterLoopCounter      ;
+    inc drawGuardianLoopCounter     ;
 
-    lda #$11                        ;
+    lda #17                         ;
     jsr OSWRCH                      ; COLOUR
 
-    lda drawMonsterLoopCounter      ;
+    lda drawGuardianLoopCounter     ;
     and #3                          ;
     tax                             ;
-    lda colourTable,x               ;
+    lda guardianColourTable,x       ;
     jsr OSWRCH                      ; set colour
 
-    lda drawMonsterLoopCounter      ;
+    lda drawGuardianLoopCounter     ;
     clc                             ;
     rol                             ;
     rol                             ;
@@ -3694,7 +3791,7 @@ L1e8d
     and #$7f                        ;
     sta $1fa5                       ;
     lda $8a                         ;
-    and #$03                        ;
+    and #3                          ;
     asl                             ;
     sta $8e                         ;
     jsr S1f4b                       ;
@@ -3714,9 +3811,9 @@ L1eb5
     adc $8e                         ;
     jsr drawIfNotOverExit           ;
     lda #$0a                        ;
-    jsr OSWRCH                      ;
-    lda #$08                        ;
-    jsr OSWRCH                      ;
+    jsr OSWRCH                      ; down one
+    lda #8                          ;
+    jsr OSWRCH                      ; back two
     jsr OSWRCH                      ;
     lda #$e8                        ;
     clc                             ;
@@ -3731,7 +3828,7 @@ L1eb5
 ; ***************************************************************************************
 L1ee5
     lda $8a                         ;
-    and #$03                        ;
+    and #3                          ;
     asl                             ;
     sta $8e                         ;
     jmp L1eb5                       ;
@@ -3740,12 +3837,12 @@ L1ee5
 L1eef
     lda $8a                         ;
     sec                             ;
-    sbc #$01                        ;
+    sbc #1                          ;
     and #$7f                        ;
     sta $1fa5                       ;
     lda $8a                         ;
-    and #$03                        ;
-    eor #$03                        ;
+    and #3                          ;
+    eor #3                          ;
     asl                             ;
     sta $8e                         ;
     jsr S1f4b                       ;
@@ -3769,7 +3866,7 @@ L1f11
     clc                             ;
     adc $8e                         ;
     jsr drawIfNotOverExit           ;
-    lda #$08                        ;
+    lda #8                          ;
     jsr OSWRCH                      ; move back two places
     jsr OSWRCH                      ; and down one
     lda #$0a                        ;
@@ -3786,7 +3883,7 @@ L1f11
 
 ; ***************************************************************************************
 S1f4b
-    lda #$1f                        ;
+    lda #31                         ;
     jsr OSWRCH                      ;
     lda $8a                         ;
     and #$fc                        ;
@@ -3794,23 +3891,23 @@ S1f4b
     ror                             ;
     ror                             ; TAB($8a/4 + 5, ($8b AND $0f) + 1)
     clc                             ;
-    adc #$05                        ;
+    adc #5                          ;
     jsr OSWRCH                      ;
     lda $8b                         ;
     and #$0f                        ;
     clc                             ;
-    adc #$01                        ;
+    adc #1                          ;
     jmp OSWRCH                      ;
 
 ; ***************************************************************************************
 eraseBehindMonster
-    lda #$08                        ;
+    lda #8                          ;
     jsr OSWRCH                      ;
     lda #$20                        ;
     jsr drawIfNotOverExit           ;
     lda #$0a                        ;
     jsr OSWRCH                      ;
-    lda #$08                        ;
+    lda #8                          ;
     jsr OSWRCH                      ;
     lda #$20                        ;
     jsr drawIfNotOverExit           ;
@@ -3818,16 +3915,16 @@ eraseBehindMonster
 
 ; ***************************************************************************************
 S1f81
-    lda #$09                        ;
+    lda #9                          ;
     jsr OSWRCH                      ;
-    jsr OSWRCH                      ; forward two spaces
+    jsr OSWRCH                      ; move forward two characters
 
     lda #$20                        ;
     jsr drawIfNotOverExit           ;
 
     lda #$0a                        ; down
     jsr OSWRCH                      ;
-    lda #$08                        ; left
+    lda #8                          ; left
     jsr OSWRCH                      ;
 
     lda #$20                        ;
@@ -3842,7 +3939,7 @@ L1f9e
     rts                             ;
 
     !byte $ea                       ;
-drawMonsterLoopCounter
+drawGuardianLoopCounter
     !byte $ea                       ;
 
 ; ***************************************************************************************
@@ -3856,11 +3953,11 @@ L1fa7
     rts                             ;
 
 ; ***************************************************************************************
-L1fb5
-    lda #$80                            ;
-    sta S1e03 + 1                       ; set address to read from as $7280
-    lda #$72                            ;
-    sta S1e03 + 2                       ;
+copyGuardianSprites
+    lda #<guardianGraphics              ;
+    sta readGuardianByte + 1            ; set address to read guardian graphics
+    lda #>guardianGraphics              ;
+    sta readGuardianByte + 2            ;
 
     lda #$ea                            ; }
     ldx #0                              ; }
@@ -3876,98 +3973,105 @@ L1fb5
     bne -                               ; }
 
     ldx currentLevel                    ;
-    lda $20e5,x                         ;
+    lda guardianSetForEachLevel - 1,x   ;
     sta $8a                             ;
 
     ldx #1                              ;
-L1fd7
-    cpx $8a
-    beq L1ff0
-    lda S1e03 + 1                       ;
+-
+    cpx $8a                             ;
+    beq copyGuardiansWithAddress        ;
+    lda readGuardianByte + 1            ;
     clc                                 ;
-    adc #$80                            ;
-    sta S1e03 + 1                       ; add $80 for each X up to ($8a)
-    lda S1e03 + 2                       ;
+    adc #$80                            ; multiplication by repeated addition
+    sta readGuardianByte + 1            ; add $80 for each X up to ($8a)
+    lda readGuardianByte + 2            ;
     adc #0                              ;
-    sta S1e03 + 2                       ;
-    inx
-    jmp L1fd7
+    sta readGuardianByte + 2            ;
+    inx                                 ;
+    jmp -                               ;
 
 ; ***************************************************************************************
-L1ff0
+copyGuardiansWithAddress
     ldx #0                              ; loop counter
 -
-    jsr S1e03                           ;
+    jsr readGuardianByte                ;
     sta $0c00,x                         ;
-    inx                                 ;
+    inx                                 ; copy from guardian sprites to $0c00-$0c7f
     cpx #$80                            ;
     bne -                               ;
 
     ldy #0                              ; loop counter
-L1fff
-    lda $0c00,y                     ;
-    sty $20a6                       ;
-    jsr L208a                       ;
-    ldy $20a6                       ;
-    sta $0c80,y                     ;
-    iny                             ;
-    cpy #$80                        ;
-    bne L1fff                       ;
-    lda #$ff                        ;
-    sta S1e03 + 1                   ; address $22ff
-    lda #$22                        ;
-    sta S1e03 + 2                   ;
-    ldy #0                          ;
-    ldx #0                          ;
-L2021
-    lda S1e03 + 1                   ;
-    clc                             ;
-    adc #1                          ;
-    sta S1e03 + 1                   ;
-    lda S1e03 + 2                   ;
-    adc #0                          ;
-    sta S1e03 + 2                   ;
-    jsr S1e03                       ;
-    cmp #$ff                        ;
-    beq L203c                       ;
-    jmp L2021                       ;
+-
+    lda $0c00,y                         ;
+    sty $20a6                           ;
+    jsr reverseBitsInByte               ;
+    ldy $20a6                           ; copy reflected guardians to $0c80-$0cff
+    sta $0c80,y                         ;
+    iny                                 ;
+    cpy #$80                            ;
+    bne -                               ;
+
+    ; find guardian data for current level
+    lda #<(guardianLevelData - 1)       ;
+    sta readGuardianByte + 1            ; set start of guardian level data
+    lda #>(guardianLevelData - 1)       ;
+    sta readGuardianByte + 2            ;
+
+    ldy #0                              ;
+    ldx #0                              ;
+findGuardianDataLoop
+    lda readGuardianByte + 1            ; }
+    clc                                 ; }
+    adc #1                              ; }
+    sta readGuardianByte + 1            ; } increment source address
+    lda readGuardianByte + 2            ; }
+    adc #0                              ; }
+    sta readGuardianByte + 2            ; }
+    jsr readGuardianByte                ;
+    cmp #$ff                            ;
+    beq checkLevelNumber                ; when we reach a 255 (a level separator byte), then branch
+    jmp findGuardianDataLoop            ;
 
 ; ***************************************************************************************
-L203c
-    iny                             ;
-    cpy currentLevel                ;
-    bne L2021                       ;
-    ldy #0                          ;
-    ldx #1                          ;
+checkLevelNumber
+    iny                                 ;
+    cpy currentLevel                    ;
+    bne findGuardianDataLoop            ; if (not current level) then branch (loop back)
 
-L2045
-    jsr S1e03                       ;
-    jsr S2070                       ;
-    iny                             ;
-    iny                             ;
-    jsr S2070                       ;
-    inx                             ;
-    dey                             ;
-    jsr S1e03                       ;
-    jsr S2070                       ;
-    inx                             ;
-    iny                             ;
-    iny                             ;
-    jsr S1e03                       ;
-    jsr S2070                       ;
-    inx                             ;
-    jsr S1e03                       ;
-    iny                             ;
-    cmp #$ff                        ;
-    bne L2045                       ;
-    jsr S2070                       ;
-    jmp swapPagesC00andE00          ;
+    ldy #0                              ;
+    ldx #1                              ;
+copyGuardianPositionDataLoop
+    jsr readGuardianByte                ;
+    jsr storeByteToD80                  ; Y coordinate
+    iny                                 ;
+    iny                                 ;
+    jsr storeByteToD80                  ; X1 coordinate
+    inx                                 ;
+    dey                                 ;
+    jsr readGuardianByte                ; Y coordinate
+    jsr storeByteToD80                  ;
+    inx                                 ;
+    iny                                 ;
+    iny                                 ;
+    jsr readGuardianByte                ; X2 coordinate
+    jsr storeByteToD80                  ;
+    inx                                 ;
+    jsr readGuardianByte                ;
+    iny                                 ;
+    cmp #$ff                            ;
+    bne copyGuardianPositionDataLoop    ;
+    jsr storeByteToD80                  ;
+    jmp swapPagesC00andE00              ;
 
 ; ***************************************************************************************
-S2070
-    sta $0d80,y                     ;
-    rts                             ;
+storeByteToD80
+    sta $0d80,y                         ;
+    rts                                 ;
 
+; ***************************************************************************************
+;
+; Note: this only copies 255 bytes, rather than 256 bytes
+;
 ; ***************************************************************************************
 swapPagesC00andE00
     ldx #0                              ;
@@ -3984,19 +4088,23 @@ L2076
     rts                                 ;
 
 ; ***************************************************************************************
-L208a
-    sta $20a5                           ;
-    ldy #0                              ;
+;
+; See also "reverseBits" for another copy of this routine and a smaller, faster implementation in comments
+;
+; ***************************************************************************************
+reverseBitsInByte
+    sta tempReversingByte               ;
+    ldy #0                              ; loop counter
     ldx #0                              ;
 reverseLoop
-    lda $20a5                           ;
+    lda tempReversingByte               ;
     clc                                 ;
     rol                                 ;
-    sta $20a5                           ;
-    bcs L20a7                           ;
+    sta tempReversingByte               ;
+    bcs reverseBitCarrySet              ;
     txa                                 ;
     clc                                 ;
-L209d
+backToReversingLoop
     ror                                 ;
     tax                                 ;
     iny                                 ;
@@ -4005,13 +4113,16 @@ L209d
     rts                                 ;
 
 ; ***************************************************************************************
-    !byte $ea, $ea                  ;
+    ; $20a5
+tempReversingByte
+    !byte $ea                           ;
+    !byte $ea                           ;
 
 ; ***************************************************************************************
-L20a7
+reverseBitCarrySet
     txa                             ;
     sec                             ;
-    jmp L209d                       ;
+    jmp backToReversingLoop         ;
 
 ; ***************************************************************************************
 rememberCharacterToDraw
@@ -4024,8 +4135,8 @@ drawIfNotOverExit
     clc                             ;
     adc #2                          ;
     cmp exitPositionY               ;
-    bne L20d0                       ;
-L20bb
+    bne testNextYPosition           ;
+textXPosition
     lda vduTextCursorXPosition      ;
     cmp exitPositionX               ;
     beq moveForward                 ;
@@ -4037,35 +4148,38 @@ moveForward
     lda #9                          ; move forward
     jmp OSWRCH                      ;
 
-L20d0
+testNextYPosition
     sec                             ;
     sbc #1                          ;
     cmp exitPositionY               ;
     bne +                           ;
-    jmp L20bb                       ;
+    jmp textXPosition               ;
 
 +
     lda rememberCharacterToDraw     ;
     jmp OSWRCH                      ;
 
 ; ***************************************************************************************
-colourTable
+guardianColourTable
     !byte $03, $02, $01, $03        ;
 
     ; $20e5
-    !byte $ea, $01, $02, $03, $04, $05, $06, $07, $08, $09, $0a
-    !byte $0b, $08, $0c, $00, $0d, $0e, $0f, $09, $10, $01
+    !byte $ea                       ; [unused]
+
+guardianSetForEachLevel
+    ; level 1,   2,   3,   4,   5,   6,   7,  8,    9,  10,  11,  12,  13,  14,  15,  16,  17,  18,  19,  20
+    !byte $01, $02, $03, $04, $05, $06, $07, $08, $09, $0a, $0b, $08, $0c, $00, $0d, $0e, $0f, $09, $10, $01
 
 ; ***************************************************************************************
-L20fa
-    jsr S2227                       ;
+updateLevel19Special
+    jsr updateLevel19EnergyBars     ;
 L20fd
-    ldx #$00                        ;
+    ldx #0                          ; loop counter
 L20ff
     lda $0d80,x                     ;
     sta $0d90,x                     ;
     inx                             ;
-    cpx #$05                        ;
+    cpx #5                          ;
 L2108
     bne L20ff                       ;
 L210a
@@ -4077,27 +4191,27 @@ L210a
     sta $0d80                       ;
     lda $227d                       ;
     clc                             ;
-    adc #$01                        ;
+    adc #1                          ;
     sta $0d81                       ;
     lda #$ff                        ;
     sta $0d84                       ;
     jsr S68df                       ;
-    ldx #$00                        ;
+    ldx #0                          ;
 L2128
     lda $0d90,x                     ;
     sta $0d80,x                     ;
     inx                             ;
-    cpx #$05                        ;
+    cpx #5                          ;
     bne L2128                       ;
     jsr L2204                       ;
     inc $227d                       ;
 L2139
-    lda #$11                        ;
+    lda #17                         ;
     jsr OSWRCH                      ;
-    lda #$03                        ; COLOUR 3
+    lda #3                          ; COLOUR 3
     jsr OSWRCH                      ;
 
-    lda #$1f                        ;
+    lda #31                         ;
     jsr OSWRCH                      ;
     lda $227c                       ; TAB($227c, $227d + 1)
     jsr OSWRCH                      ;
@@ -4139,11 +4253,11 @@ L2188
     inc $227e                       ;
     dec $227d                       ;
     lda $227e                       ;
-    cmp #$04                        ;
+    cmp #4                          ;
     beq L21aa                       ;
-    cmp #$01                        ;
+    cmp #1                          ;
     beq L2175                       ;
-    cmp #$02                        ;
+    cmp #2                          ;
     beq L21f7                       ;
     lda #$e5                        ;
     jsr S221a                       ;
@@ -4169,7 +4283,7 @@ L21aa
     tay                             ;
     and #$1f                        ;
     clc                             ;
-    adc #$04                        ;
+    adc #4                          ;
     sta $227c                       ;
     tya                             ;
     and #$e0                        ;
@@ -4179,7 +4293,7 @@ L21aa
     lsr                             ;
     lsr                             ;
     clc                             ;
-    adc #$03                        ;
+    adc #3                          ;
     sta $227b                       ;
     lda $227c                       ;
     cmp #$19                        ;
@@ -4204,7 +4318,7 @@ L21f7
 
 ; ***************************************************************************************
 L2204
-    ldx #$00                        ;
+    ldx #0                          ; loop counter
 L2206
     lda $22c0,x                     ;
     tay                             ;
@@ -4222,52 +4336,55 @@ S221a
     jsr OSWRCH                      ;
     lda #$0a                        ;
     jsr OSWRCH                      ;
-    lda #$08                        ;
+    lda #8                          ;
     jmp OSWRCH                      ;
 
 ; ***************************************************************************************
-S2227
+updateLevel19EnergyBars
     lda $7eed                       ;
     and #$10                        ;
-    cmp #$00                        ;
-    beq L223e                       ;
+    cmp #0                          ;
+    beq +                           ;
+
     ldx #$3f                        ;
     ldy #$f2                        ;
     jsr S2241                       ;
+
     ldx #$49                        ;
     ldy #$f2                        ;
     jsr S2241                       ;
-L223e
+
++
     jmp L7e80                       ;
 
 ; ***************************************************************************************
 S2241
     stx S2277 + 2                   ;
     sty S2277 + 1                   ;
-    ldx #$00                        ;
+    ldx #0                          ;
     jsr S2277                       ;
     and #$80                        ;
-    cmp #$00                        ;
-    bne L2274                       ;
-    ldx #$07                        ;
+    cmp #0                          ;
+    bne deathJumper2                ;
+    ldx #7                          ;
     jsr S2277                       ;
-    and #$01                        ;
-    cmp #$00                        ;
-    bne L2274                       ;
+    and #1                          ;
+    cmp #0                          ;
+    bne deathJumper2                ;
     ldx #$90                        ;
     jsr S2277                       ;
     and #$80                        ;
-    cmp #$00                        ;
-    bne L2274                       ;
+    cmp #0                          ;
+    bne deathJumper2                ;
     ldx #$97                        ;
     jsr S2277                       ;
-    and #$01                        ;
-    cmp #$00                        ;
-    bne L2274                       ;
+    and #1                          ;
+    cmp #0                          ;
+    bne deathJumper2                ;
     rts                             ;
 
 ; ***************************************************************************************
-L2274
+deathJumper2
     jmp death                       ;
 
 ; ***************************************************************************************
@@ -4308,18 +4425,57 @@ L229b
     !byte $48, $1c, $2e, $7d, $57, $7d, $36, $1c, $42, $3c, $36, $5f, $7d, $6f, $3a, $1c
     !byte $00, $00, $00, $00, $00, $22, $91, $4a, $00, $00, $00, $00, $00, $00, $00, $40
     !byte $91, $4a, $12, $48, $1c, $2e, $7d, $57, $09, $20, $14, $40, $28, $02, $22, $5d
-    !byte $ff, $1a, $87, $3a, $ff, $47, $03, $01, $72, $0d, $2d, $ff, $3f, $03, $01, $4a
-    !byte $0d, $01, $45, $83, $72, $ff, $01, $8d, $26, $15, $8d, $3a, $ff, $0c, $87, $2f
-    !byte $2f, $03, $01, $ff, $14, $88, $32, $34, $88, $52, $19, $8d, $4e, $5d, $8d, $72
-    !byte $ff, $38, $81, $72, $27, $08, $05, $41, $8d, $72, $ff, $22, $0d, $01, $29, $ab
-    !byte $3a, $45, $87, $52, $ff, $31, $83, $46, $31, $aa, $46, $ff, $41, $85, $52, $20
-    !byte $87, $36, $0d, $8d, $66, $36, $2a, $1c, $ff, $14, $8d, $4a, $38, $83, $5b, $35
-    !byte $a7, $49, $ff, $26, $ab, $3a, $22, $0d, $02, $5e, $86, $6e, $ff, $1a, $81, $6e
-    !byte $6e, $24, $1a, $62, $07, $26, $5a, $2a, $1a, $ff, $ff, $40, $ad, $4b, $ff, $65
-    !byte $a5, $72, $4a, $0d, $02, $45, $87, $5e, $02, $8a, $1e, $ff, $10, $ad, $1f, $2c
-    !byte $8d, $62, $ff, $2e, $a3, $46, $46, $06, $2e, $2e, $aa, $46, $42, $0d, $2e, $ff
-    !byte $4a, $0b, $1e, $72, $0d, $5a, $1a, $0d, $02, $ff, $1a, $83, $2e, $4a, $21, $30
-    !byte $29, $29, $05, $ff, $29, $05, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+
+; ***************************************************************************************
+    ; Three bytes per guardian, specifying initial position and direction:
+    ;   X1, Y + top bit, X2
+    ;   top bit indicates initial direction (set = left), initial bounce at X2
+guardianLevelData
+    ; level 1
+    !byte $ff, $1a, $87, $3a
+    ; level 2
+    !byte $ff, $47, $03, $01, $72, $0d, $2d
+    ; level 3
+    !byte $ff, $3f, $03, $01, $4a, $0d, $01, $45, $83, $72
+    ; level 4
+    !byte $ff, $01, $8d, $26, $15, $8d, $3a
+    ; level 5
+    !byte $ff, $0c, $87, $2f, $2f, $03, $01
+    ; level 6
+    !byte $ff, $14, $88, $32, $34, $88, $52, $19, $8d, $4e, $5d, $8d, $72
+    ; level 7
+    !byte $ff, $38, $81, $72, $27, $08, $05, $41, $8d, $72
+    ; level 8
+    !byte $ff, $22, $0d, $01, $29, $ab, $3a, $45, $87, $52
+    ; level 9
+    !byte $ff, $31, $83, $46, $31, $aa, $46
+    ; level 10
+    !byte $ff, $41, $85, $52, $20, $87, $36, $0d, $8d, $66, $36, $2a, $1c
+    ; level 11
+    !byte $ff, $14, $8d, $4a, $38, $83, $5b, $35, $a7, $49
+    ; level 12
+    !byte $ff, $26, $ab, $3a, $22, $0d, $02, $5e, $86, $6e
+    ; level 13
+    !byte $ff, $1a, $81, $6e, $6e, $24, $1a, $62, $07, $26, $5a, $2a, $1a
+    ; level 14
+    !byte $ff
+    ; level 15
+    !byte $ff, $40, $ad, $4b
+    ; level 16
+    !byte $ff, $65, $a5, $72, $4a, $0d, $02, $45, $87, $5e, $02, $8a, $1e
+    ; level 17
+    !byte $ff, $10, $ad, $1f, $2c, $8d, $62
+    ; level 18
+    !byte $ff, $2e, $a3, $46, $46, $06, $2e, $2e, $aa, $46, $42, $0d, $2e
+    ; level 19
+    !byte $ff, $4a, $0b, $1e, $72, $0d, $5a, $1a, $0d, $02
+    ; level 20
+    !byte $ff, $1a, $83, $2e, $4a, $21, $30, $29, $29, $05
+    !byte $ff
+
+    ; [unused]
+    !byte $29, $05
+    !byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
 
 ; ***************************************************************************************
 showScreenAndWaitForRETURN
@@ -4348,20 +4504,20 @@ showScreenAndWaitForRETURN
     txa                             ;
     jsr setPalette                  ;
     inx                             ;
-    cpx #$05                        ;
+    cpx #5                          ;
     bne -                           ;
 
     ; set logical colour 3 to white
-    lda #$07                        ;
-    ldx #$03                        ;
+    lda #7                          ;
+    ldx #3                          ;
     jsr setPalette                  ;
 
-    ; delay
+    ; delay loop
     lda #$d0                        ;
     sta $70                         ;
     tax                             ;
     tay                             ;
-    sta $70                         ;
+    sta $70                         ;   [redundant]
 
 -
     inx                             ;
@@ -4383,8 +4539,8 @@ showScreenAndWaitForRETURN
     inc $70                         ;
     bne -                           ;
 
-    lda #$00                        ;
-    sta $3098                       ; }
+    lda #0                          ;
+    sta channel3Frequency           ; }
     jsr S62e3                       ; } demo mode?
     jmp playGame                    ; }
 
@@ -4396,7 +4552,7 @@ startGameJumper
 L2427
     lda #$ff                        ;
     sta $6b7c                       ;
-    jmp L1ce8                       ;
+    jmp copyVerticalSprites         ;
 
 ; ***************************************************************************************
     !byte $00                       ;
@@ -4417,13 +4573,21 @@ creditsMessage
 creditsMessageEnd
 
 ; ***************************************************************************************
-    !byte $00, $00, $00, $00, $00, $00, $00, $00, $00
-    !byte $85, $0d, $cb, $0d, $94, $0d, $d9, $0d, $00, $00, $00, $00, $00, $00, $00, $00
-    !byte $83, $4d, $8c, $07, $95, $6d, $da, $0d, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-    !byte $85, $1d, $ff, $ff, $ff, $ff, $ff, $ff, $c1, $09, $8b, $04, $d5, $07, $ff, $ff
-    !byte $89, $4d, $8f, $5d, $d5, $4d, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-    !byte $83, $8d, $4a, $c0, $13, $80, $db, $0c, $c5, $1d, $8a, $1d, $d4, $1d, $99, $1d
-    !byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $82, $06, $da, $4d, $ff, $ff, $ff, $ff
+    !byte $00
+specialLevelData
+    !byte $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $85, $0d, $cb, $0d, $94, $0d, $d9, $0d
+    !byte $00, $00, $00, $00, $00, $00, $00, $00
+    !byte $83, $4d, $8c, $07, $95, $6d, $da, $0d
+    !byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+    !byte $85, $1d, $ff, $ff, $ff, $ff, $ff, $ff
+    !byte $c1, $09, $8b, $04, $d5, $07, $ff, $ff
+    !byte $89, $4d, $8f, $5d, $d5, $4d, $ff, $ff
+    !byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+    !byte $83, $8d, $4a, $c0, $13, $80, $db, $0c
+    !byte $c5, $1d, $8a, $1d, $d4, $1d, $99, $1d
+    !byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
+    !byte $82, $06, $da, $4d, $ff, $ff, $ff, $ff
 
 bylineMessage
     !byte 19, 17                    ; ...(19,17)
@@ -4467,7 +4631,7 @@ nonLevel10
     sta conveyorLength              ;
 
 drawFixedString
-    lda #$1f                        ;
+    lda #31                         ;
     jsr OSWRCH                      ;
     lda #4                          ; TAB(4,19)
     jsr OSWRCH                      ;
@@ -4497,9 +4661,9 @@ drawConveyors
     cmp #$ff                        ;
     beq L259b                       ;
 
-    lda #$11                        ; }
+    lda #17                         ; }
     jsr OSWRCH                      ; }
-    lda #$02                        ; } COLOUR 2
+    lda #2                          ; } COLOUR 2
     jsr OSWRCH                      ; }
 
     lda conveyorX                   ;
@@ -4511,7 +4675,7 @@ drawConveyors
 L2576
     tax                             ;
 
-    lda #$1f                        ;
+    lda #31                         ;
     jsr OSWRCH                      ;
     lda conveyorX                   ;
     and #$7f                        ; remove top bit (direction)
@@ -4566,7 +4730,7 @@ showScoreLivesAndLevel
     jsr addToScore                  ; } add 0 to score
 
     ; show lives
-    lda #$1f                        ; }
+    lda #31                         ; }
     jsr OSWRCH                      ; }
     lda #$22                        ; } TAB(34,19)
     jsr OSWRCH                      ; }
@@ -4631,20 +4795,20 @@ L2604
     sta S2600 + 1                   ;
     lda #$26                        ;
     sta S2600 + 2                   ;
-    lda #$00                        ;
+    lda #0                          ;
     sta $2693                       ;
-    lda #$11                        ;
-    jsr OSWRCH                      ;
-    lda #$03                        ;
-    jsr OSWRCH                      ;
-    ldx #$00                        ;
+    lda #17                         ; }
+    jsr OSWRCH                      ; } COLOUR 3
+    lda #3                          ; }
+    jsr OSWRCH                      ; }
+    ldx #0                          ;
 L261f
     jsr S2600                       ;
     cmp #$20                        ;
     bcc L2631                       ;
 L2626
     inx                             ;
-    cpx #$00                        ;
+    cpx #0                          ;
     bne L261f                       ;
     inc S2600 + 2                   ;
     jmp L261f                       ;
@@ -4656,13 +4820,13 @@ L2631
     lda currentLevel                ; UNUSED
     cmp $2693                       ; UNUSED
     bne L2626                       ; UNUSED
-    lda #$1f                        ; UNUSED
+    lda #31                         ; UNUSED
     jsr OSWRCH                      ; UNUSED
     jsr S2600                       ; UNUSED   TAB(level value + 4, 17)
     clc                             ; UNUSED
-    adc #$04                        ; UNUSED
+    adc #4                          ; UNUSED
     jsr OSWRCH                      ; UNUSED
-    lda #$11                        ; UNUSED
+    lda #17                         ; UNUSED
     jsr OSWRCH                      ; UNUSED
 
 -
@@ -4674,7 +4838,6 @@ L2631
     jmp -                           ; UNUSED
 
 ; ***************************************************************************************
-; unused?
 L265c
     lda #$00                        ; UNUSED
     sta $2695                       ; UNUSED
@@ -4723,7 +4886,7 @@ numbers
     !byte $0d                               ; terminator
 
 ; ***************************************************************************************
-    ; unused... (possibly a test level?)
+    ; [unused]
     !text 7, "Th"                   ;
 
 ; ***************************************************************************************
@@ -4759,17 +4922,17 @@ clearScreen
 
     jsr setPalette                  ; set every colour black (A=0)
     inx                             ;
-    cpx #$04                        ; are we done yet?
-    bne -                           ; if (not done yet) then branch (loop back)
+    cpx #4                          ;
+    bne -                           ; if (not done four yet) then branch (loop back)
 
     lda #>screenStartAddress        ;
     sta injectAddressHigh           ;
     lda #<screenStartAddress        ;
     sta injectAddressLow            ;
-    ldx #$00                        ;
+    ldx #0                          ;
 -
 
-    lda #$00                        ;
+    lda #0                          ;
 injectAddressLow = * + 1
 injectAddressHigh = * + 2
     sta $3000,x                     ; clear screen
@@ -4789,7 +4952,7 @@ L2843
 level10Init
     lda #$e1                        ;
     sta levelFeature3               ;
-    lda #$02                        ;
+    lda #2                          ;
     sta levelColourArray + 1        ;
     sta levelColourArray + 2        ;
     lda #3                          ;
@@ -4797,11 +4960,11 @@ level10Init
     jmp levelInitContinued          ;
 
 drawSwitchAt10Comma1
-    lda #$1f                        ; }
+    lda #31                         ; }
     jsr OSWRCH                      ; }
-    lda #$0a                        ; }
+    lda #10                         ; }
     jsr OSWRCH                      ; } TAB(10,1)
-    lda #$01                        ; }
+    lda #1                          ; }
     jsr OSWRCH                      ; }
 
     lda #$f8                        ; VDU $f8
@@ -4847,7 +5010,7 @@ setPalette
 -
     jsr OSWRCH                      ; VDU Y
     iny                             ;
-    cpy #$04                        ;
+    cpy #4                          ;
     bne -                           ; loop four times
     rts                             ;
 
@@ -4875,11 +5038,11 @@ initLevel
 nonLevel10Init
     lda #$eb                        ; }
     sta levelFeature3               ; }
-    lda #$03                        ; }
+    lda #3                          ; }
     sta levelColourArray + 2        ; } values for all levels except level 10
-    lda #$01                        ; }
+    lda #1                          ; }
     sta levelColourArray + 1        ; }
-    lda #$02                        ; }
+    lda #2                          ; }
     sta levelColourArray + 3        ; }
 
     lda currentLevel                ;
@@ -5273,7 +5436,7 @@ drawExit
     jsr readLevelDataByte           ;
     sta $71                         ;
 
-    lda #$1f                        ;
+    lda #31                         ;
     jsr OSWRCH                      ;
     lda $70                         ; TAB(exitX,exitY - 2)
     jsr OSWRCH                      ;
@@ -5286,22 +5449,23 @@ drawExit
     ;       f3,f4
     ldx #0                          ;
 L2af3
-    lda L2aff,x                     ;
+    lda exitMessage,x               ;
     jsr OSWRCH                      ;
     inx                             ;
-    cpx #$08                        ;
+    cpx #8                          ;
     bne L2af3                       ;
     rts                             ;
 
-L2aff
-    !byte $f1, $f2, $0a, $08, $08, $f3, $f4, $00
+exitMessage
+    !byte $f1, $f2, $0a, $08, $08
+    !byte $f3, $f4, $00
 
 setRoomColours
     lda #0                          ;
     jsr OSWRCH                      ;
     jsr drawAirBar                  ;
 
-    lda #$11                        ;
+    lda #17                         ;
     jsr OSWRCH                      ; COLOUR 2
     lda #2                          ;
     jsr OSWRCH                      ;
@@ -5326,7 +5490,7 @@ setRoomColours
 
     lda levelColours2               ;
     and #$0f                        ;
-    ldx #$02                        ;
+    ldx #2                          ;
     jsr setPalette                  ; set palette from second colour byte (lower nybble)
     ldx #3                          ;
     lda #3                          ;
@@ -5411,9 +5575,9 @@ setColourAndDrawLevel7Platform
     lda levelFeatureIndex               ;
     cmp #1                              ;
     bne setColourAndDrawPlatform        ;
-    lda #$11                            ; }
+    lda #17                             ; }
     jsr OSWRCH                          ; } COLOUR 2
-    lda #$02                            ; }
+    lda #2                              ; }
     jsr OSWRCH                          ; }
     jmp drawPlatform                    ;
 
@@ -5422,12 +5586,12 @@ setColourAndDrawLevel14Platform
     cmp #0                              ;
     bne setColourAndDrawPlatform        ;
 
-    lda #$11                            ;
+    lda #17                             ;
     jsr OSWRCH                          ;
     lda #1                              ; COLOUR 1
     jsr OSWRCH                          ;
 
-    lda #$1f                            ;
+    lda #31                             ;
     jsr OSWRCH                          ;
     lda $71                             ;
     clc                                 ;
@@ -5453,14 +5617,14 @@ commandPlatform
     beq setColourAndDrawLevel14Platform ;
 
 setColourAndDrawPlatform
-    lda #$11                            ;
+    lda #17                             ;
     jsr OSWRCH                          ;
     ldx levelFeatureIndex               ;
     lda levelColourArray,x              ;
     jsr OSWRCH                          ;
 
 drawPlatform
-    lda #$1f                            ;
+    lda #31                             ;
     jsr OSWRCH                          ;
     lda $71                             ;
     clc                                 ;
@@ -5618,17 +5782,17 @@ L2cc9
 ; ***************************************************************************************
 start
     ; *FX 13,4 - disable vsync event
-    lda #$0d                            ;
-    ldx #$04                            ;
-    ldy #$00                            ;
+    lda #13                             ;
+    ldx #4                              ;
+    ldy #0                              ;
     jsr OSBYTE                          ;
 
     jsr swapManicMinerGraphicWithC00    ;
 
     ; *fx 200,3 - clear memory on BREAK
-    lda #$c8                            ;
-    ldx #$03                            ;
-    ldy #$00                            ;
+    lda #200                            ;
+    ldx #3                              ;
+    ldy #0                              ;
     jsr OSBYTE                          ;
 
     ; print message (switch to MODE 1)
@@ -5643,12 +5807,11 @@ outputMessageLoop
     cpx #$37                            ;
     bne moreMessageLoop                 ;
 
-    ; VDU 31,12,3
-    lda #$1f                            ;
+    lda #31                             ;
     jsr OSWRCH                          ;
-    lda #$0c                            ; TAB(12,3)
+    lda #12                             ; TAB(12,3)
     jsr OSWRCH                          ;
-    lda #$03                            ;
+    lda #3                              ;
     jsr OSWRCH                          ;
 
     ; VDU 128,129,130,...,143 (TAB and show user defined characters)
@@ -5892,9 +6055,9 @@ miner2Entry
     sta $71                         ; reset scrolling message counter
 
     ; *FX 200,3 - clear memory on BREAK
-    lda #$c8                        ;
-    ldx #$03                        ;
-    ldy #$00                        ;
+    lda #200                        ;
+    ldx #3                          ;
+    ldy #0                          ;
     jsr OSBYTE                      ;
 
     ; set MODE 7 and text window
@@ -5915,7 +6078,7 @@ copyToScreen3
     bne copyToScreen3               ;
 
     ; turn off cursor
-    lda #$0a                        ;
+    lda #10                         ;
     sta $fe00                       ;
     lda #$20                        ;
     sta $fe01                       ;
