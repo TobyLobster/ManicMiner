@@ -1,5 +1,5 @@
 ;
-; miner4.a
+; miner4.a ($5580)
 ;
 
 ; constants
@@ -7,14 +7,18 @@ charSPACE                   = $20               ;
 willyPageRight              = $05               ;
 willyPageLeft               = $06               ;
 
-; memory locations
+; OS memory locations
 OSWRCH                      = $ffee             ;
 OSBYTE                      = $fff4             ;
 OSWORD                      = $fff1             ;
+timeClockB                  = $0297             ; 5 byte clock as read by TIME
+countdownIntervalTimer      = $029C             ; 5 byte countdown interval timer (causes an EVENT when it reaches zero)
+vduTextCursorXPosition      = $0318             ;
 
+; memory locations
+energyFieldSpriteOffset     = $3f               ;
 currentLevel                = $80               ;
 switchTriggered             = $9f               ;
-vduTextCursorXPosition      = $0318             ;
 
 updatePlayer                = $109c             ;
 readTwoCharactersFromScreen = $14a7             ;
@@ -24,8 +28,12 @@ newPlayerPixelX             = $183c             ;
 newPlayerPixelY             = $183d             ;
 willyAnimationEOR           = $183f             ;
 willyGraphicsPage           = $1840             ;
+willySpriteAddressLow       = $1842             ;
+willySpriteAddressHigh      = $1843             ;
 isInAir                     = $184b             ;
+conveyorDirection           = $1854             ;
 readOrWriteCachedBackground = $1869             ;
+currentVerticalGuardians    = $1dad             ;
 energyFieldSprites          = $1dc1             ;
 drawMonsters                = $1e0d             ;
 
@@ -38,6 +46,7 @@ spriteColourMask            = $109b             ; $ff for colour 3, $f0 for colo
 
 checkForChannel3Update      = $303b             ;
 channel3Frequency           = $3098             ;
+channel2Frequency           = $3099             ;
 updateJumpAndFallSounds     = $3146             ;
 
 plot                        = $0f00             ;
@@ -400,13 +409,13 @@ showEnterCodeAtCell
     bne -
 
     ; get and show a random code
-    lda $029b                                   ; read byte of clock time
-    sta $60a0                                   ; as a source of randomness
+    lda timeClockB + 4                          ; read byte of clock time
+    sta addition                                ; as a source of randomness
 
-    lda $02a0                                   ; read byte of countdown interval timer
-    sta $60a1                                   ; as a second source of randomness
+    lda countdownIntervalTimer + 4              ; read byte of countdown interval timer
+    sta counter                                 ; as a second source of randomness
 
-    lda $60a0                                   ;
+    lda addition                                ;
 -
     cmp #19                                     ;
     bcc +                                       ; if (less than 19) then branch
@@ -415,12 +424,12 @@ showEnterCodeAtCell
     jmp -                                       ; loop back
 
 +
-    sta $60a0                                   ;
+    sta addition                                ;
     clc                                         ;
     adc #'A'                                    ; add 'A' to get a character 'A' to 'R'
     jsr OSWRCH                                  ;
 
-    lda $60a1                                   ;
+    lda counter                                 ;
 -
     cmp #20                                     ;
     bcc +                                       ; if (less than 20) then branch
@@ -429,7 +438,7 @@ showEnterCodeAtCell
     jmp -                                       ;
 
 +
-    sta $60a1                                   ; store result
+    sta counter                                 ; store result
     cmp #10                                     ;
     bcs showTensDigit                           ; if (ten or more) then branch
 showDigitAndSpace
@@ -1819,7 +1828,7 @@ L6391
     sta isInAir                     ;
 
     lda #$27                        ;
-    sta $1842                       ;
+    sta willySpriteAddressLow       ;
 
     lda #willyPageLeft              ; }
     sta willyGraphicsPage           ; } look left
@@ -1853,7 +1862,7 @@ L641a
     lda #1                          ;
     jsr readOrWriteCachedBackground ;
     lda willyGraphicsPage           ;
-    sta $1843                       ;
+    sta willySpriteAddressHigh      ;
 
     lda conveyorX                   ;
     and #$80                        ;
@@ -1861,17 +1870,17 @@ L641a
     beq L643c                       ;
 
     lda #$ff                        ;
-    sta $1854                       ;
+    sta conveyorDirection           ;
     jmp $2fc2                       ;
 
 L643c
     lda #1                          ;
-    sta $1854                       ;
+    sta conveyorDirection           ;
     jmp $2fc2                       ;
 
 lookRight
     lda #$e7                        ;
-    sta $1842                       ;
+    sta willySpriteAddressLow       ;
     lda #willyPageRight             ; }
     sta willyGraphicsPage           ; } look right
     lda #0                          ; }
@@ -2015,12 +2024,12 @@ L651f
     lda #0                          ;
     sta keyCounter                  ;
 L6534
-    lda $6b7e                       ;
+    lda airRemaining                ;
     lsr                             ;
     clc                             ;
     adc #1                          ;
     eor #$3f                        ;
-    sta $3099                       ;
+    sta channel2Frequency           ;
     jsr updateAir                   ;
     inc keyCounter                  ;
     lda keyCounter                  ;
@@ -2028,7 +2037,7 @@ L6534
     cmp #0                          ;
     beq L655c                       ;
 L654f
-    lda $6b7e                       ;
+    lda airRemaining                ;
     cmp #0                          ;
     bne L6534                       ;
     jsr updateMusicState            ;
@@ -2051,9 +2060,9 @@ airMessage
     !byte 'R'                       ; VDU $52
 airMessageEnd
 
-drawAirMeter
+drawInitialAirMeter
     lda #$67                        ;
-    sta $6b7e                       ; ?
+    sta airRemaining                ; ?
 
     lda #17                         ; }
     jsr OSWRCH                      ; }
@@ -2186,7 +2195,7 @@ L6640
     rts                             ;
 
 L664d
-    dec $6b7e                       ;
+    dec airRemaining                ;
     inc $6693                       ;
     lda $6693                       ;
     and #7                          ;
@@ -2584,385 +2593,402 @@ playSoundAXY
 
 ; ***************************************************************************************
 collideWithMonsters
-    lda $77                         ; }
-    sec                             ; }
-    sbc #39                         ; }
-    sta $77                         ; } subtract 39 from ($77,$78)
-    lda $78                         ; }
-    sbc #0                          ; }
-    sta $78                         ; }
+    lda $77                             ; }
+    sec                                 ; }
+    sbc #39                             ; }
+    sta $77                             ; } subtract 39 from ($77,$78)
+    lda $78                             ; }
+    sbc #0                              ; }
+    sta $78                             ; }
 
-    ldx newPlayerPixelX             ;
-    ldy newPlayerPixelY             ;
-    lda #6                          ;
-    jsr plot                        ;
-    jsr updateEnergyFields          ;
-    jsr S6a4b                       ;
-    jsr S6967                       ;
-    lda #3                          ;
-    sta $6936                       ;
-    lda #4                          ;
-    sta $693c                       ;
-    lda willyAnimationEOR           ;
-    cmp #3                          ;
-    bne L68fa                       ;
-    lda #4                          ;
-    sta $6936                       ;
-    lda #3                          ;
-    sta $693c                       ;
+    ldx newPlayerPixelX                 ;
+    ldy newPlayerPixelY                 ;
+    lda #6                              ;
+    jsr plot                            ;
+    jsr checkForDeath                   ;
+    jsr checkForSwitchFlipped           ;
+    jsr S6967                           ;
+    lda #3                              ;
+    sta $6936                           ;
+    lda #4                              ;
+    sta $693c                           ;
+    lda willyAnimationEOR               ;
+    cmp #3                              ;
+    bne L68fa                           ;
+    lda #4                              ;
+    sta $6936                           ;
+    lda #3                              ;
+    sta $693c                           ;
 L68fa
-    lda playerPixelX                ;
-    and #3                          ;
-    eor willyAnimationEOR           ;
-    cmp #3                          ;
-    bne L691a                       ;
-    lda willyAnimationEOR           ;
-    cmp #3                          ;
-    bne L6915                       ;
-    lda #5                          ;
-    sta $6936                       ;
-    jmp L691a                       ;
+    lda playerPixelX                    ;
+    and #3                              ;
+    eor willyAnimationEOR               ;
+    cmp #3                              ;
+    bne L691a                           ;
+    lda willyAnimationEOR               ;
+    cmp #3                              ;
+    bne L6915                           ;
+    lda #5                              ;
+    sta $6936                           ;
+    jmp L691a                           ;
 
 L6915
-    lda #5                          ;
-    sta $693c                       ;
+    lda #5                              ;
+    sta $693c                           ;
 L691a
-    ldx #0                          ;
+    ldx #0                              ;
 L691c
-    lda $0d80,x                     ;
-    cmp #$ff                        ;
-    beq L693f                       ;
-    jsr S692e                       ;
-    txa                             ;
-    clc                             ;
-    adc #4                          ;
-    tax                             ;
-    jmp L691c                       ;
+    lda $0d80,x                         ;
+    cmp #$ff                            ;
+    beq L693f                           ;
+    jsr S692e                           ;
+    txa                                 ;
+    clc                                 ;
+    adc #4                              ;
+    tax                                 ;
+    jmp L691c                           ;
 
 S692e
-    clc                             ;
-    adc #$13                        ;
-    sec                             ;
-    sbc playerPixelX                ;
-    cmp #3                          ;
-    bcc L6940                       ;
-    eor #$fe                        ;
-    cmp #3                          ;
-    bcc L6940                       ;
+    clc                                 ;
+    adc #$13                            ;
+    sec                                 ;
+    sbc playerPixelX                    ;
+    cmp #3                              ;
+    bcc L6940                           ;
+    eor #$fe                            ;
+    cmp #3                              ;
+    bcc L6940                           ;
 L693f
-    rts                             ;
+    rts                                 ;
 
 L6940
-    inx                             ;
-    lda $0d80,x                     ;
-    sec                             ;
-    sbc #1                          ;
-    asl                             ;
-    asl                             ;
-    asl                             ;
-    cmp playerPixelY                ;
-    bcc L6951                       ;
-    dex                             ;
-    rts                             ;
+    inx                                 ;
+    lda $0d80,x                         ;
+    sec                                 ;
+    sbc #1                              ;
+    asl                                 ;
+    asl                                 ;
+    asl                                 ;
+    cmp playerPixelY                    ;
+    bcc L6951                           ;
+    dex                                 ;
+    rts                                 ;
 
 L6951
-    lda $0d80,x                     ;
-    dex                             ;
-    clc                             ;
-    adc #3                          ;
-    asl                             ;
-    asl                             ;
-    asl                             ;
-    sec                             ;
-    sbc #1                          ;
-    cmp playerPixelY                ;
-    bcs deathJumper3                ;
-    rts                             ;
+    lda $0d80,x                         ;
+    dex                                 ;
+    clc                                 ;
+    adc #3                              ;
+    asl                                 ;
+    asl                                 ;
+    asl                                 ;
+    sec                                 ;
+    sbc #1                              ;
+    cmp playerPixelY                    ;
+    bcs deathJumper3                    ;
+    rts                                 ;
 
 deathJumper3
-    jmp death                       ;
+    jmp death                           ;
 
 S6967
-    lda #0                          ;
-    sta $5a                         ;
-    lda playerPixelX                ;
-    and #3                          ;
-    eor willyAnimationEOR           ;
-    cmp #0                          ;
-    beq L697b                       ;
-    lda #1                          ;
-    sta $5a                         ;
+    lda #0                              ;
+    sta $5a                             ;
+    lda playerPixelX                    ;
+    and #3                              ;
+    eor willyAnimationEOR               ;
+    cmp #0                              ;
+    beq L697b                           ;
+    lda #1                              ;
+    sta $5a                             ;
 L697b
-    lda currentLevel                ;
-    cmp #5                          ;
-    bne L6996                       ;
-    lda $1c48                       ;
-    and #$7f                        ;
-    sec                             ;
-    sbc #8                          ;
-    sta $1dae                       ;
-    lda #$ff                        ;
-    sta $1db1                       ;
-    lda #$0f                        ;
-    sta $1dad                       ;
+    lda currentLevel                    ;
+    cmp #5                              ;
+    bne L6996                           ;
+    lda $1c48                           ;
+    and #$7f                            ;
+    sec                                 ;
+    sbc #8                              ;
+    sta $1dae                           ;
+    lda #$ff                            ;
+    sta $1db1                           ;
+    lda #$0f                            ;
+    sta currentVerticalGuardians        ;
 L6996
-    lda currentLevel                ;
-    cmp #8                          ;
-    beq L69a3                       ;
-    cmp #12                         ;
-    beq L69a3                       ;
-    jmp L69be                       ;
+    lda currentLevel                    ;
+    cmp #8                              ;
+    beq L69a3                           ;
+    cmp #12                             ;
+    beq L69a3                           ;
+    jmp L69be                           ;
 
 L69a3
-    lda #$ff                        ;
-    sta $1dad                       ;
-    lda $33c0                       ;
-    cmp #0                          ;
-    beq L69be                       ;
-    lda #$0f                        ;
-    sta $1dad                       ;
-    lda #$ff                        ;
-    sta $1db1                       ;
-    lda #0                          ;
-    sta $1dae                       ;
+    lda #$ff                            ;
+    sta currentVerticalGuardians        ;
+    lda $33c0                           ;
+    cmp #0                              ;
+    beq L69be                           ;
+    lda #$0f                            ;
+    sta currentVerticalGuardians        ;
+    lda #$ff                            ;
+    sta $1db1                           ;
+    lda #0                              ;
+    sta $1dae                           ;
 L69be
-    lda #$f1                        ;
-    sta $6a2a                       ;
-    lda currentLevel                ;
-    cmp #$0e                        ;
-    bne L69ce                       ;
-    lda #$f1                        ;
-    sta $6a2a                       ;
+    lda #$f1                            ;
+    sta $6a2a                           ;
+    lda currentLevel                    ;
+    cmp #$0e                            ;
+    bne L69ce                           ;
+    lda #$f1                            ;
+    sta $6a2a                           ;
 L69ce
-    ldx #0                          ; loop counter
+    ldx #0                              ; loop counter
 L69d0
-    lda $1dad,x                     ;
-    cmp #$ff                        ;
-    beq L6a1a                       ;
-    jsr S69e6                       ;
-    txa                             ;
-    clc                             ;
-    adc #4                          ;
-    tax                             ;
-    cpx #16                         ;
-    bcs L6a1a                       ;
-    jmp L69d0                       ;
+    lda currentVerticalGuardians,x      ;
+    cmp #$ff                            ;
+    beq L6a1a                           ;
+    jsr S69e6                           ;
+    txa                                 ;
+    clc                                 ;
+    adc #4                              ;
+    tax                                 ;
+    cpx #16                             ;
+    bcs L6a1a                           ;
+    jmp L69d0                           ;
 
 S69e6
-    lda $1dad,x                     ;
-    and #$3f                        ;
-    clc                             ;
-    adc #5                          ;
-    asl                             ;
-    asl                             ;
-    sta $6632                       ;
-    lda playerPixelX                ;
-    clc                             ;
-    adc #4                          ;
-    sec                             ;
-    sbc $6632                       ;
-    cmp #0                          ;
-    beq L6a1b                       ;
-    cmp #7                          ;
-    bcc L6a1b                       ;
-    sec                             ;
-    sbc $5a                         ;
-    cmp #7                          ;
-    bcc L6a1b                       ;
-    clc                             ;
-    adc $5a                         ;
-    cmp #$fd                        ;
-    bcs L6a1b                       ;
-    clc                             ;
-    adc $5a                         ;
-    cmp #$fd                        ;
-    bcs L6a1b                       ;
+    lda currentVerticalGuardians,x      ;
+    and #$3f                            ;
+    clc                                 ;
+    adc #5                              ;
+    asl                                 ;
+    asl                                 ;
+    sta $6632                           ;
+    lda playerPixelX                    ;
+    clc                                 ;
+    adc #4                              ;
+    sec                                 ;
+    sbc $6632                           ;
+    cmp #0                              ;
+    beq L6a1b                           ;
+    cmp #7                              ;
+    bcc L6a1b                           ;
+    sec                                 ;
+    sbc $5a                             ;
+    cmp #7                              ;
+    bcc L6a1b                           ;
+    clc                                 ;
+    adc $5a                             ;
+    cmp #$fd                            ;
+    bcs L6a1b                           ;
+    clc                                 ;
+    adc $5a                             ;
+    cmp #$fd                            ;
+    bcs L6a1b                           ;
 L6a1a
-    rts                             ;
+    rts                                 ;
 
 L6a1b
-    lda $1dae,x                     ;
-    clc                             ;
-    adc #8                          ;
-    sec                             ;
-    sbc playerPixelY                ;
-    cmp #$13                        ;
-    bcc deathJumper4                ;
-    cmp #$f0                        ;
-    bcs deathJumper4                ;
-    rts                             ;
+    lda $1dae,x                         ;
+    clc                                 ;
+    adc #8                              ;
+    sec                                 ;
+    sbc playerPixelY                    ;
+    cmp #$13                            ;
+    bcc deathJumper4                    ;
+    cmp #$f0                            ;
+    bcs deathJumper4                    ;
+    rts                                 ;
 
 deathJumper4
-    jmp death                       ;
+    jmp death                           ;
 
 S6a31
-    lda $199f                       ;
-    eor #$0f                        ;
-    sta $199f                       ;
+    lda $199f                           ;
+    eor #$0f                            ;
+    sta $199f                           ;
 
-    jsr $1980                       ;
+    jsr $1980                           ;
 
-    lda #$ff                        ;
-    sta spriteColourMask            ;
-    rts                             ;
+    lda #$ff                            ;
+    sta spriteColourMask                ;
+    rts                                 ;
 
 S6a42
-    jsr showScoreLivesAndLevel      ;
-    lda #$ff                        ;
-    sta $1dad                       ;
-    rts                             ;
+    jsr showScoreLivesAndLevel          ;
+    lda #$ff                            ;
+    sta currentVerticalGuardians        ;
+    rts                                 ;
 
-S6a4b
-    lda $332e                       ;
-    cmp #0                          ;
-    bne L6a53                       ;
-    rts                             ;
+checkForSwitchFlipped
+    lda $332e                           ; screen address that becomes non-zero when the switch is flipped
+    cmp #0                              ;
+    bne switchFlipped                   ;
+    rts                                 ;
 
-L6a53
-    lda currentLevel                ;
-    cmp #8                          ;
-    beq L6a63                       ;
-    cmp #12                         ;
-    bne L6a62                       ;
-    lda #$47                        ;
-    sta $0d83                       ;
-L6a62
-    rts                             ;
+switchFlipped
+    lda currentLevel                    ;
+    cmp #8                              ;
+    beq level8SwitchFlipped             ;
+    cmp #12                             ;
+    bne +                               ;
 
-L6a63
-    lda #$47                        ;
-    sta $0d87                       ;
-L6a68
-    rts                             ;
-
-S6a69
-    lda $6b7e                       ;
-    cmp #0                          ;
-    beq deathJumper5                ;
-    lda playerPixelY                ;
-    cmp $6b7b                       ;
-    bcs +                           ;
-    sta $6b7b                       ;
+    ; level 12 switch flipped
+    lda #$47                            ;
+    sta $0d83                           ;
 +
-    lda playerPixelY                ;
-    and #7                          ;
-    cmp #0                          ;
-    beq +                           ;
-    lda #0                          ;
-    sta $6b7c                       ;
+    rts                                 ;
+
+level8SwitchFlipped
+    lda #$47                            ;
+    sta $0d87                           ;
+return6
+    rts                                 ;
+
+; ***************************************************************************************
+updateAirEtc
+    lda airRemaining                    ;
+    cmp #0                              ;
+    beq deathJumper5                    ; if (out of air) then branch (die)
+
+    lda playerPixelY                    ;
+    cmp $6b7b                           ;
+    bcs +                               ;
+    sta $6b7b                           ;
 +
-    lda playerPixelY                ;
-    and #7                          ;
-    cmp $6b7d                       ;
-    bne L6aba                       ;
-    cmp #0                          ;
-    bne L6aba                       ;
-    lda $6b7c                       ;
-    cmp #0                          ;
-    bne L6aba                       ;
-    lda #$ff                        ;
-    sta $6b7c                       ;
-    jsr drawConveyors               ;
-    lda playerPixelY                ;
-    sec                             ;
-    sbc $6b7b                       ;
-    cmp #$28                        ;
-    bcc L6ab4                       ;
-    jmp death                       ;
+    lda playerPixelY                    ;
+    and #7                              ;
+    cmp #0                              ;
+    beq +                               ;
+    lda #0                              ;
+    sta $6b7c                           ;
++
+    lda playerPixelY                    ;
+    and #7                              ;
+    cmp $6b7d                           ;
+    bne L6aba                           ;
+    cmp #0                              ;
+    bne L6aba                           ;
+
+    lda $6b7c                           ;
+    cmp #0                              ;
+    bne L6aba                           ;
+    lda #$ff                            ;
+    sta $6b7c                           ;
+    jsr drawConveyors                   ;
+    lda playerPixelY                    ;
+    sec                                 ;
+    sbc $6b7b                           ;
+    cmp #$28                            ;
+    bcc L6ab4                           ;
+    jmp death                           ;
 
 L6ab4
-    lda playerPixelY                ;
-    sta $6b7b                       ;
+    lda playerPixelY                    ;
+    sta $6b7b                           ;
 L6aba
-    lda playerPixelY                ;
-    and #7                          ;
-    sta $6b7d                       ;
-    rts                             ;
+    lda playerPixelY                    ;
+    and #7                              ;
+    sta $6b7d                           ;
+    rts                                 ;
 
-L6ac3
+; ***************************************************************************************
+hitLevel20EnergyField
     jsr swapEnergyFieldSpritesWith0C00  ;
 deathJumper5
-    jmp death                       ;
+    jmp death                           ;
 
-updateEnergyFields
-    jsr S6a69                   ;
-    lda currentLevel            ;
-    cmp #$14                    ;
-    bne L6a68                   ;
-    inc $6b7a                   ;
+; ***************************************************************************************
+checkForDeath
+    jsr updateAirEtc                    ;
+    lda currentLevel                    ;
+    cmp #20                             ;
+    bne return6                         ;
+    inc level20EnergyFieldsTimer        ;
     jsr swapEnergyFieldSpritesWith0C00  ;
-    lda $6b7a                   ;
-    and #$10                    ;
-    cmp #0                      ;
-    beq L6b4e                   ;
-    lda $4f42                   ;
-    and #$80                    ;
-    cmp #0                      ;
-    bne L6ac3                   ;
-    lda $3942                   ;
-    and #$80                    ;
-    cmp #0                      ;
-    bne L6ac3                   ;
-    lda $394a                   ;
-    and #1                      ;
-    cmp #0                      ;
-    bne L6ac3                   ;
-    lda $4f4a                   ;
-    and #1                      ;
-    cmp #0                      ;
-    bne L6ac3                   ;
-    lda $6b7a                   ;
-    and #1                      ;
-    cmp #0                      ;
-    beq L6b47                   ;
-    lda #0                      ;
-    sta $3f                     ;
-L6b12
-    ldx #0                      ;
-L6b14
-    lda $6b72,x                 ;
-    jsr OSWRCH                  ;
-    inx                         ;
-    cpx #5                      ;
-    beq L6b29
-L6b1f
-    cpx #8                      ;
-    bne L6b14                   ;
-    jsr S6b2f                   ;
+    lda level20EnergyFieldsTimer        ;
+    and #$10                            ;
+    cmp #0                              ;
+    beq toggleLevel20EnergyFields       ;
+
+    ; check for collision
+    lda $4f42                           ; read screen byte directly
+    and #$80                            ;
+    cmp #0                              ; top bit set indicates a collision
+    bne hitLevel20EnergyField           ;
+
+    lda $3942                           ; read screen byte directly
+    and #$80                            ;
+    cmp #0                              ; top bit set indicates a collision
+    bne hitLevel20EnergyField           ;
+
+    lda $394a                           ; read screen byte directly
+    and #1                              ;
+    cmp #0                              ; bottom bit set indicates a collision
+    bne hitLevel20EnergyField           ;
+
+    lda $4f4a                           ; read screen byte directly
+    and #1                              ;
+    cmp #0                              ; bottom bit set indicates a collision
+    bne hitLevel20EnergyField           ;
+
+    lda level20EnergyFieldsTimer        ;
+    and #1                              ;
+    cmp #0                              ;
+    beq level20SwitchEnergyFieldSprite  ;
+    lda #0                              ;
+    sta energyFieldSpriteOffset         ;
+drawLevel20EnergyFieldString
+    ldx #0                              ;
+-
+    lda level20EnergyFieldsString,x     ;
+    jsr OSWRCH                          ;
+    inx                                 ;
+    cpx #5                              ;
+    beq +                               ;
+backToLevel20EnergyFieldString
+    cpx #8                              ;
+    bne -                               ;
+    jsr drawLevel20EnergyField          ;
     jmp swapEnergyFieldSpritesWith0C00  ;
 
-L6b29
-    jsr S6b2f                   ;
-    jmp L6b1f                   ;
++
+    jsr drawLevel20EnergyField          ;
+    jmp backToLevel20EnergyFieldString  ;
 
-S6b2f
-    lda #$e0                    ;
-    clc                         ;
-    adc $3f                     ;
-    jsr OSWRCH                  ;
-    tay                         ;
-    iny                         ;
-    lda #$0a                    ; move down
-    jsr OSWRCH                  ;
-    lda #8                      ; move left
-    jsr OSWRCH                  ;
-    tya                         ;
-    jmp OSWRCH                  ;
+; ***************************************************************************************
+drawLevel20EnergyField
+    lda #$e0                            ;
+    clc                                 ;
+    adc energyFieldSpriteOffset         ;
+    jsr OSWRCH                          ; draw first character of energy field
+    tay                                 ;
+    iny                                 ;
+    lda #$0a                            ; move down
+    jsr OSWRCH                          ;
+    lda #8                              ; move left
+    jsr OSWRCH                          ;
+    tya                                 ;
+    jmp OSWRCH                          ; draw second character of energy field
 
-L6b47
-    lda #2                      ;
-    sta $3f                     ;
-    jmp L6b12                   ;
+; ***************************************************************************************
+level20SwitchEnergyFieldSprite
+    lda #2                              ;
+    sta energyFieldSpriteOffset         ;
+    jmp drawLevel20EnergyFieldString    ;
 
-L6b4e
+; ***************************************************************************************
+toggleLevel20EnergyFields
     lda #4                              ;
-    sta $3f                             ;
-    lda $6b7a                           ;
+    sta energyFieldSpriteOffset         ;
+    lda level20EnergyFieldsTimer        ;
     and #$0f                            ;
     cmp #0                              ;
     bne swapEnergyFieldSpritesWith0C00  ;
-    jmp L6b12                           ;
+    jmp drawLevel20EnergyFieldString    ;
 
+; ***************************************************************************************
 swapEnergyFieldSpritesWith0C00
     ldx #$40                    ;
 -
@@ -2977,11 +3003,19 @@ swapEnergyFieldSpritesWith0C00
     rts                         ;
 
     ; $6b72
+; ***************************************************************************************
+level20EnergyFieldsString
     !byte $11, $02                                  ; COLOUR 2
     !byte $1f, $14, $0b                             ; TAB(20,11)
     !byte $1f, $1c, $02                             ; TAB(28, 2)
 
-    !byte $ea, $ea, $ea, $ea, $ea                   ;
+level20EnergyFieldsTimer
+    !byte $ea
+
+    !byte $ea, $ea, $ea                             ;
+
+airRemaining
+    !byte $ea                                       ;
 
 cheatModeEnabled
     !byte $00                                       ;
@@ -6382,88 +6416,83 @@ kongBeastSprite
     !byte %##......
 
     ; $7e80
-L7e80
-    lda $80                     ;
-    cmp #$13                    ;
-    beq L7e87                   ;
-    rts                         ;
+; ***************************************************************************************
+animateLevel19EnergyFields
+    lda currentLevel                    ;
+    cmp #19                             ;
+    beq level19EnergyFields             ;
+    rts                                 ;
 
-L7e87
-    inc L7eed                   ;
+level19EnergyFields
+    inc energyFieldTimer                ;
     jsr swapEnergyFieldSpritesWith0C00  ;
-    lda L7eed                   ;
-    and #$10                    ;
-    cmp #0                      ;
-    beq L7edd                   ;
-    lda #0                      ;
-    sta $3f                     ;
-    lda L7eed                   ;
-    and #1                      ;
-    cmp #0                      ;
-    beq L7ea7                   ;
-    lda #2                      ;
-    sta $3f                     ;
-L7ea7
-    lda #17                     ;
-    jsr OSWRCH                  ; COLOUR 2
-    lda #2                      ;
-    jsr OSWRCH                  ;
-    ldx #0                      ;
+    lda energyFieldTimer                ;
+    and #$10                            ;
+    cmp #0                              ;
+    beq toggleEnergyField               ;
+    lda #0                              ;
+    sta energyFieldSpriteOffset         ;
+    lda energyFieldTimer                ;
+    and #1                              ;
+    cmp #0                              ;
+    beq setEnergyFieldColour            ;
+    lda #2                              ;
+    sta energyFieldSpriteOffset         ;
+setEnergyFieldColour
+    lda #17                             ;
+    jsr OSWRCH                          ; COLOUR 2
+    lda #2                              ;
+    jsr OSWRCH                          ;
+    ldx #0                              ;
 -
-    lda L7eee,x                 ;
-    cmp #$2a                    ;
-    beq L7ec5                   ;
-L7eba
-    jsr OSWRCH                  ;
-    inx                         ;
-    cpx #16                     ;
-    bne -                       ;
+    lda energyFieldString,x             ;
+    cmp #$2a                            ;
+    beq drawEnergyField                 ;
+continueEnergyFieldString
+    jsr OSWRCH                          ;
+    inx                                 ;
+    cpx #16                             ;
+    bne -                               ; loop for length of message
     jmp swapEnergyFieldSpritesWith0C00  ;
 
-L7ec5
-    lda #$e0                    ;
-    clc                         ;
-    adc $3f                     ;
-    tay                         ;
-    iny                         ;
-    jsr OSWRCH                  ;
-    lda #$0a                    ;
-    jsr OSWRCH                  ;
-    lda #8                      ;
-    jsr OSWRCH                  ;
-    tya                         ;
-    jmp L7eba                   ;
+drawEnergyField
+    lda #$e0                            ;
+    clc                                 ;
+    adc energyFieldSpriteOffset         ;
+    tay                                 ;
+    iny                                 ;
+    jsr OSWRCH                          ;
+    lda #$0a                            ;
+    jsr OSWRCH                          ;
+    lda #8                              ;
+    jsr OSWRCH                          ;
+    tya                                 ;
+    jmp continueEnergyFieldString       ;
 
-L7edd
-    lda #4                      ;
-    sta $3f                     ;
-    lda L7eed                   ;
-    and #$0f                    ;
-    cmp #0                      ;
-    beq L7ea7                   ;
+toggleEnergyField
+    lda #4                              ;
+    sta energyFieldSpriteOffset         ;
+    lda energyFieldTimer                ;
+    and #$0f                            ;
+    cmp #0                              ;
+    beq setEnergyFieldColour            ;
     jmp swapEnergyFieldSpritesWith0C00  ;
 
-L7eed
-    !byte $ea                   ;
-L7eee
-    !byte $1f                   ;
-    !byte $0f                   ;
-    !byte $05                   ;
-    !byte $2a                   ;
-    !byte $1f                   ;
-    !byte $0f                   ;
-    !byte $09                   ;
-    !byte $2a                   ;
-    !byte $1f                   ;
-    !byte $18                   ;
-    !byte $05                   ;
-    !byte $2a                   ;
-    !byte $1f                   ;
-    !byte $18                   ;
-    !byte $09                   ;
-    !byte $2a                   ;
-    !byte $10                   ;
-    !byte $c0                   ;
+energyFieldTimer
+    !byte $ea                           ;
+energyFieldString
+    !byte $1f, 15, 5                    ; TAB(15, 5)
+    !byte $2a                           ;
+    !byte $1f, 15, 9                    ; TAB(15, 9)
+    !byte $2a                           ;
+    !byte $1f, 24, 5                    ;
+    !byte $2a                           ;
+    !byte $1f, 24, 9                    ; TAB(24, 9)
+    !byte $2a                           ;
+
+    ; [unused]
+    !byte $10                           ;
+    !byte $c0                           ;
 
     !byte %....#.#.             ; ....#.#...#.....
     !byte %...#.##.             ; ...#.##..##.#...

@@ -1,11 +1,19 @@
 ;
-; MINER2.bin ($4c00)
+; MINER2.a ($4c00)
 ;
 
 ; constants
 charSPACE                   = $20
 willyPageRight              = $05
 willyPageLeft               = $06
+
+; os memory locations
+vduTextCursorXPosition      = $0318
+vduTextCursorYPosition      = $0319
+
+OSWRCH                      = $ffee
+OSBYTE                      = $fff4
+OSWORD                      = $fff7
 
 ; memory locations
 levelDataOffset             = $70
@@ -19,16 +27,11 @@ keySprite                   = $2dfd
 decodeLevelByte             = $2dfe
 keyPositionCounter          = $2e89
 
-vduTextCursorXPosition      = $0318
-vduTextCursorYPosition      = $0319
-
-OSWRCH                      = $ffee
-OSBYTE                      = $fff4
-OSWORD                      = $fff7
-
+logicalScreenStart          = $3000                             ;
 channel3Frequency           = $3098                             ;
 screenStartAddress          = $3280                             ; start of visible screen
 screenEndAddress            = $6000                             ; end of visible screen
+backgroundCache             = $6ba0                             ; six cells copied from the screen before the player is drawn
 levelDefinitions            = $6c00                             ; start of level definitions
 
 miner4EntryPoint            = $619a                             ; See miner4.a
@@ -42,6 +45,7 @@ setModeStringEnd            = setModeString + 7                 ; See miner1.a
 whiteBackgroundString       = $74db                             ; See miner1.a
 whiteBackgroundStringEnd    = whiteBackgroundString + $1e       ; See miner1.a
 eugeneSprite                = $7b00
+energyFieldTimer            = $7eed
 
 L2e03 = $2e03
 S2e18 = $2e18
@@ -58,7 +62,7 @@ addToScore = $673c
 updateAirAndCheckExit = $646d
 death = $67d6
 S68df = $68df
-L7e80 = $7e80
+animateLevel19EnergyFields = $7e80
 
 * = $4c00
 
@@ -189,15 +193,15 @@ setMode2Address
 
 ; ***************************************************************************************
 calculateScreenAddrAndPlot
-    lda #$00                            ; }
+    lda #<logicalScreenStart            ; }
     sta $75                             ; }
-    lda #$30                            ; } start at logical screen address $3000
+    lda #>logicalScreenStart            ; } start at logical screen address $3000
     sta $76                             ; }
 
     lda #0                              ;
     sta spriteRowCounter                ;
 
-    ; calculate $3000 + 8*(X cell coordinate)
+    ; calculate logicalScreenStart + 8*(X cell coordinate)
     ; multiplication by repeated addition
     ldx #0                              ;
 -
@@ -360,6 +364,7 @@ add24ToSourceAddress
 return3
     rts                                 ;
 
+screenCharacterAPrime
     !byte $ea
 
 ; ***************************************************************************************
@@ -426,7 +431,7 @@ updatePlayer
 handleOnGround
     ldx #0                                  ; loop counter
 -
-    lda $1842,x                             ; }
+    lda willySpriteAddressLow,x             ; }
     sta $77,x                               ; }
     inx                                     ; } copy 5 bytes from ($1842-$1846) to ($77-$7B)
     cpx #5                                  ; }
@@ -464,7 +469,7 @@ handleOnGround
     lda screenCharacterA                    ;
     jsr isCrumbleBar                        ;
     cmp #1                                  ;
-    beq updateCrumberBar                    ;
+    beq updateLeftCrumbleBar                    ;
 afterUpdateCrumberBar
     lda $75                                 ;
     clc                                     ;
@@ -494,7 +499,7 @@ afterUpdateCrumberBar
 
     ; data for pseudo pc $0900-$0cff is EORing with #$AA
 !xor $aa {
-
+spriteStart
     ; skull and crossbones
     !byte %.....###            ;      ######
     !byte %....####            ;     ########
@@ -1648,6 +1653,7 @@ afterUpdateCrumberBar
     !byte %........
     !byte %........
     !byte %........
+spriteEnd
     }
 }
 
@@ -1655,7 +1661,6 @@ afterUpdateCrumberBar
 !xor $55 {
 
     ; $1100
-L1100
     sta $75                             ;
     lda $76                             ;
     adc #0                              ;
@@ -1665,35 +1670,38 @@ L1100
     cmp #1                              ;
     bne checkForConveyors               ;
 
-    ; crumble the crumble bar (in the cache)
+    ; crumble the right hand crumble bar (in the background cache)
     ldx #7                              ; loop counter
 -
-    lda $6bef,x                         ;
-    sta $6bf0,x                         ; copy one row to the next
-    lda $6bf7,x                         ;
-    sta $6bf8,x                         ;
+    ; $50 is to get to the characters underneath the players feet
+    lda backgroundCache + $50 - 1,x     ;
+    sta backgroundCache + $50 + 0,x     ; copy one pixel row to the next
+    lda backgroundCache + $50 + 7,x     ;
+    sta backgroundCache + $50 + 8,x     ;
     dex                                 ;
     bne -                               ;
 
     lda #0                              ;
-    sta $6bf0                           ; zero the top row of crumble bar
-    sta $6bf8                           ;
+    sta backgroundCache + $50 + 0       ; zero the top row of crumble bar
+    sta backgroundCache + $50 + 8       ;
     jsr showCrumble                     ;
     jmp checkForConveyors               ;
 
 ; ***************************************************************************************
-updateCrumberBar
+updateLeftCrumbleBar
     ldx #7                              ;
 -
-    lda $6bdf,x                         ;
-    sta $6be0,x                         ;
-    lda $6be7,x                         ;
-    sta $6be8,x                         ;
+    ; $40 is to get to the characters underneath the players feet
+    lda backgroundCache + $40 - 1,x     ;
+    sta backgroundCache + $40 + 0,x     ; copy one pixel row to the next
+    lda backgroundCache + $40 + 7,x     ;
+    sta backgroundCache + $40 + 8,x     ;
     dex                                 ;
     bne -                               ;
+
     lda #0                              ;
-    sta $6be0                           ;
-    sta $6be8                           ;
+    sta backgroundCache + $40 + 0       ; zero the top row of crumble bar
+    sta backgroundCache + $40 + 8       ;
     jsr showCrumble                     ;
     jmp afterUpdateCrumberBar           ;
 
@@ -1721,7 +1729,7 @@ onConveyor                              ;
     lda willyIsOnConveyor               ;
     cmp #1                              ;
     bne checkPlayerY                    ;
-    lda $1853                           ;
+    lda willyDirectionAgainstFlowOfConveyor ;
     cmp #0                              ;
     bne checkPlayerY                    ;
     jmp checkForUpdatePlayerOnConveyor  ;
@@ -1854,7 +1862,7 @@ checkForUpdatePlayerOnConveyor
     bne L127a                               ;
 L126f
     lda willyDeltaX                         ;
-    sta $1853                               ;
+    sta willyDirectionAgainstFlowOfConveyor ;
     lda #1                                  ;
     sta willyIsOnConveyor                   ;
 L127a
@@ -1871,13 +1879,13 @@ L127a
     cmp conveyorDirection                   ;
     bne L1297                               ;
     lda #$fe                                ;
-    sta $1853                               ;
+    sta willyDirectionAgainstFlowOfConveyor ;
 L1297
     lda willyFalling                        ;
     cmp #1                                  ;
     bne L12b0                               ;
     lda #$fe                                ;
-    sta $1853                               ;
+    sta willyDirectionAgainstFlowOfConveyor ;
 L12a3
     lda newPlayerPixelX                     ;
     sec                                     ;
@@ -1887,7 +1895,7 @@ L12a3
 
 ; ***************************************************************************************
 L12b0
-    lda $1853                       ;
+    lda willyDirectionAgainstFlowOfConveyor ;
     cmp #$fe                        ;
     bne L12c4                       ;
     lda willyDeltaX                 ;
@@ -1906,9 +1914,9 @@ L12c4
     bne L12d8                       ;
 L12d3
     lda #0                          ;
-    sta $1853                       ;
+    sta willyDirectionAgainstFlowOfConveyor ;
 L12d8
-    lda $1853                       ;
+    lda willyDirectionAgainstFlowOfConveyor ;
     cmp #0                          ;
     bne L12e9                       ;
     lda willyIsOnConveyor           ;
@@ -1998,7 +2006,7 @@ foundWallSoCancelJump
 ; ***************************************************************************************
 L1375
     lda #0                          ;
-    sta $105f                       ;
+    sta screenCharacterAPrime       ;
     sta playerYNegativeOffsetWithinCell ;
     lda newPlayerPixelY             ;
     and #7                          ;
@@ -2095,7 +2103,7 @@ L1423
 
     lda #$00                            ;
     sta $79                             ; }
-    lda #$0d                            ; } $0d00?
+    lda #$0d                            ; } $0d00 (?)
     sta $7a                             ; }
 
     lda newPlayerPixelX                 ;
@@ -2148,7 +2156,7 @@ L1455
     ldx #0                              ;
 -
     lda $77,x                           ;
-    sta $1842,x                         ;
+    sta willySpriteAddressLow,x         ;
     inx                                 ;
     cpx #4                              ;
     bne -                               ;
@@ -2551,8 +2559,8 @@ checkWhatsLeftOfThePlayer
     lsr                             ;
     lsr                             ;
     jsr OSWRCH                      ;
-
     jsr readTwoCharactersVertically ;
+
     lda newPlayerPixelY             ;
     and #7                          ;
     cmp #0                          ;
@@ -2560,13 +2568,13 @@ checkWhatsLeftOfThePlayer
 
     ; if we are not vertically aligned with a cell then we need to check another cell
     lda screenCharacterB            ;
-    sta $105f                       ;
-    lda #$0a                        ; move down one line
+    sta screenCharacterAPrime       ;
+    lda #10                         ; VDU 10 (down)
     jsr OSWRCH                      ;
     jsr readTwoCharactersVertically ;
 
 +
-    lda $105f                       ;
+    lda screenCharacterAPrime       ;
     cmp #$20                        ;
     bne L1756                       ; if (not a space) then branch (check for collision)
 
@@ -2589,7 +2597,7 @@ L1756
     cmp #$8f                        ;
     beq L176c                       ; if (wall) then branch
 
-    lda $105f                       ;
+    lda screenCharacterAPrime       ;
     cmp #$8f                        ;
     beq L176c                       ; if (wall) then branch
     rts                             ;
@@ -2623,18 +2631,23 @@ checkWhatsRightOfThePlayer
     and #7                          ;
     cmp #0                          ;
     beq +                           ;
+
+    ; if we are not vertically aligned with a cell then we need to check another cell
     lda screenCharacterB            ;
-    sta $105f                       ;
+    sta screenCharacterAPrime       ;
     lda #10                         ; VDU 10 (down)
     jsr OSWRCH                      ;
     jsr readTwoCharactersVertically ;
+
 +
-    lda $105f                       ;
+    lda screenCharacterAPrime       ;
     cmp #$20                        ;
-    bne L17bf                       ;
+    bne L17bf                       ; if (not a space) then branch (check for collision)
+
     lda screenCharacterB            ;
     cmp #$20                        ;
-    bne L17bf                       ;
+    bne L17bf                       ; if (not a space) then branch (check for collision)
+
     lda jumpPhase                   ;
     cmp #5                          ;
     bne L17bf                       ;
@@ -2644,13 +2657,15 @@ checkWhatsRightOfThePlayer
 L17bf
     lda screenCharacterA            ;
     cmp #$8f                        ;
-    beq L17d5                       ;
+    beq L17d5                       ; if (wall) then branch
+
     lda screenCharacterB            ;
     cmp #$8f                        ;
-    beq L17d5                       ;
-    lda $105f                       ;
+    beq L17d5                       ; if (wall) then branch
+
+    lda screenCharacterAPrime       ;
     cmp #$8f                        ;
-    beq L17d5                       ;
+    beq L17d5                       ; if (wall) then branch
     rts                             ;
 
 ; ***************************************************************************************
@@ -2690,7 +2705,7 @@ L17f6
 
 ; ***************************************************************************************
 L180e
-    lda conveyorDirection                       ;
+    lda conveyorDirection           ;
     cmp #$ff                        ;
     bne L1829                       ;
     lda willyAnimationEOR           ;
@@ -2731,47 +2746,53 @@ willyGraphicsPage
 willyChangedDirection
     !byte $ea
 
-    !byte $00, $00, $00, $00
+willySpriteAddressLow
+    !byte $00
+willySpriteAddressHigh
+    !byte $00
+    !byte $00
+    !byte $00
 
 hasDrawnConveyors
-    !byte $ea
+    !byte $ea                       ;
 willyFalling
-    !byte $ea
+    !byte $ea                       ;
 willyJustLandedOnConveyor
-    !byte $ea
+    !byte $ea                       ;
 
     ; $1849
 screenCharacterA
-    !byte $ea
+    !byte $ea                       ;
 screenCharacterB
-    !byte $ea
+    !byte $ea                       ;
 
     ; $184b
 isInAir
-    !byte $ea
+    !byte $ea                       ;
 playerHeightOnTakeOff
-    !byte $ea
+    !byte $ea                       ;
 jumpPhase
-    !byte $ea
+    !byte $ea                       ;
 jumpDirection
-    !byte $ea
+    !byte $ea                       ;
 spriteRowCounter
-    !byte $ea
+    !byte $ea                       ;
 
     ; $1850
 playerXOffsetWithinCell
-    !byte $ea
+    !byte $ea                       ;
 playerYNegativeOffsetWithinCell
-    !byte $ea
+    !byte $ea                       ;
 willyIsOnConveyor
-    !byte $ea
-
-    !byte $ea
+    !byte $ea                       ;
+willyDirectionAgainstFlowOfConveyor
+    !byte $ea                       ; $01 or $ff when moving against the flow of the conveyor
 
 conveyorDirection
-    !byte $ff
+    !byte $ff                       ;
 
-    !byte $ea
+
+    !byte $ea                       ; [unused]
 
     ; $1856
     ; vertical movements at each stage of a jump
@@ -2962,7 +2983,7 @@ readOrWriteScreen
 
 ; ***************************************************************************************
 readOrWriteCache
-    lda $6ba0,y                         ; off-the-visible-screen storage area
+    lda backgroundCache,y               ; off-the-visible-screen storage area
     rts                                 ;
 
 ; ***************************************************************************************
@@ -3035,10 +3056,11 @@ S19d2
     sta $77                     ; } address $0400, source address for Eugene
     lda #$04                    ; }
     sta $78                     ; }
-    lda #0                      ;
-    sta $79                     ;
-    lda #$2f                    ; $2f00?
-    sta $7a                     ;
+
+    lda #0                      ; }
+    sta $79                     ; }
+    lda #$2f                    ; } $2f00 (?)
+    sta $7a                     ; }
     rts
 
 ; ***************************************************************************************
@@ -3076,7 +3098,7 @@ L1a12
     jmp plot                    ;
 
 ; ***************************************************************************************
-L1a1b
+return7
     rts                         ;
 
 ; ***************************************************************************************
@@ -3118,277 +3140,283 @@ L1a50
 
 ; ***************************************************************************************
 L1a62
-    lda currentLevel            ;
-    cmp #14                     ;
-    bne L1a6d                   ;
-    lda #0                      ;
-    sta $1c54                   ;
+    lda currentLevel                    ;
+    cmp #14                             ;
+    bne L1a6d                           ;
+    lda #0                              ;
+    sta $1c54                           ;
 L1a6d
-    lda #0                      ;
-    sta $1d95                   ;
-    ldx #0                      ;
-    stx $1c4f                   ;
+    lda #0                              ;
+    sta currentGuardianColour           ;
+    ldx #0                              ;
+    stx currentGuardianIndex            ;
 L1a77
-    lda L1dad,x                 ;
-    cmp #$ff                    ;
-    beq L1a1b                   ;
-    sta $1c4b                   ;
-    inx                         ;
-    jsr S1d9a                   ;
-    sta $1c4c                   ;
-    inx                         ;
-    jsr S1d9a                   ;
-    sta $1c4d                   ;
-    inx                         ;
-    jsr S1d9a                   ;
-    sta $1c4e                   ;
-    stx $1c4f                   ;
-    lda $1c4b                   ;
-    and #$40                    ;
-    cmp #$40                    ;
-    beq L1aa7                   ;
-    lda #2                      ;
-    jmp L1aa9                   ;
+    lda currentVerticalGuardians,x      ;
+    cmp #$ff                            ;
+    beq return7                         ;
+    sta currentGuardianX                ; x coordinate + top bit for direction + bit 6 for speed
+    inx                                 ;
+    jsr readByteFromVerticalGuardians   ;
+    sta currentGuardianY                ; y coordinate
+    inx                                 ;
+    jsr readByteFromVerticalGuardians   ;
+    sta currentGuardianExtent1          ; Y extent 1
+    inx                                 ;
+    jsr readByteFromVerticalGuardians   ;
+    sta currentGuardianExtent2          ; Y extent 2
+    stx currentGuardianIndex            ;
+    lda currentGuardianX                ;
+    and #$40                            ;
+    cmp #$40                            ;
+    beq fastGuardian                    ;
+    lda #2                              ; set slow speed
+    jmp +                               ;
 
 ; ***************************************************************************************
-L1aa7
-    lda #4                      ;
-L1aa9
-    sta $1c57                   ;
-    lda $1d95                   ;
+fastGuardian
+    lda #4                      ; set fast speed
++
+    sta currentGuardianSpeed    ;
+    lda currentGuardianColour   ;
     and #3                      ;
     tax                         ;
-    lda L1dbd,x                 ;
+    lda guardianColourMasks,x   ;
     sta spriteColourMask        ; set sprite colour
-    lda $1c4d                   ;
+    lda currentGuardianExtent1  ;
     and #$80                    ;
     cmp #$80                    ;
     bne L1ac4                   ;
-    jmp L1b97                   ;
+    jmp drawSkylabCrashing      ;
 
 ; ***************************************************************************************
 L1ac4
     lda currentLevel            ;
     cmp #19                     ;
-    bne L1ad6                   ;
+    bne +                       ; if (not level 19) then branch
     lda spriteColourMask        ;
     cmp #$ff                    ;
-    bne L1ad6                   ;
-    lda #$f0                    ; sprite colour 2
+    bne +                       ; if (not colour 3) then branch
+    lda #$f0                    ; make the meteors in the Meteor Storm colour 2
     sta spriteColourMask        ;
-L1ad6
-    lda $1c4b                   ;
++
+    lda currentGuardianX        ;
     and #$3f                    ;
     asl                         ;
     asl                         ;
     clc                         ;
     adc #$10                    ;
     tax                         ;
-    lda $1c4c                   ;
+    lda currentGuardianY        ;
     clc                         ;
     adc #8                      ;
     tay                         ;
     lda #5                      ;
-    jsr plot                    ;
-    lda $1c4b                   ;
-    and #$80                    ;
-    cmp #$80                    ;
-    beq L1b03                   ;
-    lda $1c4c                   ;
+    jsr plot                    ; plot (type 5)
+    lda currentGuardianX        ; }
+    and #$80                    ; } check current direction
+    cmp #$80                    ; }
+    beq moveGuardianDown        ; if (down) then branch
+
+    ; move guardian up
+    lda currentGuardianY        ;
     sec                         ;
-    sbc $1c57                   ;
-    sta $1c4c                   ;
-    jmp L1b0d                   ;
+    sbc currentGuardianSpeed    ;
+    sta currentGuardianY        ;
+    jmp drawGuardian            ;
 
 ; ***************************************************************************************
-L1b03
-    lda $1c4c                   ;
+moveGuardianDown
+    lda currentGuardianY        ;
     clc                         ;
-    adc $1c57                   ;
-    sta $1c4c                   ;
-L1b0d
-    lda $1c4b                   ;
+    adc currentGuardianSpeed    ;
+    sta currentGuardianY        ;
+
+drawGuardian
+    lda currentGuardianX        ;
     and #$3f                    ;
     asl                         ;
     asl                         ;
     clc                         ;
     adc #$10                    ;
-    tax                         ;
-    lda $1c4c                   ;
+    tax                         ; X = (guardianX * 4) + 16
+    lda currentGuardianY        ;
     clc                         ;
     adc #8                      ;
-    tay                         ;
+    tay                         ; Y = (guardianY + 8)
     lda $1c54                   ;
     sta $77                     ;
     lda $1c55                   ;
     sta $78                     ;
     lda #4                      ;
-    jsr plot                    ;
-    lda $1c4c                   ;
-    cmp $1c4d                   ;
-    beq L1b73                   ;
-    cmp $1c4e                   ;
-    beq L1b73                   ;
-L1b3b
-    ldx $1c4f                   ;
-    dex                         ;
-    dex                         ;
-    dex                         ;
-    lda $1c4b                   ;
-    jsr S1d9e                   ;
-    inx                         ;
-    lda $1c4c                   ;
-    jsr S1d9e                   ;
-    inx                         ;
-    lda $1c4d                   ;
-    jsr S1d9e                   ;
-    inx                         ;
-    lda $1c4e                   ;
-    jsr S1d9e                   ;
-    inx                         ;
-    stx $1c4f                   ;
-    lda $1d95                   ;
-    clc                         ;
-    adc #1                      ;
-    and #3                      ;
-    sta $1d95                   ;
-    cpx #$10                    ;
-    beq L1b72                   ;
-    jmp L1a77                   ;
+    jsr plot                    ; draw guardian
+
+    lda currentGuardianY        ;
+    cmp currentGuardianExtent1  ;
+    beq bounceCurrentGuardian   ;
+    cmp currentGuardianExtent2  ;
+    beq bounceCurrentGuardian   ;
+
+updateCurrentGuardian
+    ldx currentGuardianIndex            ;
+    dex                                 ;
+    dex                                 ;
+    dex                                 ;
+    lda currentGuardianX                ;
+    jsr writeByteToVerticalGuardians    ;
+    inx                                 ;
+    lda currentGuardianY                ;
+    jsr writeByteToVerticalGuardians    ;
+    inx                                 ;
+    lda currentGuardianExtent1          ;
+    jsr writeByteToVerticalGuardians    ;
+    inx                                 ;
+    lda currentGuardianExtent2          ;
+    jsr writeByteToVerticalGuardians    ;
+    inx                                 ;
+    stx currentGuardianIndex            ;
+    lda currentGuardianColour           ;
+    clc                                 ;
+    adc #1                              ;
+    and #3                              ;
+    sta currentGuardianColour           ;
+    cpx #$10                            ;
+    beq L1b72                           ;
+    jmp L1a77                           ;
 
 ; ***************************************************************************************
 L1b72
     rts                         ;
 
 ; ***************************************************************************************
-L1b73
+bounceCurrentGuardian
     lda currentLevel            ;
     cmp #14                     ;
-    beq L1b84                   ;
-    lda $1c4b                   ;
-    eor #$80                    ;
-    sta $1c4b                   ;
-    jmp L1b3b                   ;
+    beq crashLand               ; if (skylab landing bay) then don't bounce, crash land
+    lda currentGuardianX        ; }
+    eor #$80                    ; } flip direction
+    sta currentGuardianX        ; }
+    jmp updateCurrentGuardian   ;
 
 ; ***************************************************************************************
-L1b84
-    lda $1c4d                   ;
-    eor #$80                    ;
-    sta $1c4d                   ;
-    jsr S1bf6                   ;
-    lda #0                      ;
-    sta $1c51,y                 ;
-    jmp L1b3b                   ;
+crashLand
+    lda currentGuardianExtent1      ;
+    eor #$80                        ;
+    sta currentGuardianExtent1      ;
+    jsr guardianGetAnimationIndex   ;
+    lda #0                          ;
+    sta guardianSpriteOffsets,y     ;
+    jmp updateCurrentGuardian       ;
 
 ; ***************************************************************************************
-L1b97
-    jsr S1bf6
-    lda $1c51,y
-    clc
-    adc #1
-    sta $1c51,y
-    asl
-    asl
-    asl
-    asl
-    asl
-    asl
-    sta $77
-    sty $1c50
-    jsr S1c16
-    lda $1c4b
-    and #$3f
-    asl
-    asl
-    clc
-    adc #$10
-    tax
-    lda $1c4c
-    clc
-    adc #8
-    tay
-    lda #3
-    jsr plot
-    ldy $1c50
-    lda $1c51,y
-    cmp #6
-    beq L1bd5
-    jmp L1b3b
+drawSkylabCrashing
+    jsr guardianGetAnimationIndex   ;
+    lda guardianSpriteOffsets,y     ; }
+    clc                             ; }
+    adc #1                          ; } add one to sprite offsets
+    sta guardianSpriteOffsets,y     ; }
+    asl                             ;
+    asl                             ;
+    asl                             ;
+    asl                             ;
+    asl                             ;
+    asl                             ;
+    sta $77                         ; set source address (low) to 64 * spriteOffset
+    sty tempGuardianSpriteOffset    ;
+    jsr S1c16                       ;
+    lda currentGuardianX            ;
+    and #$3f                        ;
+    asl                             ;
+    asl                             ;
+    clc                             ;
+    adc #$10                        ;
+    tax                             ;
+    lda currentGuardianY            ;
+    clc                             ;
+    adc #8                          ;
+    tay                             ;
+    lda #3                          ;
+    jsr plot                        ;
+    ldy tempGuardianSpriteOffset    ;
+    lda guardianSpriteOffsets,y     ;
+    cmp #6                          ;
+    beq L1bd5                       ;
+    jmp updateCurrentGuardian       ;
 
 ; ***************************************************************************************
 L1bd5
     lda #0
-    sta $1c4c
-    lda $1c4d
+    sta currentGuardianY
+    lda currentGuardianExtent1
     eor #$80
-    sta $1c4d
-    lda $1c4b
+    sta currentGuardianExtent1
+    lda currentGuardianX
     ora #$80
     clc
     adc #8
-    sta $1c4b
+    sta currentGuardianX
     and #$3f
     cmp #$20
     bcs L1c0a
-    jmp L1b3b
+    jmp updateCurrentGuardian
 
 ; ***************************************************************************************
-S1bf6
-    lda $1c4c
-    cmp #$48
-    beq L1c04
-    cmp #$38
-    beq L1c07
-    ldy #2
-    rts
+guardianGetAnimationIndex
+    lda currentGuardianY            ;
+    cmp #$48                        ;
+    beq setYZero                    ;
+    cmp #$38                        ;
+    beq setYOne                     ;
+
+    ldy #2                          ;
+    rts                             ;
 
 ; ***************************************************************************************
-L1c04
-    ldy #0
-    rts
+setYZero
+    ldy #0                          ;
+    rts                             ;
 
 ; ***************************************************************************************
-L1c07
-    ldy #1
-    rts
+setYOne
+    ldy #1                          ;
+    rts                             ;
 
 ; ***************************************************************************************
 L1c0a
-    lda $1c4b
+    lda currentGuardianX
     sec
     sbc #$20
-    sta $1c4b
-    jmp L1b3b
+    sta currentGuardianX
+    jmp updateCurrentGuardian
 
 ; ***************************************************************************************
 S1c16
-    jsr S1bf6
-    lda $1c51,y
+    jsr guardianGetAnimationIndex
+    lda guardianSpriteOffsets,y
     cmp #4
     beq L1c2d
     cmp #5
     beq L1c36
     cmp #6
     beq L1c3f
-    lda #4
-    sta $78
-    rts
+    lda #$04                ; $0400
+    sta $78                 ;
+    rts                     ;
 
 ; ***************************************************************************************
 L1c2d
-    lda #$80
-    sta $77
-    lda #$7a
-    sta $78
-    rts
+    lda #$80                ;
+    sta $77                 ; $7a80
+    lda #$7a                ;
+    sta $78                 ;
+    rts                     ;
 
 ; ***************************************************************************************
 L1c36
-    lda #$c0
-    sta $77
-    lda #$7a
-    sta $78
-    rts
+    lda #$c0                ;
+    sta $77                 ; $7ac0
+    lda #$7a                ;
+    sta $78                 ;
+    rts                     ;
 
 ; ***************************************************************************************
 L1c3f
@@ -3398,8 +3426,27 @@ L1c3f
     sta $78
     rts
 
-    !byte $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea
-    !byte $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea
+    ; $1c48
+    !byte $ea, $ea, $ea
+
+currentGuardianX
+    !byte $ea                       ;
+currentGuardianY
+    !byte $ea                       ;
+currentGuardianExtent1
+    !byte $ea                       ;
+currentGuardianExtent2
+    !byte $ea                       ;
+currentGuardianIndex
+    !byte $ea
+
+    ; $1c50
+tempGuardianSpriteOffset
+    !byte $ea
+guardianSpriteOffsets
+    !byte $ea, $ea, $ea, $ea, $ea, $ea
+currentGuardianSpeed
+    !byte $ea
 
 ; ***************************************************************************************
 copyEugeneIntoMODE1Format
@@ -3542,97 +3589,104 @@ return4
 
 ; ***************************************************************************************
 L1d32
-    jsr copyEugeneIntoMODE1Format   ;
-    lda currentLevel            ;
-    cmp #9                      ; Levels 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20
-    beq laterLevelsSpecialStuff ; have this feature
-    cmp #11                     ;
-    bcc return4                 ;
+    jsr copyEugeneIntoMODE1Format       ;
+    lda currentLevel                    ;
+    cmp #9                              ; Levels 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20
+    beq handleVerticalGuardians         ; have vertical guardians
+    cmp #11                             ;
+    bcc return4                         ; if (currentLevel < 11) then branch (return)
 
-laterLevelsSpecialStuff
-    ldx #8                      ;
-    lda #0                      ;
+handleVerticalGuardians
+    ldx #8                              ;
+    lda #0                              ;
 -
-    clc                         ;
-    adc #8                      ; multiplication by repeated addition
-    inx                         ;
-    cpx currentLevel            ;
-    bne -                       ;
+    clc                                 ;
+    adc #8                              ; multiplication by repeated addition
+    inx                                 ;
+    cpx currentLevel                    ;
+    bne -                               ;
 
-    clc                             ;
-    adc #<specialLevelData          ;
-    sta readSpecialLevelData + 1    ;
-    ldx #0                      ; loop counter
-    ldy #0                      ;
+    clc                                 ;
+    adc #<verticalGuardians             ;
+    sta readVerticalGuardiansByte + 1   ; addr = verticalGuardians + 8 * (currentLevel-8)
 
+    ldx #0                              ; loop counter
+    ldy #0                              ;
 -
-    jsr readSpecialLevelData    ;
-    cmp #$ff                    ;
-    beq L1d91                   ; if (terminator) then branch
-    sta L1dad,y                 ; copy
-    iny                         ;
-    inx                         ;
-    jsr readSpecialLevelData    ;
-    sta L1dad,y                 ; copy
-    iny                         ;
-    sta L1dad,y                 ; copy
-    iny                         ;
-    sta L1dad,y                 ; copy
+    jsr readVerticalGuardiansByte       ;
+    cmp #$ff                            ;
+    beq finishUpVerticalGuardians       ; if (terminator) then branch
+    sta currentVerticalGuardians,y      ; write x coordinate of vertical guardian. top bit is direction (clear = up, set = down)
+    iny                                 ;
+    inx                                 ;
+    jsr readVerticalGuardiansByte       ;
+    sta currentVerticalGuardians,y      ; write byte 1: copy byte 1
+    iny                                 ;
+    sta currentVerticalGuardians,y      ; write byte 2: copy byte 1
+    iny                                 ;
+    sta currentVerticalGuardians,y      ; write byte 3: copy byte 1
 
-    lda L1dad,y                 ; [redundant]
-    and #$0f                    ;
-    asl                         ;
-    asl                         ;
-    asl                         ;
-    sta L1dad,y                 ; bottom nybble multiplied by eight
+    lda currentVerticalGuardians,y      ; [redundant]
+    and #$0f                            ;
+    asl                                 ;
+    asl                                 ;
+    asl                                 ;
+    sta currentVerticalGuardians,y      ; write first extent (bottom nybble of byte 1 multiplied by eight)
 
-    dey                         ;
-    lda L1dad,y                 ;
-    and #$f0                    ;
-    lsr                         ; top nybble divided by two
-    sta L1dad,y                 ;
+    dey                                 ;
+    lda currentVerticalGuardians,y      ;
+    and #$f0                            ;
+    lsr                                 ;
+    sta currentVerticalGuardians,y      ; write second extent (top nybble of byte 1 divided by two)
 
-    dey                         ;
-    sta L1dad,y                 ;
-    iny                         ;
-    iny                         ;
-    iny                         ;
-    inx                         ;
-    cpx #8                      ; loop eight times
-    bne -                       ;
-    rts                         ;
-
-; ***************************************************************************************
-L1d91
-    sta L1dad,y                 ;
-    rts                         ;
-
-    !byte $ea                   ;
+    dey                                 ;
+    sta currentVerticalGuardians,y      ; write y coordinate (top nybble of byte 1 divided by two)
+    iny                                 ;
+    iny                                 ;
+    iny                                 ; Y is effectively moved on four bytes in aggregate
+    inx                                 ;
+    cpx #8                              ; loop eight times
+    bne -                               ;
+    rts                                 ;
 
 ; ***************************************************************************************
-readSpecialLevelData
-    lda specialLevelData + 8,x  ;
-    rts                         ;
+finishUpVerticalGuardians
+    sta currentVerticalGuardians,y      ;
+    rts                                 ;
 
 ; ***************************************************************************************
-S1d9a
-    lda L1dad,x                 ;
-    rts                         ;
+currentGuardianColour
+    !byte $ea                           ;
 
 ; ***************************************************************************************
-S1d9e
-    sta L1dad,x                 ;
-    rts                         ;
+readVerticalGuardiansByte
+    lda verticalGuardians + 8,x         ;
+    rts                                 ;
+
+; ***************************************************************************************
+readByteFromVerticalGuardians
+    lda currentVerticalGuardians,x      ;
+    rts                                 ;
+
+; ***************************************************************************************
+writeByteToVerticalGuardians
+    sta currentVerticalGuardians,x      ;
+    rts                                 ;
 
 ; ***************************************************************************************
 verticalGuardiansSpritesArray
     ; vertical guardians for the later levels
     ; Level     11,  12,  13,  14,  15,  16,  17,  18,  19,  20
     !byte $ea, $03, $00, $04, $05, $06, $00, $07, $0a, $08, $04
-L1dad
-    !byte $ea, $ea, $ea
-    !byte $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea
-L1dbd
+
+    ; Each vertical guardian has four bytes in this table
+    ; <x coord + top bit for direction + bit 6 for speed>, <y coord>, <Y extent 1>, <Y extent 2>
+currentVerticalGuardians
+    !byte $ea, $ea, $ea, $ea
+    !byte $ea, $ea, $ea, $ea
+    !byte $ea, $ea, $ea, $ea
+    !byte $ea, $ea, $ea, $ea
+guardianColourMasks
     !byte $f0, $ff, $0f, $f0
 
 energyFieldSprites
@@ -4172,7 +4226,7 @@ guardianSetForEachLevel
 
 ; ***************************************************************************************
 updateLevel19Special
-    jsr updateLevel19EnergyBars     ;
+    jsr updateLevel19EnergyFields   ;
 L20fd
     ldx #0                          ; loop counter
 L20ff
@@ -4340,45 +4394,45 @@ S221a
     jmp OSWRCH                      ;
 
 ; ***************************************************************************************
-updateLevel19EnergyBars
-    lda $7eed                       ;
+updateLevel19EnergyFields
+    lda energyFieldTimer            ;
     and #$10                        ;
     cmp #0                          ;
     beq +                           ;
 
     ldx #$3f                        ;
     ldy #$f2                        ;
-    jsr S2241                       ;
+    jsr checkForCollisionLevel19    ;
 
     ldx #$49                        ;
     ldy #$f2                        ;
-    jsr S2241                       ;
+    jsr checkForCollisionLevel19    ;
 
 +
-    jmp L7e80                       ;
+    jmp animateLevel19EnergyFields  ;
 
 ; ***************************************************************************************
-S2241
-    stx S2277 + 2                   ;
-    sty S2277 + 1                   ;
+checkForCollisionLevel19
+    stx readScreenByte + 2          ;
+    sty readScreenByte + 1          ;
     ldx #0                          ;
-    jsr S2277                       ;
-    and #$80                        ;
+    jsr readScreenByte              ;
+    and #$80                        ; top bit set indicates collision
     cmp #0                          ;
     bne deathJumper2                ;
     ldx #7                          ;
-    jsr S2277                       ;
-    and #1                          ;
+    jsr readScreenByte              ;
+    and #1                          ; bottom bit set indicates collision
     cmp #0                          ;
     bne deathJumper2                ;
     ldx #$90                        ;
-    jsr S2277                       ;
-    and #$80                        ;
+    jsr readScreenByte              ;
+    and #$80                        ; top bit set indicates collision
     cmp #0                          ;
     bne deathJumper2                ;
     ldx #$97                        ;
-    jsr S2277                       ;
-    and #1                          ;
+    jsr readScreenByte              ;
+    and #1                          ; bottom bit set indicates collision
     cmp #0                          ;
     bne deathJumper2                ;
     rts                             ;
@@ -4388,7 +4442,7 @@ deathJumper2
     jmp death                       ;
 
 ; ***************************************************************************************
-S2277
+readScreenByte
     lda $ffff,x                     ;
     rts                             ;
 
@@ -4572,22 +4626,32 @@ creditsMessage
     !byte 31                        ; TAB...
 creditsMessageEnd
 
+    !byte $00                                       ; [unused?]
+
 ; ***************************************************************************************
-    !byte $00
-specialLevelData
-    !byte $00, $00, $00, $00, $00, $00, $00, $00
-    !byte $85, $0d, $cb, $0d, $94, $0d, $d9, $0d
-    !byte $00, $00, $00, $00, $00, $00, $00, $00
-    !byte $83, $4d, $8c, $07, $95, $6d, $da, $0d
-    !byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-    !byte $85, $1d, $ff, $ff, $ff, $ff, $ff, $ff
-    !byte $c1, $09, $8b, $04, $d5, $07, $ff, $ff
-    !byte $89, $4d, $8f, $5d, $d5, $4d, $ff, $ff
-    !byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-    !byte $83, $8d, $4a, $c0, $13, $80, $db, $0c
-    !byte $c5, $1d, $8a, $1d, $d4, $1d, $99, $1d
-    !byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
-    !byte $82, $06, $da, $4d, $ff, $ff, $ff, $ff
+;
+; Later levels (9 and 11 upwards) can have up to four vertical guardians
+;
+; Guardian position data is packed into two bytes:
+;
+; <x coordinate>    x position in cells, top bit specifies initial direction, (clear = up, set = down)
+; <y coordinates>   top nybble is the initial Y and also the second extent, bottom nybble is the first extent
+;
+; ***************************************************************************************
+verticalGuardians
+    !byte $00, $00, $00, $00, $00, $00, $00, $00    ; [unused]
+    !byte $85, $0d, $cb, $0d, $94, $0d, $d9, $0d    ; level 9
+    !byte $00, $00, $00, $00, $00, $00, $00, $00    ; [unused]
+    !byte $83, $4d, $8c, $07, $95, $6d, $da, $0d    ; level 11
+    !byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff    ; level 12
+    !byte $85, $1d, $ff, $ff, $ff, $ff, $ff, $ff    ; level 13
+    !byte $c1, $09, $8b, $04, $d5, $07, $ff, $ff    ; level 14
+    !byte $89, $4d, $8f, $5d, $d5, $4d, $ff, $ff    ; level 15
+    !byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff    ; level 16
+    !byte $83, $8d, $4a, $c0, $13, $80, $db, $0c    ; level 17
+    !byte $c5, $1d, $8a, $1d, $d4, $1d, $99, $1d    ; level 18
+    !byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff    ; level 19
+    !byte $82, $06, $da, $4d, $ff, $ff, $ff, $ff    ; level 20
 
 bylineMessage
     !byte 19, 17                    ; ...(19,17)

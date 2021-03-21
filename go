@@ -5,9 +5,9 @@ set -e
 ../tools/acme -o new/miner2 -r miner2.txt --vicelabels miner2.sym miner2.a
 ../tools/acme -o new/miner3 -r miner3.txt --vicelabels miner3.sym miner3.a
 ../tools/acme -o new/miner4 -r miner4.txt --vicelabels miner4.sym miner4.a
-diff new/manic ./original/Disc011-ManicMiner.ssd.d/MANIC
 if [ "$1" != "skip" ]; then
     echo Checking diffs...
+    diff new/manic  ./original/Disc011-ManicMiner.ssd.d/MANIC
     diff new/miner1 ./original/Disc011-ManicMiner.ssd.d/MINER1.bin
     diff new/miner2 ./original/Disc011-ManicMiner.ssd.d/MINER2.bin
     diff new/miner3 ./original/Disc011-ManicMiner.ssd.d/MINER3.bin
