@@ -38,7 +38,7 @@ drawSpecialVerticalSprites  = $1980             ;
 eugenePositionY             = $1c48             ;
 currentVerticalGuardians    = $1dad             ;
 energyFieldSprites          = $1dc1             ;
-drawMonsters                = $1e0d             ;
+drawGuardians                = $1e0d             ;
 
 drawConveyors               = $254d             ;
 conveyorX                   = $25a4             ;
@@ -1581,8 +1581,8 @@ playCurrentLevel
     lda $76                                 ;
     sta $651e                               ;
 
-    jsr drawMonsters                        ;
-    jsr collideWithMonsters                 ;
+    jsr drawGuardians                       ;
+    jsr collideWithGuardians                ;
     jsr updateJumpAndFallSounds             ;
 
     ; pointless delay loop
@@ -2615,7 +2615,7 @@ playSoundAXY
     jmp OSWORD                      ;
 
 ; ***************************************************************************************
-collideWithMonsters
+collideWithGuardians
     lda $77                             ; }
     sec                                 ; }
     sbc #39                             ; }
@@ -2631,6 +2631,7 @@ collideWithMonsters
     jsr checkForDeath                   ;
     jsr checkForSwitchFlipped           ;
     jsr S6967                           ;
+S68df
     lda #3                              ;
     sta $6936                           ;
     lda #4                              ;
@@ -2890,13 +2891,15 @@ updateAirEtc
     lda playerPixelY                    ;
     and #7                              ;
     cmp willyOffsetWithinCellY          ;
-    bne L6aba                           ;
+    bne setOffsetYWithinCell            ;
     cmp #0                              ;
-    bne L6aba                           ;
+    bne setOffsetYWithinCell            ;
 
     lda willyIsOnGround                 ;
     cmp #0                              ;
-    bne L6aba                           ;
+    bne setOffsetYWithinCell            ;
+
+    ; land (or die if fallen too far)
     lda #$ff                            ;
     sta willyIsOnGround                 ;
     jsr drawConveyors                   ;
@@ -2904,13 +2907,14 @@ updateAirEtc
     sec                                 ;
     sbc willyHighestPointReachedOnCurrentJump   ;
     cmp #$28                            ;
-    bcc L6ab4                           ; if (fall is less than 40 pixels) then branch
+    bcc +                               ; if (fall is less than 40 pixels) then branch
     jmp death                           ;
 
-L6ab4
++
     lda playerPixelY                            ;
     sta willyHighestPointReachedOnCurrentJump   ;
-L6aba
+
+setOffsetYWithinCell
     lda playerPixelY                    ;
     and #7                              ;
     sta willyOffsetWithinCellY          ;

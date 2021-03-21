@@ -43,6 +43,7 @@ backgroundCache             = $6ba0                             ; six cells copi
 levelDefinitions            = $6c00                             ; start of level definitions
 
 miner4EntryPoint            = $619a                             ; See miner4.a
+resumeMusic                 = $62e3                             ; See miner4.a
 lives                       = $67be                             ; See miner4.a
 willyIsOnGround             = $6b7c                             ; See miner4.a
 guardianGraphics            = $7280                             ; See miner4.a
@@ -63,7 +64,7 @@ S2df7 = $2df7
 colourCycleKeys = $2e8c
 drawRoomName = $2ef0
 logicalScreenStart = $3000
-playGame = $309a
+playAttractLoop = $309a
 startGame = $6200
 S62e3 = $62e3
 drawAirBar = $6577
@@ -3049,105 +3050,107 @@ drawEugene
     sta spriteColourMask                ; colour 2
     lda eugenePositionY                 ;
     and #$7f                            ;
-    cmp #$60                            ;
-    beq L19e3                           ;
+    cmp #$60                            ; bottom coordinate
+    beq toggleEugeneDirection           ;
     cmp #8                              ;
-    beq L19e3                           ;
-L19b0
+    beq toggleEugeneDirection           ; top coordinate
+moveEugene
     lda eugenePositionY                 ;
     and #$80                            ;
     cmp #$80                            ;
-    bne L19bf                           ;
+    bne moveEugeneDown                  ;
+
+    ; move Eugene up
     inc eugenePositionY                 ;
-    jmp L19c2                           ;
+    jmp +                               ;
 
 ; ***************************************************************************************
-L19bf
+moveEugeneDown
     dec eugenePositionY                 ;
-L19c2
++
     ldx #$4c                            ;
     lda eugenePositionY                 ;
     and #$7f                            ;
     tay                                 ;
-    jsr S19d2                           ;
+    jsr setEugineSprite                 ;
     lda #3                              ;
     jmp plot                            ; plot Eugene
 
 ; ***************************************************************************************
-S19d2
-    lda #$00                    ; }
-    sta $77                     ; } address $0400, source address for Eugene
-    lda #$04                    ; }
-    sta $78                     ; }
+setEugineSprite
+    lda #$00                            ; }
+    sta $77                             ; } address $0400, source address for Eugene
+    lda #$04                            ; }
+    sta $78                             ; }
 
-    lda #0                      ; }
-    sta $79                     ; }
-    lda #$2f                    ; } $2f00 (?)
-    sta $7a                     ; }
-    rts                         ;
+    lda #0                              ; }
+    sta $79                             ; }
+    lda #$2f                            ; } $2f00 (?)
+    sta $7a                             ; }
+    rts                                 ;
 
 ; ***************************************************************************************
-L19e3
-    lda eugenePositionY         ;
-    eor #$80                    ;
-    sta eugenePositionY         ;
-    jmp L19b0                   ;
+toggleEugeneDirection
+    lda eugenePositionY                 ;
+    eor #$80                            ;
+    sta eugenePositionY                 ;
+    jmp moveEugene                      ;
 
 ; ***************************************************************************************
 drawKong
-    lda #$f0                    ;
-    sta spriteColourMask        ; colour 2
+    lda #$f0                            ;
+    sta spriteColourMask                ; colour 2
 
-    inc kongAnimationCounter    ;
-    lda kongAnimationCounter    ;
-    and #8                      ;
-    cmp #8                      ;
-    beq showKongAnimationState1 ;
-    lda #$00                    ; }
-    sta $77                     ; }
-    lda #$04                    ; } address $0400 (Kong animation 0)
-    sta $78                     ; }
-    jmp +                       ;
+    inc kongAnimationCounter            ;
+    lda kongAnimationCounter            ;
+    and #8                              ;
+    cmp #8                              ;
+    beq showKongAnimationState1         ;
+    lda #$00                            ; }
+    sta $77                             ; }
+    lda #$04                            ; } address $0400 (Kong animation 0)
+    sta $78                             ; }
+    jmp +                               ;
 
 ; ***************************************************************************************
 showKongAnimationState1
-    lda #$40                    ; }
-    sta $77                     ; } address $0440 (Kong animation 1)
-    lda #$04                    ; }
-    sta $78                     ; }
+    lda #$40                            ; }
+    sta $77                             ; } address $0440 (Kong animation 1)
+    lda #$04                            ; }
+    sta $78                             ; }
 +
-    ldx #$4e                    ;
-    ldy #$08                    ;
-    lda #3                      ;
-    jmp plot                    ;
+    ldx #$4e                            ;
+    ldy #$08                            ;
+    lda #3                              ;
+    jmp plot                            ;
 
 ; ***************************************************************************************
 return7
-    rts                         ;
+    rts                                 ;
 
 ; ***************************************************************************************
 L1a1c
-    lda #4                      ;
-    sta drawGuardianPlotType    ;
-    lda #5                      ;
-    sta $1ae9                   ;
-    jmp L1a39                   ;
+    lda #4                          ;
+    sta drawGuardianPlotType        ;
+    lda #5                          ;
+    sta $1ae9                       ;
+    jmp L1a39                       ;
 
 ; ***************************************************************************************
 drawVerticalGuardians
-    lda currentLevel            ;
-    cmp #19                     ;
-    beq L1a1c                   ;
-    lda #2                      ;
-    sta $1ae9                   ;
-    lda #3                      ;
-    sta drawGuardianPlotType    ;
+    lda currentLevel                ;
+    cmp #19                         ;
+    beq L1a1c                       ;
+    lda #2                          ;
+    sta $1ae9                       ;
+    lda #3                          ;
+    sta drawGuardianPlotType        ;
 L1a39
-    inc $1c4a                   ;
-    lda $1c4a                   ;
-    and #3                      ;
-    sta eugenePositionY         ;
-    ldx #0                      ;
+    inc verticalAnimationCounter    ;
+    lda verticalAnimationCounter    ;
+    and #3                          ;
+    sta eugenePositionY             ;
+    ldx #0                          ;
     lda #$00                        ; }
     sta tempGuardianSpriteAddrLow   ; } address $0400
     lda #$04                        ; }
@@ -3456,8 +3459,8 @@ eugenePositionY
     !byte $ea                       ; top bit indicates current direction
 kongAnimationCounter
     !byte $ea
-
-    !byte $ea
+verticalAnimationCounter
+    !byte $ea                       ; animation for vertical guardinas
 
 currentGuardianX
     !byte $ea                       ;
@@ -3580,7 +3583,7 @@ levelEugenesLair
 ; ***************************************************************************************
 copyVerticalSprites
     lda #0                              ;
-    sta $1c4a                           ;
+    sta verticalAnimationCounter        ;
     lda #>eugeneSprite                  ;
     sta specialSpriteSourceAddress + 1  ;
     lda #<eugeneSprite                  ;
@@ -3773,13 +3776,13 @@ readGuardianByte
     rts                             ;
 
 ; ***************************************************************************************
-L1e07
-    jsr drawMonsters                ;
-    jmp updateLevel19Special                       ;
+updateLevel19Guardians
+    jsr drawGuardians               ;
+    jmp updateLevel19Special        ;
 
 ; ***************************************************************************************
 ; draws the monsters
-drawMonsters2
+drawGuardians2
     nop                             ;
     nop                             ;
     nop                             ;
@@ -3793,24 +3796,24 @@ drawMonsters2
 
     lda currentLevel                ;
     cmp #19                         ;
-    beq L1e07                       ; if (level 19) then branch
-    jmp drawMonsters                ; [redundant]
+    beq updateLevel19Guardians      ; if (level 19) then branch
+    jmp drawGuardians               ; [redundant]
 
 ; ***************************************************************************************
-drawMonsters
+drawGuardians
     jsr swapPagesC00andE00          ; swap in monster definitions
     lda #0                          ;
     sta drawGuardianLoopCounter     ;
     tay                             ;
     tax                             ;
 
-drawMonstersLoop
+drawGuardiansLoop
     lda $0d80,y                     ;
     sta $8a,x                       ;
     iny                             ;
     inx                             ;
     cpx #4                          ;
-    bne drawMonstersLoop            ;
+    bne drawGuardiansLoop           ;
 
     lda $8a                         ;
     cmp #$ff                        ;
@@ -3850,7 +3853,7 @@ drawMonstersLoop
     rol                             ;
     tay                             ;
     ldx #0                          ;
-    jmp drawMonstersLoop            ;
+    jmp drawGuardiansLoop           ;
 
 ; ***************************************************************************************
 S1e78
@@ -3878,7 +3881,7 @@ L1e8d
     clc                             ;
     adc #1                          ;
     and #$7f                        ;
-    sta $1fa5                       ;
+    sta currentGuardianXPosition    ;
     lda $8a                         ;
     and #3                          ;
     asl                             ;
@@ -3928,7 +3931,7 @@ L1eef
     sec                             ;
     sbc #1                          ;
     and #$7f                        ;
-    sta $1fa5                       ;
+    sta currentGuardianXPosition    ;
     lda $8a                         ;
     and #3                          ;
     eor #3                          ;
@@ -4027,13 +4030,14 @@ L1f9e
     sta $8b                         ;
     rts                             ;
 
+currentGuardianXPosition
     !byte $ea                       ;
 drawGuardianLoopCounter
     !byte $ea                       ;
 
 ; ***************************************************************************************
 L1fa7
-    lda $1fa5                       ;
+    lda currentGuardianXPosition    ;
     sta $8a                         ;
     cmp $8c                         ;
     beq L1f9e                       ;
@@ -4092,9 +4096,9 @@ copyGuardiansWithAddress
     ldy #0                              ; loop counter
 -
     lda $0c00,y                         ;
-    sty $20a6                           ;
+    sty tempY                           ;
     jsr reverseBitsInByte               ;
-    ldy $20a6                           ; copy reflected guardians to $0c80-$0cff
+    ldy tempY                           ; copy reflected guardians to $0c80-$0cff
     sta $0c80,y                         ;
     iny                                 ;
     cpy #$80                            ;
@@ -4205,6 +4209,7 @@ backToReversingLoop
     ; $20a5
 tempReversingByte
     !byte $ea                           ;
+tempY
     !byte $ea                           ;
 
 ; ***************************************************************************************
@@ -4264,13 +4269,13 @@ updateLevel19Special
     jsr updateLevel19EnergyFields   ;
 L20fd
     ldx #0                          ; loop counter
-L20ff
+-
     lda $0d80,x                     ;
     sta $0d90,x                     ;
     inx                             ;
     cpx #5                          ;
-L2108
-    bne L20ff                       ;
+    bne -                           ;
+
 L210a
     lda $227c                       ;
     sec                             ;
@@ -4343,7 +4348,7 @@ L2188
     dec $227d                       ;
     lda $227e                       ;
     cmp #4                          ;
-    beq L21aa                       ;
+    beq eraseLandedMeteors          ;
     cmp #1                          ;
     beq L2175                       ;
     cmp #2                          ;
@@ -4355,14 +4360,14 @@ L2188
     jmp L2204                       ;
 
 ; ***************************************************************************************
-L21aa
+eraseLandedMeteors
     lda #0                          ;
     sta $227e                       ;
     lda #$ff                        ;
     sta $227d                       ;
-    lda #$20                        ;
+    lda #charSPACE                  ;
     jsr S221a                       ;
-    lda #$20                        ;
+    lda #charSPACE                  ;
     jsr OSWRCH                      ;
     inc $227f                       ;
     lda $227f                       ;
@@ -4482,6 +4487,7 @@ readScreenByte
     rts                             ;
 
 ; ***************************************************************************************
+    ; $227b
     !byte $06, $08, $ff, $00, $00
     !byte $64, $1b, $28, $a9, $16, $1d, $02, $58, $65, $57, $27, $d9, $aa, $1c, $15, $63
 
@@ -4567,7 +4573,7 @@ guardianLevelData
     !byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff
 
 ; ***************************************************************************************
-showScreenAndWaitForRETURN
+showTitleScreenMessageAndWaitForRETURN
     lda #2                          ;
     sta lives                       ;
 
@@ -4630,8 +4636,8 @@ showScreenAndWaitForRETURN
 
     lda #0                          ;
     sta channel3Frequency           ; }
-    jsr S62e3                       ; } demo mode?
-    jmp playGame                    ; }
+    jsr resumeMusic                 ; } demo mode
+    jmp playAttractLoop             ; }
 
 ; ***************************************************************************************
 startGameJumper

@@ -2,37 +2,38 @@
 ; miner3.a ($3c00)
 ;
 
-* = $3000
-
 ; constants
 
+; OS memory locations
+OSWRCH                          = $ffee
+OSBYTE                          = $fff4
+currentLevel                    = $80
+
 ; memory locations
-OSWRCH                      = $ffee
-OSBYTE                      = $fff4
-currentLevel                = $80
+newPlayerPixelY                 = $183d             ;
+isInAir                         = $184b             ;
+playerHeightOnTakeOff           = $184c             ;
+jumpPhase                       = $184d             ;
+drawSpecialVerticalSprites      = $1980             ;
 
-newPlayerPixelY             = $183d             ;
-isInAir                     = $184b             ;
-playerHeightOnTakeOff       = $184c             ;
-jumpPhase                   = $184d             ;
-drawSpecialVerticalSprites  = $1980             ;
+drawGuardians                    = $1e0d
+showTitleScreenMessageAndWaitForRETURN = $23c0
+creditsMessage                  = $2430
+creditsMessageEnd               = creditsMessage + $47
+bylineMessage                   = $24e0
+bylineMessageEnd                = bylineMessage + $15
+drawConveyors                   = $254d             ;
+clearScreen                     = $2821
+showLevel                       = $62c3
+startGame                       = $6200
+lives                           = $67be                             ; See miner4.a
+playSoundAXY                    = $68ac
+pauseMusic                      = $62e9
+score                           = $67ba
+willyIsOnGround                 = $6b7c
+cheatModeEnabled                = $6b7f
 
-drawMonsters                = $1e0d
-showScreenAndWaitForRETURN  = $23c0
-creditsMessage              = $2430
-creditsMessageEnd           = creditsMessage + $47
-bylineMessage               = $24e0
-bylineMessageEnd            = bylineMessage + $15
-drawConveyors               = $254d             ;
-clearScreen                 = $2821
-showLevel                   = $62c3
-startGame                   = $6200
-lives                       = $67be                             ; See miner4.a
-playSoundAXY                = $68ac
-pauseMusic                  = $62e9
-score                       = $67ba
-willyIsOnGround             = $6b7c
-cheatModeEnabled            = $6b7f
+* = $3000
 
 ; ***************************************************************************************
 ;
@@ -147,9 +148,9 @@ channel2Frequency
     !byte $ff                       ;
 
 ; ***************************************************************************************
-playGame
+playAttractLoop
     lda #1                          ;
-    sta currentLevel                ; start on level 1
+    sta currentLevel                ; start attract loop on level 1
 
     lda #2                          ;
     sta lives                       ; start with 2 remaining lives (3 lives total)
@@ -170,7 +171,7 @@ L30af
     sta attractModeTimer            ;
 L30b9
     jsr drawConveyors               ;
-    jsr drawMonsters                ;
+    jsr drawGuardians                ;
     jsr drawSpecialVerticalSprites  ;
 
     ; pointless delay loop
@@ -437,7 +438,7 @@ plotLoop
     jmp plotLoop                    ;
 
 finishPlot
-    jmp showScreenAndWaitForRETURN  ;
+    jmp showTitleScreenMessageAndWaitForRETURN  ;
 
 gcol
     lda #18                         ;
