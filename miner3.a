@@ -15,6 +15,7 @@ newPlayerPixelY             = $183d             ;
 isInAir                     = $184b             ;
 playerHeightOnTakeOff       = $184c             ;
 jumpPhase                   = $184d             ;
+drawSpecialVerticalSprites  = $1980             ;
 
 drawMonsters                = $1e0d
 showScreenAndWaitForRETURN  = $23c0
@@ -30,6 +31,7 @@ lives                       = $67be                             ; See miner4.a
 playSoundAXY                = $68ac
 pauseMusic                  = $62e9
 score                       = $67ba
+willyIsOnGround             = $6b7c
 cheatModeEnabled            = $6b7f
 
 ; ***************************************************************************************
@@ -165,11 +167,11 @@ L30af
     lda currentLevel                ;
     jsr showLevel                   ;
     lda #0                          ;
-    sta $30e9                       ;
+    sta attractModeTimer            ;
 L30b9
     jsr drawConveyors               ;
     jsr drawMonsters                ;
-    jsr $1980                       ;
+    jsr drawSpecialVerticalSprites  ;
 
     ; pointless delay loop
     ldx #0                          ; 0
@@ -180,8 +182,8 @@ L30b9
     iny                             ;
     bne -                           ;
 
-    inc $30e9                       ;
-    lda $30e9                       ;
+    inc attractModeTimer            ;
+    lda attractModeTimer            ;
     cmp #$40                        ;
     beq L30ea                       ;
 
@@ -197,6 +199,7 @@ L30b9
 +
     jmp startGame                   ;
 
+attractModeTimer
     !byte $ea                       ;
 L30ea
     inc currentLevel                ;
@@ -269,7 +272,7 @@ cheatCodeEnd
 
 ; ***************************************************************************************
 updateJumpAndFallSounds
-    jsr $1980                       ;
+    jsr drawSpecialVerticalSprites  ;
     lda isInAir                     ;
     cmp #1                          ;
     bne L3160                       ; if (not in air) then branch
@@ -286,9 +289,10 @@ L3160
     lda isInAir                     ;
     cmp #1                          ;
     beq return5                     ;
-    lda $6b7c                       ;
+    lda willyIsOnGround             ;
     cmp #0                          ;
     bne return5                     ;
+
     lda #$ff                        ;
     sta $6b83                       ;
 

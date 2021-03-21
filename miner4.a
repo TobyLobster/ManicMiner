@@ -33,6 +33,9 @@ willySpriteAddressHigh      = $1843             ;
 isInAir                     = $184b             ;
 conveyorDirection           = $1854             ;
 readOrWriteCachedBackground = $1869             ;
+kongBeastSwitchTriggered    = $197f             ;
+drawSpecialVerticalSprites  = $1980             ;
+eugenePositionY             = $1c48             ;
 currentVerticalGuardians    = $1dad             ;
 energyFieldSprites          = $1dc1             ;
 drawMonsters                = $1e0d             ;
@@ -482,6 +485,7 @@ moveAndPrintSpaces
 
     ; initial values for locations $00 to $9F
 zeroPageDefaults
+!pseudopc $0000 {
     ; tune frequencies
     !byte $23, $1f, $1d, $1a, $17, $1d, $17, $17, $16, $1a, $16, $16, $17, $1d, $17, $17
     !byte $23, $1f, $1d, $1a, $17, $1d, $17, $17, $16, $1a, $16, $16, $17, $17, $17, $23
@@ -489,17 +493,35 @@ zeroPageDefaults
     !byte $1f, $1d, $1a, $17, $1d, $17, $11, $13, $17, $1d, $17, $13, $13, $13, $00, $00
 
     ; $0040 - called when a switch is hit
+triggerSwitch
     lda #1                          ;
     sta switchTriggered             ;
     lda vduTextCursorXPosition      ;
     rts                             ;
 
     !byte $00, $00, $00, $08, $05, $ff, $09, $fd
-    !byte $1f, $13, $01, $20, $20, $0a, $08, $08, $00, $00, $00, $00, $00, $00, $00, $00
-    !byte $99, $1f, $15, $0c, $20, $0a, $08, $20, $00, $00, $00, $00, $00, $00, $00, $00
+
+switchMessage2
+    !byte $1f, $13, $01             ; TAB(19, 1)
+switchClearCentreMessage
+    !byte $20, $20, $0a, $08, $08   ; two spaces and move down and back
+switchClearCentreMessageEnd
+switchMessage2End
+
+    !byte $00, $00, $00, $00, $00, $00, $00, $00
+
+switchMessage
+    !byte $99                       ; the switched switch sprite
+    !byte 31, 21, 12                ; TAB(21, 12)
+    !byte charSPACE                 ; space
+    !byte 10, 8, charSPACE          ; another space below. This removes a section of wall.
+switchMessageEnd
+
+    !byte $00, $00, $00, $00, $00, $00, $00, $00
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
     !byte $a9, $00, $aa, $9d, $ba, $67, $e8, $e0, $03, $d0, $f8, $4c, $90, $31, $ff, $00
+}
 zeroPageDefaultsEnd
 
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
@@ -614,8 +636,9 @@ trianglesLogo
     !byte $05, $19, $ad                 ; DRAW  25, 173
     !byte $ff                           ; TERMINATOR
 
+    ; [unused]
     lda #$ff                            ;
-    sta $6b7c                           ;
+    sta willyIsOnGround                 ;
     jmp $1ce8                           ;
 
     !byte $00                           ;
@@ -1824,7 +1847,7 @@ L6391
     sta $19ee                       ;
 
     lda #0                          ;
-    sta $197f                       ;
+    sta kongBeastSwitchTriggered    ;
     sta isInAir                     ;
 
     lda #$27                        ;
@@ -1850,7 +1873,7 @@ L6391
     asl                             ;
     sta playerPixelY                ; playerPixelY = (lower nybble * 8)
     sta newPlayerPixelY             ;
-    sta $6b7b                       ;
+    sta willyHighestPointReachedOnCurrentJump ;
 
     ldx playerPixelX                ; if (start X < 64) then look right at start
     cpx #64                         ;
@@ -1923,9 +1946,9 @@ checkExit
     cmp #5                          ;
     bne +                           ;
 
-    lda $1c48                       ;
-    ora #$80                        ; set top bit
-    sta $1c48                       ;
+    lda eugenePositionY             ;
+    ora #$80                        ; set top bit (ensure moving down)
+    sta eugenePositionY             ;
 
     lda #$60                        ; store opcode for 'RTS'
     sta $19eb                       ;
@@ -2183,7 +2206,7 @@ L6633
     jmp L6640                       ;
 
 updateAir
-    lda $197f                       ;
+    lda kongBeastSwitchTriggered    ;
     cmp #1                          ;
     beq L6633                       ;
 L6640
@@ -2266,7 +2289,7 @@ L66bd
 
 L66d4
     lda #0                          ;
-    sta $197f                       ;
+    sta kongBeastSwitchTriggered    ;
     jmp setColour2AndShowExit       ;
 
 variable
@@ -2705,7 +2728,7 @@ L697b
     lda currentLevel                    ;
     cmp #5                              ;
     bne L6996                           ;
-    lda $1c48                           ;
+    lda eugenePositionY                 ;
     and #$7f                            ;
     sec                                 ;
     sbc #8                              ;
@@ -2809,7 +2832,7 @@ S6a31
     eor #$0f                            ;
     sta $199f                           ;
 
-    jsr $1980                           ;
+    jsr drawSpecialVerticalSprites      ;
 
     lda #$ff                            ;
     sta spriteColourMask                ;
@@ -2853,44 +2876,44 @@ updateAirEtc
     beq deathJumper5                    ; if (out of air) then branch (die)
 
     lda playerPixelY                    ;
-    cmp $6b7b                           ;
+    cmp willyHighestPointReachedOnCurrentJump ;
     bcs +                               ;
-    sta $6b7b                           ;
+    sta willyHighestPointReachedOnCurrentJump ;
 +
     lda playerPixelY                    ;
     and #7                              ;
     cmp #0                              ;
     beq +                               ;
     lda #0                              ;
-    sta $6b7c                           ;
+    sta willyIsOnGround                 ;
 +
     lda playerPixelY                    ;
     and #7                              ;
-    cmp $6b7d                           ;
+    cmp willyOffsetWithinCellY          ;
     bne L6aba                           ;
     cmp #0                              ;
     bne L6aba                           ;
 
-    lda $6b7c                           ;
+    lda willyIsOnGround                 ;
     cmp #0                              ;
     bne L6aba                           ;
     lda #$ff                            ;
-    sta $6b7c                           ;
+    sta willyIsOnGround                 ;
     jsr drawConveyors                   ;
     lda playerPixelY                    ;
     sec                                 ;
-    sbc $6b7b                           ;
+    sbc willyHighestPointReachedOnCurrentJump   ;
     cmp #$28                            ;
-    bcc L6ab4                           ;
+    bcc L6ab4                           ; if (fall is less than 40 pixels) then branch
     jmp death                           ;
 
 L6ab4
-    lda playerPixelY                    ;
-    sta $6b7b                           ;
+    lda playerPixelY                            ;
+    sta willyHighestPointReachedOnCurrentJump   ;
 L6aba
     lda playerPixelY                    ;
     and #7                              ;
-    sta $6b7d                           ;
+    sta willyOffsetWithinCellY          ;
     rts                                 ;
 
 ; ***************************************************************************************
@@ -3012,7 +3035,12 @@ level20EnergyFieldsString
 level20EnergyFieldsTimer
     !byte $ea
 
-    !byte $ea, $ea, $ea                             ;
+willyHighestPointReachedOnCurrentJump
+    !byte $ea                                       ;
+willyIsOnGround
+    !byte $ea                                       ;
+willyOffsetWithinCellY
+    !byte $ea                                       ;
 
 airRemaining
     !byte $ea                                       ;
@@ -3025,8 +3053,10 @@ oswordSoundBlock
 
     ; $6b88
 playerStartPositions
-    !byte $0e, $0e, $0e, $de, $04, $74, $0e, $0e
-    !byte $0e, $05, $12, $0e, $ee, $8e, $0e, $4e, $04, $de, $0e, $0e, $de, $0e, $0e, $00
+    ;level  1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  13,  14,  15,  16,  17,  18,  19,  20
+    !byte $0e, $0e, $0e, $de, $04, $74, $0e, $0e, $0e, $05, $12, $0e, $ee, $8e, $0e, $4e, $04, $de, $0e, $0e
+
+    !byte $de, $0e, $0e, $00
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00

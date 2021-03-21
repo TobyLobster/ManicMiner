@@ -8,6 +8,7 @@ willyPageRight              = $05
 willyPageLeft               = $06
 
 ; os memory locations
+vectorEVNTV                 = $0220     ; Events
 vduTextCursorXPosition      = $0318
 vduTextCursorYPosition      = $0319
 
@@ -16,6 +17,13 @@ OSBYTE                      = $fff4
 OSWORD                      = $fff7
 
 ; memory locations
+triggerSwitch               = $40
+switchMessage2              = $50
+switchClearCentreMessage    = $53
+switchClearCentreMessageEnd = $58
+switchMessage2End           = $58
+switchMessage               = $60
+switchMessageEnd            = $68
 levelDataOffset             = $70
 levelFeatureIndex           = $79
 currentLevel                = $80
@@ -36,6 +44,7 @@ levelDefinitions            = $6c00                             ; start of level
 
 miner4EntryPoint            = $619a                             ; See miner4.a
 lives                       = $67be                             ; See miner4.a
+willyIsOnGround             = $6b7c                             ; See miner4.a
 guardianGraphics            = $7280                             ; See miner4.a
 fromMiner2                  = $7475                             ; See miner1.a
 eventVLow                   = $74a7                             ; See miner1.a
@@ -53,7 +62,7 @@ L2d69 = $2d69
 S2df7 = $2df7
 colourCycleKeys = $2e8c
 drawRoomName = $2ef0
-L3000 = $3000
+logicalScreenStart = $3000
 playGame = $309a
 startGame = $6200
 S62e3 = $62e3
@@ -480,18 +489,25 @@ afterUpdateCrumberBar
 }
 
 !pseudopc $0800 {
+    ; OS sound workspace
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $c0, $c0, $c0, $c0, $04, $04, $04, $04
     !byte $00, $64, $00, $00, $00, $00, $00, $00, $00, $1f, $00, $00, $00, $00, $00, $00
     !byte $00, $05, $00, $00, $00, $30, $00, $00, $00, $01, $00, $00, $00, $00, $00, $00
     !byte $00, $00, $00, $00, $00, $8a, $00, $00, $ff, $fd, $c1, $00, $00, $f0, $00, $0e
+
+    ; OS sound buffers
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
     !byte $01, $01, $00, $64, $01, $08, $64, $01, $10, $64, $01, $18, $64, $01, $00, $f8
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+
+    ; OS printer buffer [unused]
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
+
+    ; OS Envelope definitions
     !byte $01, $78, $00, $00, $1e, $00, $00, $7e, $ff, $00, $ff, $7e, $5a, $00, $00, $00
     !byte $01, $00, $00, $00, $01, $01, $01, $7f, $ff, $ff, $fe, $7e, $01, $00, $00, $00
     !byte $05, $10, $00, $00, $07, $00, $00, $20, $f6, $fe, $fe, $7e, $64, $00, $00, $00
@@ -2031,7 +2047,10 @@ L1392
 +
     lda willyDeltaX                 ;
     cmp #$fd                        ;
-    bne L13c3                       ;
+    bne +                           ;
+
+    ; handle being blocked to the left
+    ; add one back onto the new X position
     lda newPlayerPixelX             ;
     clc                             ;
     adc #1                          ;
@@ -2041,7 +2060,7 @@ L1392
     jmp L13ef                       ;
 
 ; ***************************************************************************************
-L13c3
++
     lda playerXOffsetWithinCell     ;
     cmp #0                          ;
     bne L13d4                       ;
@@ -2266,8 +2285,8 @@ keyCollisionFound
     lda vduTextCursorYPosition  ;
     sta textCursorY             ;
 
-    lda #$63                    ;
-    jsr $673c                   ;
+    lda #99                     ;
+    jsr addToScore              ;
     jmp L159b                   ;
 
 ; ***************************************************************************************
@@ -2277,49 +2296,49 @@ deathJumper
     !byte $ea, $ea                  ;
 
 switchCollisionFound
-    jsr $0040                       ;
+    jsr triggerSwitch               ;
     sta textCursorX                 ;
     lda vduTextCursorYPosition      ;
     sta textCursorY                 ;
 
     ldx #0                          ; loop counter
 -
-    lda $60,x                       ;
-    jsr OSWRCH                      ;
-    inx                             ;
-    cpx #8                          ;
-    bne -                           ;
+    lda switchMessage,x                     ;
+    jsr OSWRCH                              ;
+    inx                                     ;
+    cpx #switchMessageEnd - switchMessage   ;
+    bne -                                   ;
 
-    lda playerPixelX                ;
-    cmp #80                         ;
-    bcc L159b                       ;
+    lda playerPixelX                        ;
+    cmp #80                                 ;
+    bcc L159b                               ;
 
-    lda #1                          ;
-    sta $197f                       ; ?
+    lda #1                                  ;
+    sta kongBeastSwitchTriggered            ; mark switch as triggered
 
-
-    ldx #0                          ; loop counter
+    ldx #0                                  ; loop counter
 -
-    lda $50,x                       ;
-    jsr OSWRCH                      ;
-    inx                             ;
-    cpx #8                          ;
-    bne -                           ;
+    lda switchMessage2,x                    ;
+    jsr OSWRCH                              ;
+    inx                                     ;
+    cpx #switchMessage2End - switchMessage2 ;
+    bne -                                   ;
 
-    ldy #2                          ;
-outerLoop
-    ldx #0                          ; loop counter
+    ; [inefficient]
+    ldy #2                                                          ; loop twice
+twiceLoop
+    ldx #0                                                          ; loop counter
 -
-    lda $53,x                       ;
-    jsr OSWRCH                      ;
-    inx                             ;
-    cpx #5                          ;
-    bne -                           ;
-    dey                             ;
-    bne outerLoop                   ;
+    lda switchClearCentreMessage,x                                  ;
+    jsr OSWRCH                                                      ;
+    inx                                                             ;
+    cpx #switchClearCentreMessageEnd - switchClearCentreMessage     ;
+    bne -                                                           ;
+    dey                                                             ;
+    bne twiceLoop                                                   ;
 
-    lda #$60
-    sta $19ee
+    lda #$60                        ; store opcode $60 'RTS'
+    sta drawKong                    ;
 L159b
     lda #31                         ;
     jsr OSWRCH                      ;
@@ -2576,34 +2595,34 @@ checkWhatsLeftOfThePlayer
 +
     lda screenCharacterAPrime       ;
     cmp #$20                        ;
-    bne L1756                       ; if (not a space) then branch (check for collision)
+    bne checkForCollisionToTheLeft  ; if (not a space) then branch (check for collision)
 
     lda screenCharacterB            ;
     cmp #$20                        ;
-    bne L1756                       ; if (not a space) then branch (check for collision)
+    bne checkForCollisionToTheLeft  ; if (not a space) then branch (check for collision)
 
     lda jumpPhase                   ;
     cmp #5                          ;
-    bne L1756                       ;
+    bne checkForCollisionToTheLeft  ;
     rts                             ;
 
 ; ***************************************************************************************
-L1756
+checkForCollisionToTheLeft
     lda screenCharacterA            ;
     cmp #$8f                        ;
-    beq L176c                       ; if (wall) then branch
+    beq markAsBlockedToTheLeft      ; if (wall) then branch
 
     lda screenCharacterB            ;
     cmp #$8f                        ;
-    beq L176c                       ; if (wall) then branch
+    beq markAsBlockedToTheLeft      ; if (wall) then branch
 
     lda screenCharacterAPrime       ;
     cmp #$8f                        ;
-    beq L176c                       ; if (wall) then branch
+    beq markAsBlockedToTheLeft      ; if (wall) then branch
     rts                             ;
 
 ; ***************************************************************************************
-L176c
+markAsBlockedToTheLeft
     lda #$fd                        ;
     sta willyDeltaX                 ;
     rts                             ;
@@ -2620,7 +2639,7 @@ checkWhatsRightOfThePlayer
     jsr OSWRCH                      ; } TAB(playerX/4 + 2, (newPlayerPixelY + playerYNegativeOffsetWithinCell)/8)
     lda newPlayerPixelY             ; }
     clc                             ; }
-    adc playerYNegativeOffsetWithinCell     ; }
+    adc playerYNegativeOffsetWithinCell ; }
     lsr                             ; }
     lsr                             ; }
     lsr                             ; }
@@ -2642,34 +2661,34 @@ checkWhatsRightOfThePlayer
 +
     lda screenCharacterAPrime       ;
     cmp #$20                        ;
-    bne L17bf                       ; if (not a space) then branch (check for collision)
+    bne checkForCollisionRight       ; if (not a space) then branch (check for collision)
 
     lda screenCharacterB            ;
     cmp #$20                        ;
-    bne L17bf                       ; if (not a space) then branch (check for collision)
+    bne checkForCollisionRight       ; if (not a space) then branch (check for collision)
 
     lda jumpPhase                   ;
     cmp #5                          ;
-    bne L17bf                       ;
+    bne checkForCollisionRight      ;
     rts                             ;
 
 ; ***************************************************************************************
-L17bf
+checkForCollisionRight
     lda screenCharacterA            ;
     cmp #$8f                        ;
-    beq L17d5                       ; if (wall) then branch
+    beq markAsBlockedToTheRight     ; if (wall) then branch
 
     lda screenCharacterB            ;
     cmp #$8f                        ;
-    beq L17d5                       ; if (wall) then branch
+    beq markAsBlockedToTheRight     ; if (wall) then branch
 
     lda screenCharacterAPrime       ;
     cmp #$8f                        ;
-    beq L17d5                       ; if (wall) then branch
+    beq markAsBlockedToTheRight     ; if (wall) then branch
     rts                             ;
 
 ; ***************************************************************************************
-L17d5
+markAsBlockedToTheRight
     lda #$fe                        ;
     sta willyDeltaX                 ;
     rts                             ;
@@ -2804,7 +2823,7 @@ textCursorX
 textCursorY
     !byte $ea
 
-;   $1869
+    ; $1869
 ; ***************************************************************************************
 ;
 ; On Entry:
@@ -2826,9 +2845,9 @@ readOrWriteCachedBackground
     lsr                             ;
     lsr                             ;
     sta $72                         ;
-    lda #$00                        ; }
+    lda #<logicalScreenStart        ; }
     sta readOrWriteScreen + 1       ; } $3000 screen address
-    lda #$30                        ; }
+    lda #>logicalScreenStart        ; }
     sta readOrWriteScreen + 2       ; }
 
     ldx #0                          ; loop counter
@@ -2978,7 +2997,7 @@ cacheGotoNextRow
 
 ; ***************************************************************************************
 readOrWriteScreen
-    lda L3000,x                         ; screen address
+    lda logicalScreenStart,x            ; screen address
     rts                                 ;
 
 ; ***************************************************************************************
@@ -2996,59 +3015,63 @@ readScreenWriteCache
     jsr readOrWriteScreen               ; read screen
     jmp readOrWriteCache                ; write cache
 
-    !byte $00, $00
+    !byte $00
+
+    ; $197f
+kongBeastSwitchTriggered
+    !byte $00
 
 ; ***************************************************************************************
-L1980
+drawSpecialVerticalSprites
     lda currentLevel                    ;
     cmp #5                              ;
-    beq L199e                           ;
+    beq drawEugene                      ;
     cmp #8                              ;
-    beq L19ee                           ;
+    beq drawKong                        ;
     cmp #12                             ;
-    beq L19ee                           ;
+    beq drawKong                        ; if (level 8 or 12) then branch (draw Kong)
     cmp #9                              ;
-    beq L199b                           ;
-    cmp #16                             ;
-    beq L199a                           ;
+    beq drawVerticalGuardiansJumper     ;
+    cmp #16                             ; [redundant]
+    beq +                               ; [redundant]
     cmp #11                             ;
-    bcs L199b                           ;
-L199a
+    bcs drawVerticalGuardiansJumper     ;
++
     rts
 
 ; ***************************************************************************************
-L199b
-    jmp L1a29
+drawVerticalGuardiansJumper
+    jmp drawVerticalGuardians
 
 ; ***************************************************************************************
-L199e
+drawEugene
     lda #$f0                            ;
     sta spriteColourMask                ; colour 2
-    lda $1c48                           ;
+    lda eugenePositionY                 ;
     and #$7f                            ;
     cmp #$60                            ;
     beq L19e3                           ;
     cmp #8                              ;
     beq L19e3                           ;
 L19b0
-    lda $1c48                           ;
+    lda eugenePositionY                 ;
     and #$80                            ;
     cmp #$80                            ;
     bne L19bf                           ;
-    inc $1c48                           ;
+    inc eugenePositionY                 ;
     jmp L19c2                           ;
 
 ; ***************************************************************************************
 L19bf
-    dec $1c48                   ;
+    dec eugenePositionY                 ;
 L19c2
-    ldx #$4c                    ;
-    lda $1c48                   ;
-    and #$7f                    ;
-    tay                         ;
-    jsr S19d2                   ;
-    lda #3                      ;
-    jmp plot                    ; plot Eugene
+    ldx #$4c                            ;
+    lda eugenePositionY                 ;
+    and #$7f                            ;
+    tay                                 ;
+    jsr S19d2                           ;
+    lda #3                              ;
+    jmp plot                            ; plot Eugene
 
 ; ***************************************************************************************
 S19d2
@@ -3061,37 +3084,38 @@ S19d2
     sta $79                     ; }
     lda #$2f                    ; } $2f00 (?)
     sta $7a                     ; }
-    rts
+    rts                         ;
 
 ; ***************************************************************************************
 L19e3
-    lda $1c48
-    eor #$80
-    sta $1c48
-    jmp L19b0
+    lda eugenePositionY         ;
+    eor #$80                    ;
+    sta eugenePositionY         ;
+    jmp L19b0                   ;
 
 ; ***************************************************************************************
-L19ee
+drawKong
     lda #$f0                    ;
     sta spriteColourMask        ; colour 2
-    inc $1c49                   ;
-    lda $1c49                   ;
+
+    inc kongAnimationCounter    ;
+    lda kongAnimationCounter    ;
     and #8                      ;
     cmp #8                      ;
-    beq L1a0a                   ;
+    beq showKongAnimationState1 ;
     lda #$00                    ; }
     sta $77                     ; }
-    lda #$04                    ; } address $0400
+    lda #$04                    ; } address $0400 (Kong animation 0)
     sta $78                     ; }
-    jmp L1a12                   ;
+    jmp +                       ;
 
 ; ***************************************************************************************
-L1a0a
+showKongAnimationState1
     lda #$40                    ; }
-    sta $77                     ; } address $0440
+    sta $77                     ; } address $0440 (Kong animation 1)
     lda #$04                    ; }
     sta $78                     ; }
-L1a12
++
     ldx #$4e                    ;
     ldy #$08                    ;
     lda #3                      ;
@@ -3104,39 +3128,39 @@ return7
 ; ***************************************************************************************
 L1a1c
     lda #4                      ;
-    sta $1b2a                   ;
+    sta drawGuardianPlotType    ;
     lda #5                      ;
     sta $1ae9                   ;
     jmp L1a39                   ;
 
 ; ***************************************************************************************
-L1a29
+drawVerticalGuardians
     lda currentLevel            ;
     cmp #19                     ;
     beq L1a1c                   ;
     lda #2                      ;
     sta $1ae9                   ;
     lda #3                      ;
-    sta $1b2a                   ;
+    sta drawGuardianPlotType    ;
 L1a39
     inc $1c4a                   ;
     lda $1c4a                   ;
     and #3                      ;
-    sta $1c48                   ;
+    sta eugenePositionY         ;
     ldx #0                      ;
-    lda #$00                    ; }
-    sta $1c54                   ; } address $0400
-    lda #$04                    ; }
-    sta $1c55                   ; }
-L1a50
-    cpx $1c48                   ;
-    beq L1a62                   ;
-    inx                         ;
-    lda $1c54                   ;
-    clc                         ;
-    adc #$40                    ;
-    sta $1c54                   ;
-    jmp L1a50                   ;
+    lda #$00                        ; }
+    sta tempGuardianSpriteAddrLow   ; } address $0400
+    lda #$04                        ; }
+    sta tempGuardianSpriteAddrHigh  ; }
+-
+    cpx eugenePositionY             ;
+    beq L1a62                       ; multiplication by repeated addition
+    inx                             ;
+    lda $1c54                       ; }
+    clc                             ; }
+    adc #$40                        ; } increment to $0440, $0480, or $4C0
+    sta tempGuardianSpriteAddrLow   ; }
+    jmp -                           ;
 
 ; ***************************************************************************************
 L1a62
@@ -3144,7 +3168,7 @@ L1a62
     cmp #14                             ;
     bne L1a6d                           ;
     lda #0                              ;
-    sta $1c54                           ;
+    sta tempGuardianSpriteAddrLow       ;
 L1a6d
     lda #0                              ;
     sta currentGuardianColour           ;
@@ -3239,14 +3263,15 @@ drawGuardian
     clc                         ;
     adc #$10                    ;
     tax                         ; X = (guardianX * 4) + 16
-    lda currentGuardianY        ;
-    clc                         ;
-    adc #8                      ;
-    tay                         ; Y = (guardianY + 8)
-    lda $1c54                   ;
-    sta $77                     ;
-    lda $1c55                   ;
-    sta $78                     ;
+    lda currentGuardianY            ;
+    clc                             ;
+    adc #8                          ;
+    tay                             ; Y = (guardianY + 8)
+    lda tempGuardianSpriteAddrLow   ;
+    sta $77                         ;
+    lda tempGuardianSpriteAddrHigh  ;
+    sta $78                         ;
+drawGuardianPlotType = * + 1
     lda #4                      ;
     jsr plot                    ; draw guardian
 
@@ -3427,7 +3452,12 @@ L1c3f
     rts
 
     ; $1c48
-    !byte $ea, $ea, $ea
+eugenePositionY
+    !byte $ea                       ; top bit indicates current direction
+kongAnimationCounter
+    !byte $ea
+
+    !byte $ea
 
 currentGuardianX
     !byte $ea                       ;
@@ -3444,7 +3474,12 @@ currentGuardianIndex
 tempGuardianSpriteOffset
     !byte $ea
 guardianSpriteOffsets
-    !byte $ea, $ea, $ea, $ea, $ea, $ea
+    !byte $ea, $ea, $ea
+tempGuardianSpriteAddrLow
+    !byte $ea
+tempGuardianSpriteAddrHigh
+    !byte $ea
+    !byte $ea
 currentGuardianSpeed
     !byte $ea
 
@@ -3539,7 +3574,7 @@ levelEugenesLair
     lda #1                          ;
     sta copyWhichSprite             ; copy Eugene
     lda #8                          ;
-    sta $1c48                       ;
+    sta eugenePositionY                       ;
     jmp L1d15                       ;
 
 ; ***************************************************************************************
@@ -4605,7 +4640,7 @@ startGameJumper
 ; ***************************************************************************************
 L2427
     lda #$ff                        ;
-    sta $6b7c                       ;
+    sta willyIsOnGround             ;
     jmp copyVerticalSprites         ;
 
 ; ***************************************************************************************
@@ -5887,7 +5922,7 @@ vduLoop
     cpx #$90                            ;
     bne vduLoop                         ;
 
-    ; copy 256 of screen memory 2 bytes back
+    ; copy 256 bytes of screen memory 8 bytes back
     ldx #0                              ;
 -
     lda $3840,x                         ;
@@ -6148,9 +6183,9 @@ copyToScreen3
     sta $fe01                       ;
 
     ; store original EventV address
-    lda $0220                       ;
+    lda vectorEVNTV                 ;
     sta eventVLow                   ;
-    lda $0221                       ;
+    lda vectorEVNTV + 1             ;
     sta eventVHigh                  ;
 
     ; show 'Press Space'
