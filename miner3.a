@@ -5,33 +5,34 @@
 ; constants
 
 ; OS memory locations
-OSWRCH                          = $ffee
-OSBYTE                          = $fff4
-currentLevel                    = $80
+OSWRCH                                  = $ffee
+OSBYTE                                  = $fff4
+currentLevel                            = $80
 
 ; memory locations
-newPlayerPixelY                 = $183d             ;
-isInAir                         = $184b             ;
-playerHeightOnTakeOff           = $184c             ;
-jumpPhase                       = $184d             ;
-drawSpecialVerticalSprites      = $1980             ;
+newPlayerPixelY                         = $183d             ;
+isInAir                                 = $184b             ;
+playerHeightOnTakeOff                   = $184c             ;
+jumpPhase                               = $184d             ;
+drawSpecialVerticalSprites              = $1980             ;
 
-drawGuardians                    = $1e0d
-showTitleScreenMessageAndWaitForRETURN = $23c0
-creditsMessage                  = $2430
-creditsMessageEnd               = creditsMessage + $47
-bylineMessage                   = $24e0
-bylineMessageEnd                = bylineMessage + $15
-drawConveyors                   = $254d             ;
-clearScreen                     = $2821
-showLevel                       = $62c3
-startGame                       = $6200
-lives                           = $67be                             ; See miner4.a
-playSoundAXY                    = $68ac
-pauseMusic                      = $62e9
-score                           = $67ba
-willyIsOnGround                 = $6b7c
-cheatModeEnabled                = $6b7f
+animateKeysAndUpdateGuardians           = $1e0d
+showTitleScreenMessageAndWaitForRETURN  = $23c0
+creditsMessage                          = $2430
+creditsMessageEnd                       = creditsMessage + $47
+bylineMessage                           = $24e0
+bylineMessageEnd                        = bylineMessage + $15
+drawConveyors                           = $254d             ;
+clearScreen                             = $2821
+showLevel                               = $62c3
+startGame                               = $6200
+lives                                   = $67be                             ; See miner4.a
+playSoundAXY                            = $68ac
+pauseMusic                              = $62e9
+score                                   = $67ba
+willyIsOnGround                         = $6b7c
+cheatModeEnabled                        = $6b7f
+oswordSoundBlock                        = $6b80
 
 * = $3000
 
@@ -170,9 +171,9 @@ L30af
     lda #0                          ;
     sta attractModeTimer            ;
 L30b9
-    jsr drawConveyors               ;
-    jsr drawGuardians                ;
-    jsr drawSpecialVerticalSprites  ;
+    jsr drawConveyors                   ;
+    jsr animateKeysAndUpdateGuardians   ;
+    jsr drawSpecialVerticalSprites      ;
 
     ; pointless delay loop
     ldx #0                          ; 0
@@ -295,7 +296,7 @@ L3160
     bne return5                     ;
 
     lda #$ff                        ;
-    sta $6b83                       ;
+    sta oswordSoundBlock + 3        ;
 
     lda newPlayerPixelY             ; }
     sec                             ; }
@@ -308,7 +309,7 @@ L3160
     jsr playSoundAXY                ; }
 
     lda #0                          ;
-    sta $6b83                       ;
+    sta oswordSoundBlock + 3        ;
 return5
     rts                             ;
 

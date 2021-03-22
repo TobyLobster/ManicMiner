@@ -11,16 +11,23 @@ willyPageLeft               = $06               ;
 OSWRCH                      = $ffee             ;
 OSBYTE                      = $fff4             ;
 OSWORD                      = $fff1             ;
+vectorEVNTV                 = $0220             ; Event vector, fired at VSYNC to update sound
 timeClockB                  = $0297             ; 5 byte clock as read by TIME
 countdownIntervalTimer      = $029C             ; 5 byte countdown interval timer (causes an EVENT when it reaches zero)
 vduTextCursorXPosition      = $0318             ;
 
 ; memory locations
 energyFieldSpriteOffset     = $3f               ;
+collisionFudgeFactor        = $5a               ;
 currentLevel                = $80               ;
 switchTriggered             = $9f               ;
 
+spikePlant                  = $0a58             ;
+allOtherSpikes              = $0a60             ;
+spriteColourMask            = $109b             ; $ff for colour 3, $f0 for colour 2, $0f for colour 1
 updatePlayer                = $109c             ;
+updatePlayerWithAnimation   = $1423             ;
+opcodeForJsrPlot            = $145d             ;
 readTwoCharactersFromScreen = $14a7             ;
 playerPixelX                = $183a             ;
 playerPixelY                = $183b             ;
@@ -35,17 +42,23 @@ conveyorDirection           = $1854             ;
 readOrWriteCachedBackground = $1869             ;
 kongBeastSwitchTriggered    = $197f             ;
 drawSpecialVerticalSprites  = $1980             ;
+doWeMoveEugene              = $19eb             ;
+eugeneColourMask            = $199f             ;
+drawKong                    = $19ee             ;
 eugenePositionY             = $1c48             ;
 currentVerticalGuardians    = $1dad             ;
+verticalGuardian2           = $1db1             ;
 energyFieldSprites          = $1dc1             ;
-drawGuardians                = $1e0d             ;
+animateKeysAndUpdateGuardians   = $1e0d         ;
 
+zeroScoreJumper             = $24f8             ;
+
+drawFooterTextOrReturn      = $2500             ;
 drawConveyors               = $254d             ;
 conveyorX                   = $25a4             ;
 showScoreLivesAndLevel      = $25c8             ;
 exitPositionX               = $25fe             ;
 exitPositionY               = $25ff             ;
-spriteColourMask            = $109b             ; $ff for colour 3, $f0 for colour 2, $0f for colour 1
 
 checkForChannel3Update      = $303b             ;
 channel3Frequency           = $3098             ;
@@ -66,6 +79,8 @@ mainEventRoutine            = $3000             ; See MINER3.a
 miner3EntryPoint            = $3190             ; See MINER3.a
 soundDirect                 = $3075             ;
 checkCheatCode              = $30fc             ;
+
+score                       = $67ba             ; See MINER3.a
 
 * = $5580
 
@@ -333,7 +348,7 @@ numberKeyPressed
 
     ldx $71                                     ;
     lda $70                                     ;
-    sta $60aa,x                                 ;
+    sta data,x                                  ;
     jsr updateCursor                            ;
     lda #charSPACE                              ;
     jsr OSWRCH                                  ;
@@ -501,6 +516,7 @@ triggerSwitch
 
     !byte $00, $00, $00, $08, $05, $ff, $09, $fd
 
+    ; $0050
 switchMessage2
     !byte $1f, $13, $01             ; TAB(19, 1)
 switchClearCentreMessage
@@ -510,6 +526,7 @@ switchMessage2End
 
     !byte $00, $00, $00, $00, $00, $00, $00, $00
 
+    ; $0060
 switchMessage
     !byte $99                       ; the switched switch sprite
     !byte 31, 21, 12                ; TAB(21, 12)
@@ -518,9 +535,24 @@ switchMessage
 switchMessageEnd
 
     !byte $00, $00, $00, $00, $00, $00, $00, $00
+
+    ; $0070
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
-    !byte $a9, $00, $aa, $9d, $ba, $67, $e8, $e0, $03, $d0, $f8, $4c, $90, $31, $ff, $00
+
+    ; $0090
+zeroScore
+    ; clear the score (6 digits in 3 BCD bytes)
+    lda #0                          ;
+    tax                             ;
+-
+    sta score, x                    ;
+    inx                             ;
+    cpx #3                          ;
+    bne -                           ;
+    jmp miner3EntryPoint            ;
+
+    !byte $ff, $00
 }
 zeroPageDefaultsEnd
 
@@ -534,6 +566,7 @@ zeroPageDefaultsEnd
     ; 8 poses of willy: 4 walking right and four walking left
     ; $0500
 minerWilly
+!pseudopc $0500 {
     ; right0
     !byte $00, $33, $77, $33, $33, $33, $11, $33, $66, $ee, $cc, $44, $ee, $cc, $88, $cc
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
@@ -547,6 +580,7 @@ minerWilly
     !byte $88, $88, $88, $88, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
 
     ; right2
+willyRight2
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $33, $77, $33, $33, $33, $11, $33
     !byte $66, $ee, $cc, $44, $ee, $cc, $88, $cc, $00, $00, $00, $00, $00, $00, $00, $00
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $77, $77, $ff, $ff, $33, $77, $66, $77
@@ -582,6 +616,7 @@ minerWilly
     !byte $00, $00, $88, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
     !byte $11, $33, $77, $66, $11, $55, $77, $22, $ff, $ff, $ff, $ff, $ff, $bb, $00, $11
     !byte $88, $cc, $ee, $66, $00, $88, $cc, $cc, $00, $00, $00, $00, $00, $00, $00, $00
+}
 minerWillyEnd
 
     ; Small caps flowery "MANIC MINER (C)" graphic
@@ -597,7 +632,7 @@ titleStart
     !byte $3c, $42, $99, $a1, $a1, $99, $42, $3c, $00, $00, $00, $00, $00, $00, $00, $00
 titleEnd
 
-    ; A Penrose triangle encoded in PLOT statements
+    ; A Penrose triangle as encoded PLOT statements
 trianglesLogo
     !byte $fe, $01                      ; GCOL 0,1
     !byte $04, $19, $a0                 ; MOVE  25, 160
@@ -639,7 +674,7 @@ trianglesLogo
     ; [unused]
     lda #$ff                            ;
     sta willyIsOnGround                 ;
-    jmp $1ce8                           ;
+    jmp $1ce8                           ; [unused]
 
     !byte $00                           ;
 
@@ -649,56 +684,55 @@ getLevelDataByte
     lda $2a28                           ;
     rts                                 ;
 
-L2c9c
-    jsr $2500                           ;
-    jmp L2cb2                           ;
+level18Thing
+    jsr drawFooterTextOrReturn          ;
+    jmp afterLevel18Thing               ;
 
-L2ca2
-    lda #0                              ;
-    sta keyPositionCounter              ;
-    lda #$71                            ;
-    sta getLevelDataByte + 2            ;
-    lda currentLevel                    ;
-    cmp #18                             ;
-    beq L2c9c                           ;
+decodeSingleItemData
+    lda #0                                  ;
+    sta keyPositionCounter                  ;
+    lda #>(levelSingleItemDefinitions - 1)  ;
+    sta getLevelDataByte + 2                ;
+    lda currentLevel                        ;
+    cmp #18                                 ;
+    beq level18Thing                        ;
+afterLevel18Thing
+    lda #0                                  ;
+    sta decodeLevelByte                     ;
+    lda #<(levelSingleItemDefinitions - 1)  ;
+    sta getLevelDataByte + 1                ;
 
-L2cb2
-    lda #0                              ;
-    sta decodeLevelByte                 ;
-    lda #$6f                            ;
-    sta getLevelDataByte + 1            ;
-
-L2cbc
+skipToTerminator
     jsr incrementLevelDataPointer       ;
     jsr getLevelDataByte                ;
-    cmp #$ff                            ;
-    beq L2cc9                           ;
-    jmp L2cbc                           ;
-
-L2cc9
-    inc decodeLevelByte                 ;
+    cmp #$ff                            ; level separator
+    beq +                               ;
+    jmp skipToTerminator                ;
++
+    inc decodeLevelByte                 ; increment level counter
     lda decodeLevelByte                 ;
     cmp currentLevel                    ;
-    bne L2cbc                           ;
+    bne skipToTerminator                ; if (not current room) then branch back (find next level separator)
+
     jsr incrementLevelDataPointer       ;
     jsr getLevelDataByte                ;
-    sta $2e02                           ;
-    lda $2e02                           ;
+    sta singleItemType                  ;
+    lda singleItemType                  ;
     and #$3f                            ;
-    sta keysSpriteOffset                ;
-    lda $2e02                           ;
+    sta singleItemSpriteOffset          ; singleItemSpriteOffset = bottom 6 bits
+    lda singleItemType                  ;
     and #$c0                            ;
     clc                                 ;
     rol                                 ;
     rol                                 ;
     rol                                 ;
-    sta $2e02                           ;
-    inc $2e02                           ;
+    sta singleItemType                  ;
+    inc singleItemType                  ; singleItemType = (top two bits / 64) + 1
     lda #$f0                            ;
-    sta keySprite                       ;
-    jsr setKeysOffset5                  ;
+    sta singleItemSprite                ; singleItemSprite = $f0
+    jsr setSingleItemOffset5            ; singleItemOffsetX = 5
     ldx #0                              ;
-    jmp decodeNext                      ;
+    jmp decodeNextSingleItem            ;
 
     ; $2d00
 drawExtraSpikes
@@ -707,7 +741,7 @@ drawExtraSpikes
     beq drawSpecialSpikes               ; } special thinner spikes on
     cmp #12                             ; } the ceiling of levels 8 and 12
     beq drawSpecialSpikes               ; }
-    ldx #0                              ; swap characters
+    ldx #0                              ; swap characters back
     jmp swapPagesC00andA00              ;
 
 drawSpecialSpikes
@@ -724,7 +758,7 @@ drawSpecialSpikes
     jsr OSWRCH                          ; }
 
     lda #$ec                            ; }
-    jsr OSWRCH                          ; } VDU &EC
+    jsr OSWRCH                          ; } VDU &EC (spike)
 
     lda #9                              ;
     ldx #0                              ; loop counter
@@ -735,67 +769,71 @@ drawSpecialSpikes
     bne -                               ;
 
     lda #$ec                            ; }
-    jsr OSWRCH                          ; } VDU &EC
+    jsr OSWRCH                          ; } VDU &EC (second spike)
 
     ldx #0                              ; swap characters back
     jmp swapPagesC00andA00              ;
 
 ; ***************************************************************************************
-setKeysOffset15Command
-    jsr setKeysOffset15                 ;
-    jmp decodeNext                      ;
+setSingleItemOffset15Command
+    jsr setSingleItemOffset15           ;
+    jmp decodeNextSingleItem            ;
 
 ; ***************************************************************************************
-setKeysOffset5Command
-    jsr setKeysOffset5                  ;
-    lda keySprite                       ;
+setSingleItemOffset5Command
+    jsr setSingleItemOffset5            ;
+    lda singleItemSprite                ;
     sec                                 ;
-    adc keysSpriteOffset                ;
-    sta keySprite                       ;
-    jmp decodeNext                      ;
+    adc singleItemSpriteOffset          ;
+    sta singleItemSprite                ;
+    jmp decodeNextSingleItem            ;
 
 ; ***************************************************************************************
-setAlternativeKeySprite
-    jsr setKeysOffset5                  ;
+toggleAlternativeSingleItemSprite
+    jsr setSingleItemOffset5            ; X offset 5
     ldx #0                              ;
-    jsr swapPagesC00andA00              ;
-    lda #$eb                            ;
-    sta keySprite                       ;
-    jmp decodeNext                      ;
+    jsr swapPagesC00andA00              ; swap pages
+    lda #$eb                            ; regular single item character code
+    sta singleItemSprite                ;
+    jmp decodeNextSingleItem            ;
 
 ; ***************************************************************************************
-decodeNext
+decodeNextSingleItem
     jsr incrementLevelDataPointer       ;
     jsr getLevelDataByte                ;
     sta decodeLevelByte                 ;
     cmp #$ff                            ;
-    beq drawExtraSpikes                 ;
+    beq drawExtraSpikes                 ; if (command 255) then branch (we are finished
+                                        ; with this loop. Finally we draw the special
+                                        ; spikes for level 8 and 12).
     cmp #$fe                            ;
-    beq setKeysOffset15Command          ;
+    beq setSingleItemOffset15Command    ; if (command 254) then set X offset to 15
     cmp #$fd                            ;
-    beq setKeysOffset5Command           ;
-    dec $2e02                           ;
+    beq setSingleItemOffset5Command     ; if (command 253) then set X offset to 5
+
+    dec singleItemType                  ;
+
     lda decodeLevelByte                 ;
-    and #$f0                            ; top nybble contains the key X position
+    and #$f0                            ; top nybble contains the X position
     clc                                 ;
     ror                                 ;
     ror                                 ;
     ror                                 ;
     ror                                 ;
-    sta keyPositionX                    ;
+    sta singleItemX                     ;
     lda decodeLevelByte                 ;
-    and #$0f                            ; bottom nybble contains the key Y position
-    sta keyPositionY                    ;
+    and #$0f                            ; bottom nybble contains the Y position
+    sta singleItemY                     ;
 
     lda #31                             ; TAB
     jsr OSWRCH                          ;
 
-    lda keyPositionX                    ;
+    lda singleItemX                     ;
     clc                                 ;
-    adc keysOffset                      ;
+    adc singleItemOffsetX               ;
     jsr OSWRCH                          ; X pos
 
-    lda keyPositionY                    ;
+    lda singleItemY                     ;
     clc                                 ;
     adc #1                              ;
     jsr OSWRCH                          ; Y pos
@@ -805,61 +843,62 @@ decodeNext
     lda #2                              ; COLOUR 2
     jsr OSWRCH                          ;
 
-    lda keySprite                       ;
+    lda singleItemSprite                ;
     cmp #$ee                            ;
-    beq L2e2a                           ; regular key
+    beq drawSpiderAndThread             ; if (spider) then branch
     cmp #$f0                            ;
-    beq colour3Key                      ;
+    beq handleKey                       ; if (key) then branch
     cmp #$eb                            ;
-    bne colour1Key                      ;
-drawKey
-    lda keySprite                       ;
-    jsr OSWRCH                          ;
-    lda $2e02                           ;
-    cmp #$ff                            ;
-    beq setAlternativeKeySprite         ;
-    jmp decodeNext                      ;
+    bne handleColour1SingleItem         ; if (colour 1 item) then branch
+drawSingleItem
+    lda singleItemSprite                    ;
+    jsr OSWRCH                              ;
+    lda singleItemType                      ;
+    cmp #$ff                                ;
+    beq toggleAlternativeSingleItemSprite   ;
+    jmp decodeNextSingleItem                ;
 
 ; ***************************************************************************************
-colour3Key
+handleKey
     lda #17                         ;
     jsr OSWRCH                      ;
     lda #3                          ; COLOUR 3
     jsr OSWRCH                      ;
-    jmp updateKey                   ;
+    jmp recordKey                   ;
 
 ; ***************************************************************************************
-colour1Key
+handleColour1SingleItem
     lda #17                         ;
     jsr OSWRCH                      ;
     lda #1                          ; COLOUR 1
     jsr OSWRCH                      ;
-    jmp drawKey                     ;
+    jmp drawSingleItem              ;
 
 ; ***************************************************************************************
-setKeysOffset15
+setSingleItemOffset15
     lda #$15                        ;
-    sta keysOffset                  ;
+    sta singleItemOffsetX           ;
     rts                             ;
 
 ; ***************************************************************************************
-setKeysOffset5
+setSingleItemOffset5
     lda #5                          ;
-    sta keysOffset                  ;
+    sta singleItemOffsetX           ;
     rts                             ;
 
-keySprite
+singleItemSprite
     !byte $ea                       ;
 decodeLevelByte
     !byte $ea                       ;
-keyPositionX
+singleItemX
     !byte $ea                       ;
-keyPositionY
+singleItemY
     !byte $ea                       ;
-keysOffset
+singleItemOffsetX
     !byte $ea                       ;
+singleItemType
     !byte $ea                       ;
-keysSpriteOffset
+singleItemSpriteOffset
     !byte $ea                       ;
 
 ; ***************************************************************************************
@@ -888,7 +927,7 @@ incrementLevelDataPointer
     rts
 
 ; ***************************************************************************************
-L2e2a
+drawSpiderAndThread
     jsr incrementLevelDataPointer   ;
     jsr getLevelDataByte            ;
     sta decodeLevelByte             ;
@@ -912,35 +951,37 @@ threadLoop
 drawSpider
     lda #$ee                        ; spider at end of thread
     jsr OSWRCH                      ;
-    jmp decodeNext                  ;
+    jmp decodeNextSingleItem        ;
 
 ; ***************************************************************************************
-updateKey
+recordKey
     lda keyPositionCounter          ;
     cmp #keyPositionsEnd - keyPositions ; only store five keys (don't go beyond the end of the buffer)
     bcc +                           ;
-    jmp drawKey                     ;
+    jmp drawSingleItem              ;
 
 +
-    lda keyPositionX                ;
+    lda singleItemX                 ;
     clc                             ;
-    adc keysOffset                  ;
+    adc singleItemOffsetX           ;
     ldy keyPositionCounter          ;
     sta keyPositions,y              ; store key position x
     iny                             ;
-    lda keyPositionY                ;
+    lda singleItemY                 ;
     clc                             ;
     adc #1                          ;
     sta keyPositions,y              ; store key position y
     inc keyPositionCounter          ;
     inc keyPositionCounter          ;
-    jmp drawKey                     ;
+    jmp drawSingleItem              ;
 
 keyPositions
     !byte $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea, $ea
 keyPositionsEnd
 keyPositionCounter
-    !byte $0f, $16                  ;
+    !byte $0f                       ;
+tempKeyIndex
+    !byte $16                       ;
 keyColourCounter
     !byte $ea                       ;
 
@@ -948,7 +989,7 @@ keyColourCounter
 colourCycleKeys
     lda #0                          ;
     tax                             ;
-L2e8f
+cycleKeyLoop
     inc keyColourCounter            ;
     lda #31                         ;
     jsr OSWRCH                      ;
@@ -958,13 +999,15 @@ L2e8f
     lda keyPositions,x              ;
     jsr OSWRCH                      ;
     inx                             ;
-    stx $2e8a                       ;
+    stx tempKeyIndex                ;
+
     lda #135                        ;
     jsr OSBYTE                      ; read character from screen
+
     cpx #$90                        ;
     beq animateKey                  ; if (key present) then branch (animate key)
 L2eb1
-    ldx $2e8a                       ;
+    ldx tempKeyIndex                ;
     txa                             ;
     cmp keyPositionCounter          ;
     bcs L2ecd                       ;
@@ -973,11 +1016,11 @@ L2eb1
     and #1                          ;
     cmp #0                          ;
     beq +                           ;
-    jmp L2e8f                       ;
+    jmp cycleKeyLoop                ;
 
 +
     inc keyColourCounter            ;
-    jmp L2e8f                       ;
+    jmp cycleKeyLoop                ;
 
 L2ecd
     rts                             ;
@@ -1073,7 +1116,7 @@ foundControlCharacter
 +
     lda #$00                        ;
     sta readOrWriteAddrLow          ;
-    lda #$5a                        ; store $5a00 as address to read / write to
+    lda #$5a                        ; store $5a00 as screen address to read / write to
     sta readOrWriteAddrHigh         ;
     ldy #$c0                        ;
 eorLoop
@@ -1124,27 +1167,28 @@ writeToScreenLoop
     bne writeToScreenLoop           ;
 
     lda #0                          ;
-    sta $5846                       ;
+    sta $5846                       ; screen address
     rts                             ;
 
-L2fc2
+copySpikeSprites
     ldx #0                          ; loop counter
 -
-    lda $0a58,x                     ;
-    sta $0cd8,x                     ;
+    lda spikePlant,x                ;
+    sta $0cd8,x                     ; copy spike plant sprite to $0cd8
     inx                             ;
     cpx #8                          ;
     bne -                           ;
 
-    lda keysSpriteOffset            ;
+    lda singleItemSpriteOffset      ;
     asl                             ;
     asl                             ;
     asl                             ;
     tax                             ;
+
     ldy #0                          ; loop counter
 -
-    lda $0a60,x                     ;
-    sta $0ce0,y                     ;
+    lda allOtherSpikes,x            ;
+    sta $0ce0,y                     ; copy spike from allOtherSpikes+(8*singleItemSpriteOffset) to $0ce0
     inx                             ;
     iny                             ;
     cpy #8                          ;
@@ -1152,12 +1196,12 @@ L2fc2
 
     lda keyPositionCounter          ;
     cmp #4                          ;
-    beq L2ff0                       ;
+    beq +                           ;
     lsr                             ;
     sta keysLeft                    ;
     rts                             ;
 
-L2ff0
++
     lda #1                          ;
     sta keysLeft                    ;
     rts                             ;
@@ -1177,9 +1221,9 @@ readOrWriteAddrHigh = readOrWriteByte + 2
 initialize
     ; install event vector code at $3000
     lda #<mainEventRoutine          ;
-    sta $0220                       ;
+    sta vectorEVNTV                 ;
     lda #>mainEventRoutine          ;
-    sta $0221                       ;
+    sta vectorEVNTV + 1             ;
 
     ; initialize zero page variables $00-$9f from zeroPageDefaults - zeroPageDefaults + $9f
     ldx #0                          ;
@@ -1281,13 +1325,13 @@ initialize
     cpx #$67                        ;
     bne -                           ;
 
-    ; initialize variables?
+    ; install a JMP zeroScore instruction   (just for obfuscation)
     lda #$4c                        ;
-    sta $24f8                       ;
-    lda #$90                        ; $4c, $90, $00 looks like JMP $0090 instruction?
-    sta $24f9                       ;
-    lda #$00                        ;
-    sta $24fa                       ;
+    sta zeroScoreJumper             ;
+    lda #<zeroScore                 ;
+    sta zeroScoreJumper + 1         ;
+    lda #>zeroScore                 ;
+    sta zeroScoreJumper + 2         ;
 
     ; EOR with #$55 memory in the region ($6200-$7fff)
     lda #$00                        ; }
@@ -1336,9 +1380,9 @@ backFrom8Zeros
     ldy #0                          ;
     jsr OSBYTE                      ;
 
-    ; initialize variable?
+    ; fix up single item
     lda #$41                        ;
-    sta $7266                       ;
+    sta pokeSingleItem              ;
 
     ; VDU 26 - reset text and graphics windows
     lda #26                         ;
@@ -1569,19 +1613,19 @@ startGame
     jsr showLevel                           ;
     jsr updateMusicState                    ;
 playCurrentLevel
-    lda $651d                               ;
+    lda tempScreenAddressLow                ;
     sta $75                                 ;
-    lda $651e                               ;
+    lda tempScreenAddressHigh               ;
     sta $76                                 ;
 
     jsr updatePlayer                        ;
 
     lda $75                                 ;
-    sta $651d                               ;
+    sta tempScreenAddressLow                ;
     lda $76                                 ;
-    sta $651e                               ;
+    sta tempScreenAddressHigh               ;
 
-    jsr drawGuardians                       ;
+    jsr animateKeysAndUpdateGuardians       ;
     jsr collideWithGuardians                ;
     jsr updateJumpAndFallSounds             ;
 
@@ -1638,7 +1682,7 @@ readKeysLoop
     lda #$81                                ;
     jsr OSBYTE                              ;
     cpy #$ff                                ;
-    beq keyPressed                          ; if (key pressed) then branch
+    beq functionKeyPressed                  ; if (function key pressed) then branch
 
     inc keyCounter                          ; increment counter
     lda keyCounter                          ;
@@ -1663,7 +1707,7 @@ waitForCOPYKey
     jmp playCurrentLevel                    ;
 
 endGame
-    jmp $24f8                               ;
+    jmp zeroScoreJumper                     ;
 
 musicOff
     lda #0                                  ;
@@ -1715,7 +1759,7 @@ updateMusicState
     beq pauseMusic                          ;
     jmp resumeMusic                         ;
 
-keyPressed
+functionKeyPressed
     ldy #$ff                                ;
     ldx #$ff                                ;
     lda #$81                                ; check for SHIFT key press
@@ -1725,15 +1769,15 @@ keyPressed
 
 afterShiftHandled
     lda keyCounter                          ;
-    cmp $635d                               ;
-    beq L6324                               ;
-    sta $635d                               ;
+    cmp zeroBasedLevel                      ;
+    beq +                                   ;
+    sta zeroBasedLevel                      ;
     clc                                     ;
     adc #1                                  ;
-    jsr showLevel                           ;
-    jmp playCurrentLevel                    ;
+    jsr showLevel                           ; change level
+    jmp playCurrentLevel                    ; [redundant]
 
-L6324
++
     jmp playCurrentLevel                    ;
 
 shiftPressed
@@ -1751,8 +1795,8 @@ shiftPressed
 ; ***************************************************************************************
 storeLevelNumber
     sta currentLevel                    ;
-    sta $635d                           ;
-    dec $635d                           ; make the level zero based
+    sta zeroBasedLevel                  ;
+    dec zeroBasedLevel                  ; make the level zero based
 
     lda cheatModeEnabled                ;
     cmp #0                              ;
@@ -1775,19 +1819,23 @@ keysToRead
     !byte $df, $8e, $8d, $8c, $eb, $8b, $8a, $e9, $89, $88
 keysToReadEnd
 keyCounter
-    !byte $ea, $ea                  ;
+    !byte $ea                           ;
+zeroBasedLevel
+    !byte $ea                           ;
 
-    ldx #0                          ;
-    ldy #10                         ; copy ten pages
-L6362
-    lda $4000,x                     ; copy $4000-$4a00 to $0f00-$0900
-    sta $0f00,x                     ;
-    inx                             ;
-    bne L6362                       ;
-    inc L6362 + 2                   ;
-    inc $6367                       ;
-    dey                             ;
-    bne L6362                       ;
+    ldx #0                              ;
+    ldy #10                             ; copy ten pages
+copyTenPagesLoop
+    lda $4000,x                         ; copy $4000-$4a00 to $0f00-$0900
+copyTenPagesStoreAddressHigh = * + 2
+    sta $0f00,x                         ;
+    inx                                 ;
+    bne copyTenPagesLoop                ;
+    inc copyTenPagesLoop + 2            ;
+    inc copyTenPagesStoreAddressHigh    ;
+    dey                                 ;
+    bne copyTenPagesLoop                ;
+
     ldx #0                          ; loop counter
 -
     lda $4a00,x                     ;
@@ -1803,19 +1851,17 @@ L6362
     inx                             ;
     cpx #$40                        ;
     bne -                           ;
-    jmp $24f8                       ;
+    jmp zeroScoreJumper             ;
 
 L6391
     ldx #0                          ;
 -
     lda $0c00,x                     ;
-    sta $0cd0,x                     ;
-
+    sta $0cd0,x                     ;       copy eight bytes from $0c00 to $0cd0
     lda $0c78,x                     ;
-    sta $0cb8,x                     ;
-
+    sta $0cb8,x                     ;       copy eight bytes from $0c78 to $0cb8
     lda $0c08,x                     ;
-    sta $0ce8,x                     ;
+    sta $0ce8,x                     ;       copy eight bytes from $0c09 to $0ce8
     inx                             ;
     cpx #8                          ;
     bne -                           ;
@@ -1824,6 +1870,7 @@ L6391
     sta $0cd6                       ;
     sta $0cbe                       ;
     sta $0cee                       ;
+
     lda #$ff                        ;
     sta $0cd7                       ;
     sta $0cbf                       ;
@@ -1835,16 +1882,16 @@ L6391
     sta exitPositionY               ; }
 
     lda #$4c                        ; }
-    sta $19eb                       ; } store opcode for 'JMP abs'
+    sta doWeMoveEugene              ; } store opcode for 'JMP abs'
 
     lda #$f0                        ;
-    sta $199f                       ;
+    sta eugeneColourMask            ;
 
     lda #16                         ;
     sta variable                    ;
 
-    lda #$a9                        ;
-    sta $19ee                       ;
+    lda #$a9                        ; opcode for 'LDA #'
+    sta drawKong                    ;
 
     lda #0                          ;
     sta kongBeastSwitchTriggered    ;
@@ -1879,7 +1926,7 @@ L6391
     cpx #64                         ;
     bcc lookRight                   ;
     lda #3                          ; look left
-L641a
+afterLooking
     sta willyAnimationEOR           ;
     ldy playerPixelY                ;
     lda #1                          ;
@@ -1890,16 +1937,16 @@ L641a
     lda conveyorX                   ;
     and #$80                        ;
     cmp #$80                        ;
-    beq L643c                       ;
+    beq +                           ;
 
     lda #$ff                        ;
     sta conveyorDirection           ;
-    jmp $2fc2                       ;
+    jmp copySpikeSprites            ;
 
-L643c
++
     lda #1                          ;
     sta conveyorDirection           ;
-    jmp $2fc2                       ;
+    jmp copySpikeSprites            ;
 
 lookRight
     lda #$e7                        ;
@@ -1907,7 +1954,7 @@ lookRight
     lda #willyPageRight             ; }
     sta willyGraphicsPage           ; } look right
     lda #0                          ; }
-    jmp L641a                       ; }
+    jmp afterLooking                ; }
 
 ; ***************************************************************************************
 gotoNextLevel
@@ -1946,14 +1993,15 @@ checkExit
     cmp #5                          ;
     bne +                           ;
 
+    ; level 5 specific code
     lda eugenePositionY             ;
     ora #$80                        ; set top bit (ensure moving down)
     sta eugenePositionY             ;
 
     lda #$60                        ; store opcode for 'RTS'
-    sta $19eb                       ;
+    sta doWeMoveEugene              ;
 
-    jsr S6a31                       ;
+    jsr toggleEugeneColour          ;
 +
     lda newPlayerPixelX             ;
     lsr                             ;
@@ -2035,14 +2083,17 @@ setColour3AndShowExit
     jmp setColourAndShowExit        ;
 
     ; $651d
-    !byte $00, $05
+tempScreenAddressLow
+    !byte $00                       ;
+tempScreenAddressHigh
+    !byte $05                       ;
 
 L651f
     lda #$4c                        ;
-    sta $145d                       ;
-    jsr $1423                       ;
+    sta opcodeForJsrPlot            ; set opcode 'JMP abs'
+    jsr updatePlayerWithAnimation   ;
     lda #$20                        ;
-    sta $145d                       ;
+    sta opcodeForJsrPlot            ; restore opcode for 'JSR abs'
     jsr pauseMusic                  ;
     lda #0                          ;
     sta keyCounter                  ;
@@ -2092,8 +2143,8 @@ drawInitialAirMeter
     lda #3                          ; } COLOUR 3
     jsr OSWRCH                      ; }
 
-    jsr S6a42                       ;
-    jsr $2ca2                       ;
+    jsr showScoreAndResetVerticalGuardians  ;
+    jsr decodeSingleItemData                ;
 
     ; show 'AIR' message
     ldx #0                          ; loop counter
@@ -2107,7 +2158,7 @@ drawInitialAirMeter
     ; draw AIR meter on screen
     lda #$32                        ; }
     sta storeByte + 2               ; }
-    lda #$a0                        ; } address = $32a0
+    lda #$a0                        ; } screen address = $32a0
     sta storeByte + 1               ; }
 
     ldy #$0a                        ; loop counter
@@ -2165,11 +2216,11 @@ drawAir
     bne drawAirRow3                 ;
 
     lda #0                          ;
-    sta $6693                       ; ?
+    sta airRemainingOffsetWithinCell;
 
     lda #$f0                        ; draw the very top pixel row of the air bar
-    sta $32a0                       ;
-    sta $32a8                       ;
+    sta $32a0                       ; screen address
+    sta $32a8                       ; screen address
 
     lda #$32                        ;
     sta storeByte + 2               ;
@@ -2210,8 +2261,8 @@ updateAir
     cmp #1                          ;
     beq L6633                       ;
 L6640
-    inc $6694                       ;
-    lda $6694                       ;
+    inc airRemainingDelayCounter    ;
+    lda airRemainingDelayCounter    ;
     and #$0f                        ;
     cmp #0                          ;
     beq L664d                       ;
@@ -2219,15 +2270,15 @@ L6640
 
 L664d
     dec airRemaining                ;
-    inc $6693                       ;
-    lda $6693                       ;
+    inc airRemainingOffsetWithinCell;
+    lda airRemainingOffsetWithinCell;
     and #7                          ;
     cmp #0                          ;
     beq L6683                       ;
 L665c
     lda #$bd                        ;
     sta storeByte                   ;
-    ldx $6693                       ;
+    ldx airRemainingOffsetWithinCell;
     jsr storeByte                   ;
     cmp #$f3                        ;
     bne L668e                       ;
@@ -2235,7 +2286,7 @@ L665c
 L666d
     ldy #$9d                        ;
     sty storeByte                   ;
-    ldx $6693                       ;
+    ldx airRemainingOffsetWithinCell;
     jsr storeByte                   ;
     tay                             ;
     txa                             ;
@@ -2248,7 +2299,7 @@ L666d
 
 L6683
     lda #0                          ;
-    sta $6693                       ;
+    sta airRemainingOffsetWithinCell;
     jsr gotoNextRow                 ;
     jmp L665c                       ;
 
@@ -2256,7 +2307,11 @@ L668e
     lda #$0f                        ;
     jmp L666d                       ;
 
-    !byte $ea, $ea                  ;
+airRemainingOffsetWithinCell
+    !byte $ea                       ;
+airRemainingDelayCounter
+    !byte $ea                       ;
+
 S6695
     lda variable                    ;
     cmp #$70                        ;
@@ -2509,10 +2564,10 @@ clearScreenLoop
 
     jsr drawRoomName                ;
 
-    ; copy characters into drawable region at $0c00
+    ; copy 32 bytes (4 characters worth) into drawable region at $0c00
     ldx #0                          ; loop counter
 -
-    lda $7b20,x                     ;
+    lda pedestalSprite,x            ;
     sta $0c00,x                     ;
     inx                             ;
     cpx #$40                        ;
@@ -2527,60 +2582,68 @@ clearScreenLoop
     cpx #$0c                        ; loop 12 times
     bne -                           ;
 
-    lda #$80                        ; }
+    lda #<willyRight2               ; }
     sta $77                         ; }
-    lda #$05                        ; } ($77,$78) = $0580 (address of pedestal)
+    lda #>willyRight2               ; } ($77,$78) = $0580 (address of willy)
     sta $78                         ; }
 
-    ldx #$4e                        ;
-    ldy #$68                        ;
+    ldx #78                         ;
+    ldy #104                        ;
     lda #3                          ;
-    jsr plot                        ;
+    jsr plot                        ; plot willy (on the pedestal)
+
     lda #8                          ;
-    sta $68ab                       ;
-L6844
-    lda #$40                        ;
-    sta $77                         ;
-    lda #$0d                        ;
-    sta $78                         ;
+    sta footPositionY               ;
+footDescendingLoop
+    lda #$40                        ; }
+    sta $77                         ; } $0d40
+    lda #$0d                        ; }
+    sta $78                         ; }
     ldx #$4e                        ;
-    ldy $68ab                       ;
+    ldy footPositionY               ;
     lda #3                          ;
-    jsr plot                        ;
+    jsr plot                        ; draw foot
+
     ldx #$ff                        ;
-    ldy #$40                        ;
-L685a
+    ldy #$40                        ; loop counter
+-
     dex                             ;
-    bne L685a                       ;
-    lda $68ab                       ;
+    bne -                           ; delay
+    lda footPositionY               ;
     lsr                             ;
     eor #$3f                        ;
-    sta $3099                       ;
+    sta channel2Frequency           ; increase pitch
     dey                             ;
-    bne L685a                       ;
-    inc $68ab                       ;
-    inc $68ab                       ;
-    lda $68ab                       ;
-    cmp #$6a                        ;
-    bne L6844                       ;
-    lda #$9f                        ;
-    jsr soundDirect                 ;
-    lda #$10                        ;
-    jsr S6883                       ;
-    jmp $24f8                       ;
+    bne -                           ; if (not zero) then branch (loop back)
 
-S6883
+    inc footPositionY               ;
+    inc footPositionY               ;
+    lda footPositionY               ;
+    cmp #106                        ;
+    bne footDescendingLoop          ;
+
+    lda #$9f                        ;
+    jsr soundDirect                 ; silence sound
+
+    lda #$10                        ; delay amount
+    jsr delayAndClearPedestalSprite ;
+    jmp zeroScoreJumper             ;
+
+; ***************************************************************************************
+delayAndClearPedestalSprite
     sta $70                         ;
-L6885
+delayOuterLoop
     ldx #$ff                        ;
     ldy #$ff                        ;
-L6889
+-
     dex                             ;
-    bne L6889                       ;
+    bne -                           ;
     dey                             ;
-    bne L6889                       ;
+    bne -                           ;
     dec $70                         ;
-    bne L6885                       ;
+    bne delayOuterLoop              ;
+
+    ; clear pedestal sprite
     ldx #0                          ;
     txa                             ;
 -
@@ -2590,12 +2653,15 @@ L6889
     bne -                           ;
     rts                             ;
 
+; ***************************************************************************************
 pedestalMessage
     !byte $11, $03                  ; COLOUR 3
     !byte $1f, $13, $0f             ; TAB(19,15)
     !byte $80, $81                  ; draw leg
     !byte $0a, $08, $08             ; down and back
     !byte $82, $83                  ; draw foot
+
+footPositionY
     !byte $ea
 
 ; ***************************************************************************************
@@ -2620,7 +2686,7 @@ collideWithGuardians
     sec                                 ; }
     sbc #39                             ; }
     sta $77                             ; } subtract 39 from ($77,$78)
-    lda $78                             ; }
+    lda $78                             ; } ?
     sbc #0                              ; }
     sta $78                             ; }
 
@@ -2630,75 +2696,85 @@ collideWithGuardians
     jsr plot                            ;
     jsr checkForDeath                   ;
     jsr checkForSwitchFlipped           ;
-    jsr S6967                           ;
+    jsr collideWithVerticalGuardians    ;
+
 S68df
     lda #3                              ;
-    sta $6936                           ;
+    sta collisionLimit1                 ;
     lda #4                              ;
-    sta $693c                           ;
+    sta collisionLimit2                 ;
     lda willyAnimationEOR               ;
     cmp #3                              ;
-    bne L68fa                           ;
+    bne willyPointingRight              ;
+
+    ; willy pointing left
     lda #4                              ;
-    sta $6936                           ;
+    sta collisionLimit1                 ; set left/right limits for willy collision
     lda #3                              ;
-    sta $693c                           ;
-L68fa
+    sta collisionLimit2                 ;
+
+willyPointingRight
     lda playerPixelX                    ;
     and #3                              ;
     eor willyAnimationEOR               ;
     cmp #3                              ;
-    bne L691a                           ;
+    bne checkCollision                  ;
+
     lda willyAnimationEOR               ;
     cmp #3                              ;
-    bne L6915                           ;
+    bne +                               ;
     lda #5                              ;
-    sta $6936                           ;
-    jmp L691a                           ;
+    sta collisionLimit1                 ;
+    jmp checkCollision                  ;
 
-L6915
++
     lda #5                              ;
-    sta $693c                           ;
-L691a
+    sta collisionLimit2                 ;
+
+    ; loop to check each guardian
+checkCollision
     ldx #0                              ;
-L691c
+checkCollisionLoop
     lda $0d80,x                         ;
     cmp #$ff                            ;
-    beq L693f                           ;
-    jsr S692e                           ;
+    beq return8                         ; if (out of guardians) then return
+    jsr checkCollisionForOneGuardian    ;
     txa                                 ;
     clc                                 ;
     adc #4                              ;
     tax                                 ;
-    jmp L691c                           ;
+    jmp checkCollisionLoop              ;
 
-S692e
+; ***************************************************************************************
+checkCollisionForOneGuardian
     clc                                 ;
-    adc #$13                            ;
+    adc #19                             ;
     sec                                 ;
-    sbc playerPixelX                    ;
+    sbc playerPixelX                    ; guardianX + 19 - playerX
+collisionLimit1 = * + 1
     cmp #3                              ;
-    bcc L6940                           ;
-    eor #$fe                            ;
+    bcc possibleCollisionInX            ; if (guardianX + 19 - playerX < limit1) then branch
+    eor #$fe                            ; [attempt to negate value, not correct]
+collisionLimit2 = * + 1
     cmp #3                              ;
-    bcc L6940                           ;
-L693f
+    bcc possibleCollisionInX            ; if (255 - guardianX - 19 + playerX < limit2) then branch
+return8
     rts                                 ;
 
-L6940
+possibleCollisionInX
     inx                                 ;
-    lda $0d80,x                         ;
+    lda $0d80,x                         ; get guardian cell Y
     sec                                 ;
     sbc #1                              ;
     asl                                 ;
     asl                                 ;
     asl                                 ;
     cmp playerPixelY                    ;
-    bcc L6951                           ;
+    bcc possibleCollisionInY            ; if ((guardianCellY - 1) * 8) < playerY then branch
     dex                                 ;
     rts                                 ;
 
-L6951
+possibleCollisionInY
     lda $0d80,x                         ;
     dex                                 ;
     clc                                 ;
@@ -2708,130 +2784,149 @@ L6951
     asl                                 ;
     sec                                 ;
     sbc #1                              ;
-    cmp playerPixelY                    ;
+    cmp playerPixelY                    ; if (((guardian cell Y + 3) * 8) - 1) > playerY then branch (collision found)
     bcs deathJumper3                    ;
     rts                                 ;
 
 deathJumper3
     jmp death                           ;
 
-S6967
+; ***************************************************************************************
+collideWithVerticalGuardians
     lda #0                              ;
-    sta $5a                             ;
+    sta collisionFudgeFactor            ;
     lda playerPixelX                    ;
     and #3                              ;
     eor willyAnimationEOR               ;
     cmp #0                              ;
-    beq L697b                           ;
+    beq +                               ;
     lda #1                              ;
-    sta $5a                             ;
-L697b
+    sta collisionFudgeFactor            ;
++
     lda currentLevel                    ;
     cmp #5                              ;
-    bne L6996                           ;
+    bne notLevel5                       ;
+
+    ; level 5 specific code
     lda eugenePositionY                 ;
     and #$7f                            ;
     sec                                 ;
     sbc #8                              ;
-    sta $1dae                           ;
-    lda #$ff                            ;
-    sta $1db1                           ;
-    lda #$0f                            ;
-    sta currentVerticalGuardians        ;
-L6996
+    sta currentVerticalGuardians + 1    ; Y coordinate
+
+    lda #$ff                            ; } only one vertical guardian on level 5
+    sta verticalGuardian2               ; }
+
+    lda #$0f                            ; } column 15
+    sta currentVerticalGuardians        ; }
+
+notLevel5
     lda currentLevel                    ;
     cmp #8                              ;
-    beq L69a3                           ;
+    beq kongSpecifics                   ;
     cmp #12                             ;
-    beq L69a3                           ;
-    jmp L69be                           ;
+    beq kongSpecifics                   ;
+    jmp regularLevels                   ;
 
-L69a3
+    ; Kong levels specific code
+kongSpecifics
     lda #$ff                            ;
     sta currentVerticalGuardians        ;
-    lda $33c0                           ;
+    lda $33c0                           ; screen byte where Kong lives
     cmp #0                              ;
-    beq L69be                           ;
-    lda #$0f                            ;
-    sta currentVerticalGuardians        ;
-    lda #$ff                            ;
-    sta $1db1                           ;
+    beq regularLevels                   ;
+    lda #$0f                            ; }
+    sta currentVerticalGuardians        ; } column 15
+
+    lda #$ff                            ; } only one vertical guardian on Kong levels
+    sta verticalGuardian2               ; }
+
     lda #0                              ;
-    sta $1dae                           ;
-L69be
+    sta currentVerticalGuardians + 1    ; Y coordinate
+
+regularLevels
     lda #$f1                            ;
-    sta $6a2a                           ;
+    sta largestYExtent                  ;
     lda currentLevel                    ;
-    cmp #$0e                            ;
-    bne L69ce                           ;
+    cmp #14                             ;
+    bne +                               ;
+
+    ; level 14 specific code
     lda #$f1                            ;
-    sta $6a2a                           ;
-L69ce
+    sta largestYExtent                  ;
+
+    ; check for collisions with all vertical guardians
++
     ldx #0                              ; loop counter
-L69d0
+verticalGuardianCollisionLoop
     lda currentVerticalGuardians,x      ;
     cmp #$ff                            ;
-    beq L6a1a                           ;
-    jsr S69e6                           ;
+    beq return9                         ; if (no vertical guardians) then branch (return)
+    jsr checkOneVerticalCollision       ;
     txa                                 ;
     clc                                 ;
     adc #4                              ;
     tax                                 ;
     cpx #16                             ;
-    bcs L6a1a                           ;
-    jmp L69d0                           ;
+    bcs return9                         ;
+    jmp verticalGuardianCollisionLoop   ;
 
-S69e6
+; ***************************************************************************************
+checkOneVerticalCollision
     lda currentVerticalGuardians,x      ;
     and #$3f                            ;
     clc                                 ;
     adc #5                              ;
     asl                                 ;
     asl                                 ;
-    sta $6632                           ;
+    sta tempScreenByte                  ;
     lda playerPixelX                    ;
     clc                                 ;
     adc #4                              ;
     sec                                 ;
-    sbc $6632                           ;
+    sbc tempScreenByte                  ; playerX + 4 - (guardianX + 5) * 4
     cmp #0                              ;
-    beq L6a1b                           ;
+    beq checkVerticalCollision          ;
     cmp #7                              ;
-    bcc L6a1b                           ;
+    bcc checkVerticalCollision          ;
     sec                                 ;
-    sbc $5a                             ;
+    sbc collisionFudgeFactor            ; subtract 0 or 1
     cmp #7                              ;
-    bcc L6a1b                           ;
+    bcc checkVerticalCollision          ;
     clc                                 ;
-    adc $5a                             ;
+    adc collisionFudgeFactor            ; subtract 0 or 1
     cmp #$fd                            ;
-    bcs L6a1b                           ;
+    bcs checkVerticalCollision          ;
     clc                                 ;
-    adc $5a                             ;
+    adc collisionFudgeFactor            ; subtract 0 or 1
     cmp #$fd                            ;
-    bcs L6a1b                           ;
-L6a1a
+    bcs checkVerticalCollision          ;
+return9
     rts                                 ;
 
-L6a1b
-    lda $1dae,x                         ;
+; ***************************************************************************************
+checkVerticalCollision
+    lda currentVerticalGuardians + 1,x  ;
     clc                                 ;
     adc #8                              ;
     sec                                 ;
     sbc playerPixelY                    ;
-    cmp #$13                            ;
-    bcc deathJumper4                    ;
-    cmp #$f0                            ;
+    cmp #19                             ;
+    bcc deathJumper4                    ; if ( guardianY + 8 - playerY < 19) then branch (die)
+largestYExtent = * + 1
+    cmp #$f0                            ; if (guardianY + 8 - playerY > largestYExtent) then branch (die)
     bcs deathJumper4                    ;
     rts                                 ;
 
+; ***************************************************************************************
 deathJumper4
     jmp death                           ;
 
-S6a31
-    lda $199f                           ;
+; ***************************************************************************************
+toggleEugeneColour
+    lda eugeneColourMask                ;
     eor #$0f                            ;
-    sta $199f                           ;
+    sta eugeneColourMask                ;
 
     jsr drawSpecialVerticalSprites      ;
 
@@ -2839,7 +2934,7 @@ S6a31
     sta spriteColourMask                ;
     rts                                 ;
 
-S6a42
+showScoreAndResetVerticalGuardians
     jsr showScoreLivesAndLevel          ;
     lda #$ff                            ;
     sta currentVerticalGuardians        ;
@@ -3152,6 +3247,8 @@ levelDefinitions
     !byte $01, $00, $89, $00, $13, $07, $00, $05, $02, $02, $08, $03, $08, $0d, $0e, $05
     !byte $06, $03, $07, $0a, $04, $17, $0b, $02, $16, $07, $02, $1a, $05, $04, $1b, $09
     !byte $03, $ff, $fd, $02, $fe, $0a, $03, $0a, $0b, $ff, $02, $0c, $03, $ff, $fe, $0a
+
+    ; $7100
     !byte $04, $0a, $06, $fe, $0a, $08, $0a, $0a, $fd, $03, $ff, $ff, $20, $06, $00, $01
     !byte $00, $8a, $01, $21, $04, $07, $05, $07, $0d, $03, $07, $00, $08, $02, $08, $07
     !byte $07, $1b, $07, $03, $10, $07, $04, $13, $0d, $01, $10, $0c, $01, $16, $0d, $01
@@ -3159,7 +3256,14 @@ levelDefinitions
     !byte $ff, $0c, $00, $12, $17, $03, $05, $03, $07, $05, $00, $0b, $02, $00, $0c, $0b
     !byte $0d, $0e, $03, $0e, $0d, $02, $0f, $0c, $01, $fe, $0f, $07, $01, $0a, $0a, $0b
     !byte $01, $ff, $02, $0b, $08, $fe, $1c, $03, $02, $07, $02, $0b, $08, $ff, $ff, $ff
+
+levelSingleItemDefinitions
+    ; level 1
+    ; $ff   separator
+    ; $fe
     !byte $ff, $c1, $80, $f1, $fe, $74, $c0, $d6, $bc, $fe, $48, $64, $a4, $fd, $a0, $f0
+
+    ; $7180
     !byte $ff, $c1, $29, $61, $fe, $71, $97, $2c, $fd, $fe, $d1, $ff, $c2, $50, $e0, $fe
     !byte $60, $d6, $46, $fd, $08, $03, $90, $00, $fe, $10, $01, $a0, $00, $ff, $c2, $00
     !byte $b1, $f6, $fe, $81, $d6, $fd, $60, $00, $fe, $6c, $00, $ff, $c0, $6c, $8c, $96
@@ -3168,15 +3272,20 @@ levelDefinitions
     !byte $db, $fd, $fe, $6c, $68, $ba, $b5, $ff, $80, $18, $d6, $b2, $fe, $cd, $fe, $6e
     !byte $ff, $00, $f1, $f1, $fe, $ff, $c6, $d1, $b6, $fe, $18, $42, $d1, $fd, $23, $09
     !byte $90, $fe, $10, $30, $41, $6b, $da, $ff, $c2, $04, $fe, $26, $70, $d1, $dd, $fd
+
+    ; $7200
     !byte $ba, $02, $fe, $20, $01, $2a, $01, $76, $03, $ff, $c0, $16, $e3, $f7, $fe, $95
     !byte $cd, $fe, $6c, $bc, $ff, $c0, $ac, $96, $fe, $93, $99, $29, $fe, $ff, $80, $28
     !byte $f7, $fe, $62, $a7, $fe, $ff, $42, $b6, $fe, $82, $9e, $fd, $74, $01, $fe, $b4
     !byte $06, $ff, $87, $00, $c7, $fe, $0a, $d2, $fd, $fe, $6e, $7e, $8e, $ff, $c8, $09
     !byte $e7, $fe, $2a, $75, $9b, $54, $84, $c4, $f4, $fe, $54, $74, $fd, $26, $8b, $fe
     !byte $5a, $97, $ff, $00, $e1, $e1, $fe, $ff, $c1, $02, $c8, $fe, $d1, $dc, $18, $fe
-    !byte $ff, $c2, $88, $fe, $0d, $28, $61, $db, $66, $fe, $06, $2e, $4e, $fd, $40, $02
+    !byte $ff, $c2, $88, $fe, $0d, $28
+pokeSingleItem
+    !byte $61, $db, $66, $fe, $06, $2e, $4e, $fd, $40, $02
     !byte $fe, $b8, $03, $ff, $f0, $07, $c9, $ff, $f0, $09, $00, $00, $00, $00, $00, $00
 
+    ; $7280
 guardianGraphics
     !byte %...#####                 ;     #####  #
     !byte %..###..#                 ;    ###  ####
@@ -5530,22 +5639,23 @@ eugeneSprite
     !byte %.###....
     !byte %........
 
-    !byte %########
-    !byte %.###..#.
-    !byte %#...#.#.
-    !byte %#.#.#.#.
-    !byte %.#..#.#.
-    !byte %...#..#.
-    !byte %..#...#.
-    !byte %..#.#.#.
-    !byte %########
-    !byte %.#..###.
-    !byte %.#.#...#
-    !byte %.#.#.#.#
-    !byte %.#.#..#.
-    !byte %.#..#...
-    !byte %.#...#..
-    !byte %.#.#.#..
+pedestalSprite
+    !byte %########            ; ################
+    !byte %.###..#.            ;  ###  #  #  ###
+    !byte %#...#.#.            ; #   # #  # #   #
+    !byte %#.#.#.#.            ; # # # #  # # # #
+    !byte %.#..#.#.            ;  #  # #  # #  #
+    !byte %...#..#.            ;    #  #  #  #
+    !byte %..#...#.            ;   #   #  #   #
+    !byte %..#.#.#.            ;   # # #  # # #
+    !byte %########            ;   # # #  # # #
+    !byte %.#..###.            ;   # # #  # # #
+    !byte %.#.#...#            ;   # # #  # # #
+    !byte %.#.#.#.#            ;   # # #  # # #
+    !byte %.#.#..#.            ;   # # #  # # #
+    !byte %.#..#...            ;   # # #  # # #
+    !byte %.#...#..            ;   # # #  # # #
+    !byte %.#.#.#..            ; ################
 
     !byte %..#.#.#.
     !byte %..#.#.#.
