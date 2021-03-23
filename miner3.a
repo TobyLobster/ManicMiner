@@ -5,9 +5,10 @@
 ; constants
 
 ; OS memory locations
-OSWRCH                                  = $ffee
-OSBYTE                                  = $fff4
-currentLevel                            = $80
+OSWRCH                                  = $ffee             ;
+OSBYTE                                  = $fff4             ;
+currentLevel                            = $80               ;
+softCharacterDefinitions                = $0c00             ;
 
 ; memory locations
 newPlayerPixelY                         = $183d             ;
@@ -165,12 +166,12 @@ playAttractLoop
     cpx #3                          ;
     bne -                           ;
 
-L30af
+attractLoop
     lda currentLevel                ;
     jsr showLevel                   ;
     lda #0                          ;
     sta attractModeTimer            ;
-L30b9
+showALevelLoop
     jsr drawConveyors                   ;
     jsr animateKeysAndUpdateGuardians   ;
     jsr drawSpecialVerticalSprites      ;
@@ -187,7 +188,7 @@ L30b9
     inc attractModeTimer            ;
     lda attractModeTimer            ;
     cmp #$40                        ;
-    beq L30ea                       ;
+    beq showNextLevel               ;
 
     ldy #$ff                        ;
     ldx #$b6                        ;
@@ -196,21 +197,22 @@ L30b9
     cpy #$ff                        ;
     beq +                           ;
 
-    jmp L30b9                       ;
+    jmp showALevelLoop              ;
 
 +
     jmp startGame                   ;
 
 attractModeTimer
     !byte $ea                       ;
-L30ea
+
+showNextLevel
     inc currentLevel                ;
     lda currentLevel                ;
     cmp #19                         ;
-    beq L30f5                       ;
-    jmp L30af                       ;
+    beq endOfAttractLoop            ;
+    jmp attractLoop                 ;
 
-L30f5
+endOfAttractLoop
     nop                             ;
     nop                             ;
     nop                             ;
@@ -270,24 +272,24 @@ cheatCode
 cheatCodeEnd
 
 ; ***************************************************************************************
-    !byte $60, $60
+    !byte $60, $60                  ; [UNUSED]
 
 ; ***************************************************************************************
 updateJumpAndFallSounds
     jsr drawSpecialVerticalSprites  ;
     lda isInAir                     ;
     cmp #1                          ;
-    bne L3160                       ; if (not in air) then branch
+    bne notInAir                    ; if (not in air) then branch
     lda jumpPhase                   ;
     cmp #1                          ;
-    bne L3160                       ;
+    bne notInAir                    ;
 
     lda #$04                        ; }
     ldx #$64                        ; }
     ldy #$02                        ; } play jump sound
     jmp playSoundAXY                ; }
 
-L3160
+notInAir
     lda isInAir                     ;
     cmp #1                          ;
     beq return5                     ;
@@ -460,10 +462,10 @@ swapPages700andC00
 -
     lda $0700,x                     ;
     tay                             ;
-    lda $0c00,x                     ;
+    lda softCharacterDefinitions,x  ;
     sta $0700,x                     ;
     tya                             ; swap $700->$7ff with $0c00->$0cff
-    sta $0c00,x                     ;
+    sta softCharacterDefinitions,x  ;
     inx                             ;
     bne -                           ;
     rts                             ;
@@ -483,4 +485,4 @@ plotYHigh
     !byte $ea                       ;
 plotMessageEnd
 
-    !byte $00, $00, $00, $00, $00, $00, $00
+    !byte $00, $00, $00, $00, $00, $00, $00     ; [UNUSED]

@@ -2,12 +2,18 @@
 ; MINER1.a ($7400)
 ;
 
-mode7Screen    = $7c00
+; constants
 charSPACE      = $20
-OSBYTE         = $fff4
-OSCLI          = $fff7
 
-afterSpace     = $7390                 ; See MINER2.a
+; OS memory locations
+OSBYTE              = $fff4
+OSCLI               = $fff7
+vectorEVNTV         = $0220             ; Events
+fsBlockNumberHigh   = $03c7             ;
+fsBlockFlagByte     = $03ca             ;
+
+afterSpace     = $7390                  ; See MINER2.a
+mode7Screen    = $7c00
 
 * = $7400
 
@@ -24,10 +30,10 @@ eventV
     pha                                 ;
     php                                 ;
     lda #$20                            ;
-    sta $7bfd                           ; Write a space?
-    sta $03ca                           ;
+    sta $7bfd                           ; Write a space at the end of the second screen [why?]
+    sta fsBlockFlagByte                 ; [why?]
     lda #0                              ;
-    sta $03c7                           ;
+    sta fsBlockNumberHigh               ; [why?]
     inc $70                             ; increment vsync counter
     lda $70                             ;
     cmp #$10                            ;
@@ -88,9 +94,9 @@ animateLoop
 
 fromMiner2
     lda #<eventV                        ; }
-    sta $0220                           ; }
+    sta vectorEVNTV                     ; }
     lda #>eventV                        ; } install event vector
-    sta $0221                           ; }
+    sta vectorEVNTV + 1                 ; }
 
     ; *FX 14,4 enable start of vsync
     lda #14                             ;
@@ -122,10 +128,11 @@ waitForSpaceBar
     sei                                 ;
 eventVLow = * + 1
     lda #0                              ;
-    sta $0220                           ;
+    sta vectorEVNTV                     ;
 eventVHigh = * + 1
     lda #0                              ;
-    sta $0221                           ;
+    sta vectorEVNTV + 1                 ;
+
     ; enable interrupts
     cli                                 ;
     jmp afterSpace                      ; jump back to MINER2.a
