@@ -2,18 +2,7 @@
 ; MINER1.a ($7400)
 ;
 
-; constants
-charSPACE      = $20
-
-; OS memory locations
-OSBYTE              = $fff4
-OSCLI               = $fff7
-vectorEVNTV         = $0220             ; Events
-fsBlockNumberHigh   = $03c7             ;
-fsBlockFlagByte     = $03ca             ;
-
-afterSpace     = $7390                  ; See MINER2.a
-mode7Screen    = $7c00
+!src "constants.a"
 
 * = $7400
 
@@ -153,7 +142,7 @@ runMiner2
 
 ; ***************************************************************************************
 unused2
-    !byte 0,0,0,0,0,0,0,0,0,0,0,0       ;
+    !byte 0,0,0,0,0,0,0,0,0,0,0,0       ; [UNUSED]
 
 ; ***************************************************************************************
 setModeString
@@ -166,7 +155,7 @@ whiteBackgroundString
     !text " ",$87, $9d, $84, "                         ",$9c, 13, 0
 
 unused3
-    !byte $00, $00, $00, $00, $00       ;
+    !byte $00, $00, $00, $00, $00       ; [UNUSED]
 
 ; ***************************************************************************************
 scrollingMessage

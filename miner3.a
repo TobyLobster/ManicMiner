@@ -2,38 +2,14 @@
 ; miner3.a ($3c00)
 ;
 
+!src "constants.a"
+
 ; constants
 
 ; OS memory locations
-OSWRCH                                  = $ffee             ;
-OSBYTE                                  = $fff4             ;
 currentLevel                            = $80               ;
-softCharacterDefinitions                = $0c00             ;
 
 ; memory locations
-newPlayerPixelY                         = $183d             ;
-isInAir                                 = $184b             ;
-playerHeightOnTakeOff                   = $184c             ;
-jumpPhase                               = $184d             ;
-drawSpecialVerticalSprites              = $1980             ;
-
-animateKeysAndUpdateGuardians           = $1e0d
-showTitleScreenMessageAndWaitForRETURN  = $23c0
-creditsMessage                          = $2430
-creditsMessageEnd                       = creditsMessage + $47
-bylineMessage                           = $24e0
-bylineMessageEnd                        = bylineMessage + $15
-drawConveyors                           = $254d             ;
-clearScreen                             = $2821
-showLevel                               = $62c3
-startGame                               = $6200
-lives                                   = $67be                             ; See miner4.a
-playSoundAXY                            = $68ac
-pauseMusic                              = $62e9
-score                                   = $67ba
-willyIsOnGround                         = $6b7c
-cheatModeEnabled                        = $6b7f
-oswordSoundBlock                        = $6b80
 
 * = $3000
 

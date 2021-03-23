@@ -2,93 +2,12 @@
 ; miner4.a ($5580)
 ;
 
-; constants
-charSPACE                   = $20               ;
-willyPageRight              = $05               ;
-willyPageLeft               = $06               ;
+!src "constants.a"
 
-; OS memory locations
-OSWRCH                      = $ffee             ;
-OSBYTE                      = $fff4             ;
-OSWORD                      = $fff1             ;
-vectorEVNTV                 = $0220             ; Event vector, fired at VSYNC to update sound
-timeClockB                  = $0297             ; 5 byte clock as read by TIME
-countdownIntervalTimer      = $029C             ; 5 byte countdown interval timer (causes an EVENT when it reaches zero)
-vduTextCursorXPosition      = $0318             ;
-softCharacterDefinitions    = $0c00             ;
+; constants
 
 ; memory locations
-energyFieldSpriteOffset     = $3f               ;
-collisionFudgeFactor        = $5a               ;
-plotSourceSpriteAddressLow  = $77               ;
-plotSourceSpriteAddressHigh = $78               ;
-currentLevel                = $80               ;
-switchTriggered             = $9f               ;
 
-verticalGuardianMODE1Address    = $0400
-verticalGuardianMODE1Address1   = $0440
-verticalGuardianMODE1Address2   = $0480
-verticalGuardianMODE1Address3   = $04c0
-spikePlant                  = $0a58             ;
-allOtherSpikes              = $0a60             ;
-footSprite                  = $0d40             ;
-guardianPositions           = $0d80             ;
-guardianPositionsCopy       = $0d90             ;
-spriteColourMask            = $109b             ; $ff for colour 3, $f0 for colour 2, $0f for colour 1
-updatePlayer                = $109c             ;
-updatePlayerWithAnimation   = $1423             ;
-opcodeForJsrPlot            = $145d             ;
-readTwoCharactersFromScreen = $14a7             ;
-playerPixelX                = $183a             ;
-playerPixelY                = $183b             ;
-newPlayerPixelX             = $183c             ;
-newPlayerPixelY             = $183d             ;
-willyAnimationEOR           = $183f             ;
-willyGraphicsPage           = $1840             ;
-willySpriteAddressLow       = $1842             ;
-willySpriteAddressHigh      = $1843             ;
-isInAir                     = $184b             ;
-conveyorDirection           = $1854             ;
-readOrWriteCachedBackground = $1869             ;
-kongBeastSwitchTriggered    = $197f             ;
-drawSpecialVerticalSprites  = $1980             ;
-doWeMoveEugene              = $19eb             ;
-eugeneColourMask            = $199f             ;
-drawKong                    = $19ee             ;
-eugenePositionY             = $1c48             ;
-currentVerticalGuardians    = $1dad             ;
-verticalGuardian2           = $1db1             ;
-energyFieldSprites          = $1dc1             ;
-animateKeysAndUpdateGuardians   = $1e0d         ;
-
-zeroScoreJumper             = $24f8             ;
-
-drawFooterTextOrReturn      = $2500             ;
-drawConveyors               = $254d             ;
-conveyorX                   = $25a4             ;
-showScoreLivesAndLevel      = $25c8             ;
-exitPositionX               = $25fe             ;
-exitPositionY               = $25ff             ;
-
-checkForChannel3Update      = $303b             ;
-channel3Frequency           = $3098             ;
-channel2Frequency           = $3099             ;
-updateJumpAndFallSounds     = $3146             ;
-
-plot                        = $0f00             ;
-copyGuardianSprites         = $1fb5             ;
-numbers                     = $2680             ;
-roomNumberReached           = $2ff6             ;
-keysLeft                    = $2fff             ;
-screenStartAddress          = $3280             ; start of visible screen
-screenEndAddress            = $6000             ; end of visible screen
-
-resetLevel19Meteors         = $229b             ;
-initLevel                   = $28b8             ;
-mainEventRoutine            = $3000             ; See MINER3.a
-miner3EntryPoint            = $3190             ; See MINER3.a
-soundDirect                 = $3075             ;
-checkCheatCode              = $30fc             ;
 
 * = $5580
 
@@ -576,6 +495,7 @@ zeroPageDefaultsEnd
     ; $0500
 minerWilly
 !pseudopc $0500 {
+willyRight0
     ; right0
     !byte $00, $33, $77, $33, $33, $33, $11, $33, $66, $ee, $cc, $44, $ee, $cc, $88, $cc
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
@@ -602,6 +522,7 @@ willyRight2
     !byte $ff, $ff, $ff, $ff, $ff, $dd, $00, $88, $88, $cc, $ee, $66, $88, $aa, $ee, $44
 
     ; $0600
+willyLeft0
     ; left0
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
     !byte $66, $77, $33, $22, $77, $33, $11, $33, $00, $cc, $ee, $cc, $cc, $cc, $88, $cc
@@ -1915,7 +1836,7 @@ initializeLevelSprites
     lda #$27                        ;
     sta willySpriteAddressLow       ;
 
-    lda #willyPageLeft              ; }
+    lda #>willyLeft0                ; }
     sta willyGraphicsPage           ; } look left
 
     ; set player start position
@@ -1966,7 +1887,7 @@ afterLooking
 lookRight
     lda #$e7                        ;
     sta willySpriteAddressLow       ;
-    lda #willyPageRight             ; }
+    lda #>willyRight0               ; }
     sta willyGraphicsPage           ; } look right
     lda #0                          ; }
     jmp afterLooking                ; }

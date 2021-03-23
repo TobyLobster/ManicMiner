@@ -2,104 +2,8 @@
 ; MINER2.a ($4c00)
 ;
 
-; constants
-charSPACE                       = $20
-willyPageRight                  = $05
-willyPageLeft                   = $06
+!src "constants.a"
 
-; os memory locations
-vectorEVNTV                     = $0220     ; Event vector, fired at VSYNC to update sound
-vduTextCursorXPosition          = $0318
-vduTextCursorYPosition          = $0319
-softCharacterDefinitions        = $0c00
-OSWRCH                          = $ffee
-OSBYTE                          = $fff4
-OSWORD                          = $fff7
-
-; memory locations
-meteorTailAnimationOffset       = $3f
-triggerSwitch                   = $40
-switchMessage2                  = $50
-switchClearCentreMessage        = $53
-switchClearCentreMessageEnd     = $58
-switchMessage2End               = $58
-switchMessage                   = $60
-switchMessageEnd                = $68
-
-levelDataOffset                 = $70
-
-plotMode                        = $70
-plotX                           = $71
-plotY                           = $72
-plotXOffset                     = $73
-plotYOffset                     = $74
-plotScreenAddressLow            = $75
-plotScreenAddressHigh           = $76
-plotSourceSpriteAddressLow      = $77
-plotSourceSpriteAddressHigh     = $78
-
-levelFeatureIndex               = $79
-currentLevel                    = $80
-levelColours                    = $81
-levelColours2                   = $82
-zpGuardianPositionX             = $8a
-zpGuardianPositionY             = $8b
-zpGuardianLimit1                = $8c
-zpGuardianLimit2                = $8d
-zpGuardianAnimIndex             = $8e
-switchTriggered                 = $9f
-
-verticalGuardianMODE1Address    = $0400
-verticalGuardianMODE1Address1   = $0440
-verticalGuardianMODE1Address2   = $0480
-verticalGuardianMODE1Address3   = $04c0
-
-singleItemSprite                = $2dfd
-decodeLevelByte                 = $2dfe
-keyType                         = $2e02
-keyPositionCounter              = $2e89
-
-logicalScreenStart              = $3000                             ;
-channel3Frequency               = $3098                             ;
-screenStartAddress              = $3280                             ; start of visible screen
-blankAreaOfScreen               = $34d0                             ; empty screen area to the right of the play area
-screenEndAddress                = $6000                             ; end of visible screen
-backgroundCache                 = $6ba0                             ; six cells copied from the screen before the player is drawn
-levelDefinitions                = $6c00                             ; start of level definitions
-
-miner4EntryPoint                = $619a                             ; See miner4.a
-resumeMusic                     = $62e3                             ; See miner4.a
-lives                           = $67be                             ; See miner4.a
-willyIsOnGround                 = $6b7c                             ; See miner4.a
-guardianGraphics                = $7280                             ; See miner4.a
-fromMiner2                      = $7475                             ; See miner1.a
-eventVLow                       = $74a7                             ; See miner1.a
-eventVHigh                      = $74ac                             ; See miner1.a
-setModeString                   = $74d4                             ; See miner1.a
-setModeStringEnd                = setModeString + 7                 ; See miner1.a
-whiteBackgroundString           = $74db                             ; See miner1.a
-whiteBackgroundStringEnd        = whiteBackgroundString + $1e       ; See miner1.a
-skylab4Sprite                   = $7a80                             ; See miner4.a
-skylab5Sprite                   = $7ac0                             ; See miner4.a
-eugeneSprite                    = $7b00                             ; See miner4.a
-energyFieldTimer                = $7eed
-
-; from the unused section:
-singleItemSpriteOffset          = $2e03
-incrementLevelDataPointer       = $2e18
-decodeNextSingleItem            = $2d69
-setSingleItemOffset5            = $2df7
-
-colourCycleKeys                 = $2e8c
-drawRoomName                    = $2ef0
-logicalScreenStart              = $3000
-playAttractLoop                 = $309a
-startGame                       = $6200
-drawAirBar                      = $6577
-addToScore                      = $673c
-updateAirAndCheckExit           = $646d
-death                           = $67d6
-collideWithHorizontalGuardians  = $68df
 
 animateLevel19EnergyFields  = $7e80
 
@@ -1846,7 +1750,7 @@ onGround
 switchToLookingLeft
     lda #3                                  ; }
     sta willyAnimationEOR                   ; }
-    lda #willyPageLeft                      ; } look left
+    lda #>willyLeft0                        ; } look left
     sta willyGraphicsPage                   ; }
     lda #1                                  ;
     sta willyChangedDirection               ;
@@ -1882,7 +1786,7 @@ checkForXKey
 switchToLookingRight
     lda #0                                  ; }
     sta willyAnimationEOR                   ; }
-    lda #willyPageRight                     ; } look right
+    lda #>willyRight0                       ; } look right
     sta willyGraphicsPage                   ; }
     lda #1                                  ;
     sta willyChangedDirection               ;
@@ -2752,7 +2656,7 @@ updateWillyOnConveyor
     cmp #3                          ;
     bne updateConveyorMovement      ;
 
-    lda #willyPageRight             ; }
+    lda #>willyRight0               ; }
     sta willyGraphicsPage           ; }
     lda #0                          ; } look right
     sta willyAnimationEOR           ; }
@@ -2784,7 +2688,7 @@ updateConveyorMovement
     lda willyAnimationEOR           ;
     cmp #0                          ;
     bne walkWithConveyor            ;
-    lda #willyPageLeft              ; }
+    lda #>willyLeft0                ; }
     sta willyGraphicsPage           ; }
     lda #3                          ; } look left
     sta willyAnimationEOR           ; }
@@ -6220,12 +6124,12 @@ postFill
     ; *L.MINER3
     ldx #<loadMiner3                    ;
     ldy #>loadMiner3                    ;
-    jsr OSWORD                          ;
+    jsr OSCLI                           ;
 
     ; *L.MINER4
     ldx #<loadMiner4                    ;
     ldy #>loadMiner4                    ;
-    jsr OSWORD                          ;
+    jsr OSCLI                           ;
     jmp afterLoads                      ;
 
 ; ***************************************************************************************
