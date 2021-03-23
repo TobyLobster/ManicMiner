@@ -42,6 +42,11 @@ levelFeatureIndex               = $79
 currentLevel                    = $80
 levelColours                    = $81
 levelColours2                   = $82
+zpGuardianPositionX             = $8a
+zpGuardianPositionY             = $8b
+zpGuardianLimit1                = $8c
+zpGuardianLimit2                = $8d
+zpGuardianAnimIndex             = $8e
 switchTriggered                 = $9f
 
 verticalGuardianMODE1Address    = $0400
@@ -534,7 +539,7 @@ afterUpdateCrumberBar
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
 
-    ; OS printer buffer [unused]
+    ; OS printer buffer [UNUSED]
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
@@ -2014,7 +2019,7 @@ cancelJump
 
 ; ***************************************************************************************
 +
-    jsr drawConveyors               ;
+    jsr updatePlayerAirAndDrawConveyor  ;
     jmp updatePlayerWithAnimation   ;
 
     ; $1335
@@ -2130,9 +2135,11 @@ updateNewPlayerY
     lda playerPixelY                ;
     cmp playerHeightOnTakeOff       ;
     bne updateConveyorsAndPlayer    ; if (player height not the same as when last on ground) then branch (move player)
+
     lda jumpPhase                   ;
     cmp #0                          ;
     bne updateConveyorsAndPlayer    ; if (jumping) then branch (move player)
+
     lda newPlayerPixelY             ;
     sta playerPixelY                ;
     rts                             ;
@@ -2145,7 +2152,7 @@ updateConveyorsAndPlayer
     lda #0                              ; }
     jsr readOrWriteCachedBackground     ; } draw old background from cache
 
-    jsr drawConveyors                   ; animate conveyors
+    jsr updatePlayerAirAndDrawConveyor  ; animate conveyors
 
     lda #1                              ;
     sta hasDrawnConveyors               ;
@@ -2600,7 +2607,7 @@ updatePlayerWhenSupported
     lda #0                          ;
     sta isInAir                     ;
     sta jumpPhase                   ;
-    jsr drawConveyors               ;
+    jsr updatePlayerAirAndDrawConveyor  ;
     jsr checkUpdateConveyor         ;
     jmp updatePlayer                ;
 
@@ -3266,11 +3273,11 @@ fastGuardian
     lda currentGuardianExtent1  ;
     and #$80                    ;
     cmp #$80                    ;
-    bne L1ac4                   ;
+    bne updateGuardian          ;
     jmp drawSkylabCrashing      ;
 
 ; ***************************************************************************************
-L1ac4
+updateGuardian
     lda currentLevel            ;
     cmp #19                     ;
     bne +                       ; if (not level 19) then branch
@@ -3624,22 +3631,22 @@ copyEugeneByteCounter
 ; ***************************************************************************************
 levelWithKongBeast
     lda #2                          ;
-    sta copyWhichSprite             ;
-    jmp L1d15                       ;
+    sta copyWhichSprite             ; copy Kong
+    jmp continueCopySprites         ;
 
 ; ***************************************************************************************
-L1cd3
+levelWithAmoebatrons
     lda #9                          ;
-    sta copyWhichSprite             ;
-    jmp L1d15                       ;
+    sta copyWhichSprite             ; copy Amoebatrons
+    jmp continueCopySprites         ;
 
 ; ***************************************************************************************
 levelEugenesLair
     lda #1                          ;
     sta copyWhichSprite             ; copy Eugene
     lda #8                          ;
-    sta eugenePositionY                       ;
-    jmp L1d15                       ;
+    sta eugenePositionY             ;
+    jmp continueCopySprites         ;
 
 ; ***************************************************************************************
 copyVerticalSprites
@@ -3655,7 +3662,7 @@ copyVerticalSprites
     cmp #8                              ;
     beq levelWithKongBeast              ;
     cmp #9                              ;
-    beq L1cd3                           ;
+    beq levelWithAmoebatrons            ;
     cmp #5                              ;
     beq levelEugenesLair                ;
     lda currentLevel                    ;
@@ -3664,12 +3671,12 @@ copyVerticalSprites
     tax                                 ;
     lda verticalGuardiansSpritesArray,x ;
     sta copyWhichSprite                 ; copy based on level number - 10
-L1d15
+continueCopySprites
     ldx #1                              ;
 
 -
     cpx copyWhichSprite                 ; multiplication by repeated addition
-    beq L1d32                           ;
+    beq foundSprite                     ;
 
     lda specialSpriteSourceAddress      ; }
     clc                                 ; }
@@ -3684,10 +3691,10 @@ L1d15
 
 ; ***************************************************************************************
 return4
-    rts                         ;
+    rts                                 ;
 
 ; ***************************************************************************************
-L1d32
+foundSprite
     jsr copyEugeneIntoMODE1Format       ;
     lda currentLevel                    ;
     cmp #9                              ; Levels 9, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20
@@ -3830,7 +3837,7 @@ energyFieldSprites
     !byte $49
 
 ; ***************************************************************************************
-L1e00
+swapBackPages
     jmp swapPagesC00andE00          ;
 
 ; ***************************************************************************************
@@ -3861,6 +3868,7 @@ animateKeysAndUpdateGuardians
     beq updateLevel19Guardians      ; if (level 19) then branch
     jmp drawGuardians               ; [redundant]
 
+
 ; ***************************************************************************************
 drawGuardians
     jsr swapPagesC00andE00          ; swap in monster definitions
@@ -3871,15 +3879,15 @@ drawGuardians
 
 drawGuardiansLoop
     lda guardianPositions,y         ; }
-    sta $8a,x                       ; }
+    sta zpGuardianPositionX,x       ; }
     iny                             ; } copy guardian info to zero page cache
     inx                             ; } from guardianPositions to $8a for four bytes
     cpx #4                          ; }
     bne drawGuardiansLoop           ; }
 
-    lda $8a                         ;
+    lda zpGuardianPositionX         ;
     cmp #$ff                        ;
-    beq L1e00                       ; if (end of guardian array) then branch (finish up)
+    beq swapBackPages               ; if (end of guardian array) then branch (finish up)
 
     jsr updateAndDrawGuardian       ; update and draw guardian
 
@@ -3891,7 +3899,7 @@ drawGuardiansLoop
     ldx #0                          ; loop counter
 
 -
-    lda $8a,x                       ; }
+    lda zpGuardianPositionX,x       ; }
     sta guardianPositions,y         ; }
     inx                             ; } copy guardian info back from zero page cache
     iny                             ; } from $8a to guardianPositions for four bytes
@@ -3919,127 +3927,144 @@ drawGuardiansLoop
 
 ; ***************************************************************************************
 updateAndDrawGuardian
-    lda $8b                         ;
+    lda zpGuardianPositionY         ;
     eor #$40                        ; flip bit 6
-    sta $8b                         ;
+    sta zpGuardianPositionY         ;
 
     tay                             ;
     and #$20                        ;
     cmp #$20                        ;
-    bne L1e8d                       ; if (bit 5 clear) then branch
+    bne moveLeftOrRight             ; if (bit 5 clear) then branch
     tya                             ;
     and #$40                        ;
     cmp #$40                        ;
-    beq L1e8d                       ; if (bit 6 set) then branch
+    beq moveLeftOrRight             ; if (bit 6 set) then branch
     rts                             ;
 
 ; ***************************************************************************************
-L1e8d
-    lda $8b                         ;
+moveLeftOrRight
+    lda zpGuardianPositionY         ;
     and #$80                        ;
     cmp #$80                        ;
-    bne L1eef                       ;
-    lda $8a                         ;
+    bne moveGuardianLeft            ;
+
+    ; move guardian right
+    lda zpGuardianPositionX         ;
     clc                             ;
     adc #1                          ;
     and #$7f                        ;
     sta currentGuardianXPosition    ;
-    lda $8a                         ;
+
+    lda zpGuardianPositionX         ;
     and #3                          ;
     asl                             ;
-    sta $8e                         ;
-    jsr S1f4b                       ;
-    lda $8e                         ;
+    sta zpGuardianAnimIndex         ; temp = 2 * (guardianX and 3)
+    jsr positionCursorAtGuardian    ;
+    lda zpGuardianAnimIndex         ;
     cmp #0                          ;
-    bne L1eb5                       ;
-    jsr eraseBehindMonster          ;
-    jsr S1f4b                       ;
+    bne notAtCellXBoundary          ;
+    jsr eraseLeftOfGuardian         ;
+    jsr positionCursorAtGuardian    ;
 
-L1eb5
+notAtCellXBoundary
+    ; draw e0+temp, e1+temp
+    ;      e8+temp, e9+temp
     lda #$e0                        ;
     clc                             ;
-    adc $8e                         ;
+    adc zpGuardianAnimIndex         ;
     jsr drawIfNotOverExit           ;
+
     lda #$e1                        ;
     clc                             ;
-    adc $8e                         ;
+    adc zpGuardianAnimIndex         ;
     jsr drawIfNotOverExit           ;
+
     lda #$0a                        ;
     jsr OSWRCH                      ; down one
     lda #8                          ;
     jsr OSWRCH                      ; back two
     jsr OSWRCH                      ;
+
     lda #$e8                        ;
     clc                             ;
-    adc $8e                         ;
+    adc zpGuardianAnimIndex         ;
     jsr drawIfNotOverExit           ;
+
     lda #$e9                        ;
     clc                             ;
-    adc $8e                         ;
+    adc zpGuardianAnimIndex         ;
     jsr drawIfNotOverExit           ;
-    jmp L1fa7                       ;
+
+    jmp testForBounceHorizontal     ;
 
 ; ***************************************************************************************
-L1ee5
-    lda $8a                         ;
+setAnimIndexBasedOnX
+    lda zpGuardianPositionX         ;
     and #3                          ;
     asl                             ;
-    sta $8e                         ;
-    jmp L1eb5                       ;
+    sta zpGuardianAnimIndex         ;
+    jmp notAtCellXBoundary          ;
 
 ; ***************************************************************************************
-L1eef
-    lda $8a                         ;
+moveGuardianLeft
+    lda zpGuardianPositionX         ;
     sec                             ;
     sbc #1                          ;
     and #$7f                        ;
     sta currentGuardianXPosition    ;
-    lda $8a                         ;
+    lda zpGuardianPositionX         ;
     and #3                          ;
     eor #3                          ;
     asl                             ;
-    sta $8e                         ;
-    jsr S1f4b                       ;
-    lda $8e                         ;
+    sta zpGuardianAnimIndex         ;
+    jsr positionCursorAtGuardian    ;
+    lda zpGuardianAnimIndex         ;
     cmp #0                          ;
-    bne L1f11                       ;
-    jsr S1f81                       ;
-    jsr S1f4b                       ;
+    bne +                           ;
+    jsr eraseRightOfGuardian        ;
+    jsr positionCursorAtGuardian    ;
 
-L1f11
++
     lda currentLevel                ;
     cmp #19                         ;
-    beq L1ee5                       ;
+    beq setAnimIndexBasedOnX        ;
     cmp #15                         ;
-    beq L1ee5                       ;
+    beq setAnimIndexBasedOnX        ;
+
+    ; draw f1+temp, f0+temp
+    ;      f+temp9, f8+temp
     lda #$f1                        ;
     clc                             ;
-    adc $8e                         ;
+    adc zpGuardianAnimIndex         ;
     jsr drawIfNotOverExit           ;
     lda #$f0                        ;
     clc                             ;
-    adc $8e                         ;
+    adc zpGuardianAnimIndex         ;
     jsr drawIfNotOverExit           ;
+
     lda #8                          ;
     jsr OSWRCH                      ; move back two places
     jsr OSWRCH                      ; and down one
     lda #$0a                        ;
     jsr OSWRCH                      ;
+
     lda #$f9                        ;
     clc                             ;
-    adc $8e                         ;
+    adc zpGuardianAnimIndex         ;
     jsr drawIfNotOverExit           ;
+
     lda #$f8                        ;
     clc                             ;
-    adc $8e                         ;
+    adc zpGuardianAnimIndex         ;
     jsr drawIfNotOverExit           ;
-    jmp L1fa7                       ;
+
+    jmp testForBounceHorizontal     ;
 
 ; ***************************************************************************************
-S1f4b
+positionCursorAtGuardian
     lda #31                         ;
     jsr OSWRCH                      ;
-    lda $8a                         ;
+    lda zpGuardianPositionX         ;
     and #$fc                        ;
     clc                             ;
     ror                             ;
@@ -4047,14 +4072,14 @@ S1f4b
     clc                             ;
     adc #5                          ;
     jsr OSWRCH                      ;
-    lda $8b                         ;
+    lda zpGuardianPositionY         ;
     and #$0f                        ;
     clc                             ;
     adc #1                          ;
     jmp OSWRCH                      ;
 
 ; ***************************************************************************************
-eraseBehindMonster
+eraseLeftOfGuardian
     lda #8                          ;
     jsr OSWRCH                      ;
     lda #$20                        ;
@@ -4068,7 +4093,7 @@ eraseBehindMonster
     rts
 
 ; ***************************************************************************************
-S1f81
+eraseRightOfGuardian
     lda #9                          ;
     jsr OSWRCH                      ;
     jsr OSWRCH                      ; move forward two characters
@@ -4086,25 +4111,26 @@ S1f81
     rts                             ;
 
 ; ***************************************************************************************
-L1f9e
-    lda $8b                         ;
-    eor #$80                        ; toggle top bit
-    sta $8b                         ;
+toggleGuardianDirection
+    lda zpGuardianPositionY         ;
+    eor #$80                        ; toggle direction
+    sta zpGuardianPositionY         ;
     rts                             ;
 
+; ***************************************************************************************
 currentGuardianXPosition
     !byte $ea                       ;
 drawGuardianLoopCounter
     !byte $ea                       ;
 
 ; ***************************************************************************************
-L1fa7
+testForBounceHorizontal
     lda currentGuardianXPosition    ;
-    sta $8a                         ;
-    cmp $8c                         ;
-    beq L1f9e                       ;
-    cmp $8d                         ;
-    beq L1f9e                       ;
+    sta zpGuardianPositionX         ;
+    cmp zpGuardianLimit1            ;
+    beq toggleGuardianDirection     ;
+    cmp zpGuardianLimit2            ;
+    beq toggleGuardianDirection     ;
     rts                             ;
 
 ; ***************************************************************************************
@@ -4129,16 +4155,16 @@ copyGuardianSprites
 
     ldx currentLevel                    ;
     lda guardianSetForEachLevel - 1,x   ;
-    sta $8a                             ;
+    sta zpGuardianPositionX             ;
 
     ldx #1                              ;
 -
-    cpx $8a                             ;
+    cpx zpGuardianPositionX             ;
     beq copyGuardiansWithAddress        ;
     lda readGuardianByte + 1            ;
     clc                                 ;
     adc #$80                            ; multiplication by repeated addition
-    sta readGuardianByte + 1            ; add $80 for each X up to ($8a)
+    sta readGuardianByte + 1            ; add $80 for each X up to zpGuardianPositionX
     lda readGuardianByte + 2            ;
     adc #0                              ;
     sta readGuardianByte + 2            ;
@@ -4602,8 +4628,7 @@ resetLevel19Meteors
     jmp resetVerticalSprites        ;
 
 ; ***************************************************************************************
-    ; [UNUSED]
-    !byte $7c, $6b, $4c, $e8
+    !byte $7c, $6b, $4c, $e8        ; [UNUSED]
 
 meteorAndTailSprites
     !byte %........
@@ -4837,9 +4862,9 @@ creditsMessageEnd
 ;
 ; ***************************************************************************************
 verticalGuardians
-    !byte $00, $00, $00, $00, $00, $00, $00, $00    ; [unused]
+    !byte $00, $00, $00, $00, $00, $00, $00, $00    ; [UNUSED]
     !byte $85, $0d, $cb, $0d, $94, $0d, $d9, $0d    ; level 9
-    !byte $00, $00, $00, $00, $00, $00, $00, $00    ; [unused]
+    !byte $00, $00, $00, $00, $00, $00, $00, $00    ; [UNUSED]
     !byte $83, $4d, $8c, $07, $95, $6d, $da, $0d    ; level 11
     !byte $ff, $ff, $ff, $ff, $ff, $ff, $ff, $ff    ; level 12
     !byte $85, $1d, $ff, $ff, $ff, $ff, $ff, $ff    ; level 13
@@ -4915,11 +4940,12 @@ drawFixedString
     rts                             ;
 
 ; ***************************************************************************************
-drawConveyors
+updatePlayerAirAndDrawConveyor
     jsr updateAirAndCheckExit       ;
     lda currentLevel                ;
     cmp #18                         ;
     beq return10                    ;
+
 
     inc conveyorSpriteOffset        ;
     lda conveyorLength              ;
@@ -4937,7 +4963,7 @@ drawConveyors
     beq reverseConveyorDirection    ;
 
     lda conveyorSpriteOffset        ;
-L2576
+continueDrawingConveyors
     tax                             ;
 
     lda #31                         ;
@@ -4966,7 +4992,7 @@ return10
 reverseConveyorDirection
     lda conveyorSpriteOffset        ;
     eor #3                          ;
-    jmp L2576                       ;
+    jmp continueDrawingConveyors    ;
 
 ; ***************************************************************************************
 conveyorX
@@ -4988,7 +5014,7 @@ fixedText
     !text $09, $09, $20, $20, "Level"
 
 ; ***************************************************************************************
-    jsr $3831                       ; [unused]
+    jsr $3831                       ; [UNUSED]
 
 showScoreLivesAndLevel
     lda #$ff                        ; }
@@ -5049,7 +5075,7 @@ exitPositionY
     !byte $07                       ;
 
 ; ***************************************************************************************
-S2600
+unused
     lda $ffff,x                     ; UNUSED
     rts                             ; UNUSED
 
@@ -5057,9 +5083,9 @@ S2600
 ; [unused]
     ; $2604
     lda #$80                        ; UNUSED
-    sta S2600 + 1                   ; UNUSED
+    sta unused + 1                  ; UNUSED
     lda #$26                        ; UNUSED
-    sta S2600 + 2                   ; UNUSED
+    sta unused + 2                  ; UNUSED
     lda #0                          ; UNUSED
     sta $2693                       ; UNUSED
     lda #17                         ; UNUSED
@@ -5067,27 +5093,26 @@ S2600
     lda #3                          ; UNUSED
     jsr OSWRCH                      ; UNUSED
     ldx #0                          ; UNUSED
-L261f
-    jsr S2600                       ; UNUSED
+-
+    jsr unused                      ; UNUSED
     cmp #$20                        ; UNUSED
-    bcc L2631                       ; UNUSED
-L2626
+    bcc +                           ; UNUSED
+unused5
     inx                             ; UNUSED
     cpx #0                          ; UNUSED
-    bne L261f                       ; UNUSED
-    inc S2600 + 2                   ; UNUSED
-    jmp L261f                       ; UNUSED
+    bne -                           ; UNUSED
+    inc unused + 2                  ; UNUSED
+    jmp -                           ; UNUSED
 
 ; ***************************************************************************************
-; unused?
-L2631
++
     inc $2693                       ; UNUSED
     lda currentLevel                ; UNUSED
     cmp $2693                       ; UNUSED
-    bne L2626                       ; UNUSED
+    bne unused5                     ; UNUSED
     lda #31                         ; UNUSED
     jsr OSWRCH                      ; UNUSED
-    jsr S2600                       ; UNUSED   TAB(level value + 4, 17)
+    jsr unused                      ; UNUSED   TAB(level value + 4, 17)
     clc                             ; UNUSED
     adc #4                          ; UNUSED
     jsr OSWRCH                      ; UNUSED
@@ -5096,7 +5121,7 @@ L2631
 
 -
     inx                             ; UNUSED
-    jsr S2600                       ; UNUSED
+    jsr unused                      ; UNUSED
     cmp #$20                        ; UNUSED
     bcc +                           ; UNUSED
     jsr OSWRCH                      ; UNUSED
@@ -5150,8 +5175,7 @@ numbers
     !byte $0d                               ; terminator
 
 ; ***************************************************************************************
-    ; [unused]
-    !text 7, "Th"                   ;
+    !text 7, "Th"                   ; [UNUSED]
 
 ; ***************************************************************************************
 levelNumberCounter
@@ -5201,10 +5225,10 @@ injectAddressLow = * + 1
 injectAddressHigh = * + 2
     sta logicalScreenStart,x        ; clear screen
     inx                             ;
-    beq L2843                       ;
+    beq finishedPage                ;
     jmp -                           ;
 
-L2843
+finishedPage
     inc injectAddressHigh           ;
     lda injectAddressHigh           ;
     cmp #>screenEndAddress          ;
@@ -5282,7 +5306,7 @@ readByteOffsetX
     lda $2c00,x                     ; read byte [address overwritten before use]
     rts                             ;
 
-    sta currentLevel                ; [unused?]
+    sta currentLevel                ; [UNUSED]
 initLevel
     jsr clearScreen                 ;
     lda #>levelDefinitions          ; } read data from $6c00 upwards
@@ -5666,7 +5690,7 @@ reverseBits
 
     ldy #0                          ;
     ldx #0                          ;
-L2ab8
+reverseBitsLoop
     lda byteToReverse               ;
     clc                             ;
     rol                             ;
@@ -5680,7 +5704,7 @@ continueReverseBits
     tax                             ;
     iny                             ;
     cpy #8                          ;
-    bne L2ab8                       ;
+    bne reverseBitsLoop             ;
     rts                             ;
 
 byteToReverse
@@ -5712,12 +5736,12 @@ drawExit
     ; Draw: f1,f2
     ;       f3,f4
     ldx #0                          ;
-L2af3
+-
     lda exitMessage,x               ;
     jsr OSWRCH                      ;
     inx                             ;
     cpx #8                          ;
-    bne L2af3                       ;
+    bne -                           ;
     rts                             ;
 
 exitMessage
@@ -5734,7 +5758,7 @@ setRoomColours
     lda #2                          ;
     jsr OSWRCH                      ;
 
-    jsr drawConveyors               ;
+    jsr updatePlayerAirAndDrawConveyor  ;
     jsr drawExit                    ;
 
     ldx #0                          ;
@@ -5986,60 +6010,59 @@ drawSideWallsAndFloor
 ; ***************************************************************************************
 ; this following code (up to $2d00) is overwritten before it gets a chance to be used, by very similar code in miner4.a
 ; So this code is unused.
-S2c98
-    lda $7180                           ; [unused]
-    rts                                 ; [unused]
+unused2
+    lda $7180                           ; [UNUSED]
+    rts                                 ; [UNUSED]
 
-L2c9c
-    jsr drawFooterTextOrReturn          ; [unused]
-    jmp L2cb2                           ; [unused]
+-
+    jsr drawFooterTextOrReturn          ; [UNUSED]
+    jmp +                               ; [UNUSED]
 
-L2ca2
-    lda #0                              ; [unused]
-    sta keyPositionCounter              ; [unused]
-    lda #$71                            ; [unused]
-    sta S2c98 + 2                       ; [unused]
-    lda currentLevel                    ; [unused]
-    cmp #18                             ; [unused]
-    beq L2c9c                           ; [unused]
+    lda #0                              ; [UNUSED]
+    sta keyPositionCounter              ; [UNUSED]
+    lda #$71                            ; [UNUSED]
+    sta unused2 + 2                     ; [UNUSED]
+    lda currentLevel                    ; [UNUSED]
+    cmp #18                             ; [UNUSED]
+    beq -                               ; [UNUSED]
 
-L2cb2
-    lda #0                              ; [unused]
-    sta decodeLevelByte                 ; [unused]
-    lda #$6f                            ; [unused]
-    sta S2c98 + 1                       ; [unused]
++
+    lda #0                              ; [UNUSED]
+    sta decodeLevelByte                 ; [UNUSED]
+    lda #$6f                            ; [UNUSED]
+    sta unused2 + 1                     ; [UNUSED]
 
-L2cbc
-    jsr incrementLevelDataPointer       ; [unused]
-    jsr S2c98                           ; [unused]
-    cmp #$ff                            ; [unused]
-    beq L2cc9                           ; [unused]
-    jmp L2cbc                           ; [unused]
+unused4
+    jsr incrementLevelDataPointer       ; [UNUSED]
+    jsr unused2                         ; [UNUSED]
+    cmp #$ff                            ; [UNUSED]
+    beq +                               ; [UNUSED]
+    jmp unused4                         ; [UNUSED]
 
-L2cc9
-    inc decodeLevelByte                 ; [unused]
-    lda decodeLevelByte                 ; [unused]
-    cmp currentLevel                    ; [unused]
-    bne L2cbc                           ; [unused]
-    jsr incrementLevelDataPointer       ; [unused]
-    jsr S2c98                           ; [unused]
-    sta keyType                         ; [unused]
-    lda keyType                         ; [unused]
-    and #$3f                            ; [unused]
-    sta singleItemSpriteOffset          ; [unused]
-    lda keyType                         ; [unused]
-    and #$c0                            ; [unused]
-    clc                                 ; [unused]
-    rol                                 ; [unused]
-    rol                                 ; [unused]
-    rol                                 ; [unused]
-    sta keyType                         ; [unused]
-    inc keyType                         ; [unused]
-    lda #$f0                            ; [unused]
-    sta singleItemSprite                ; [unused]
-    jsr setSingleItemOffset5            ; [unused]
-    ldx #0                              ; [unused]
-    jmp decodeNextSingleItem            ; [unused]
++
+    inc decodeLevelByte                 ; [UNUSED]
+    lda decodeLevelByte                 ; [UNUSED]
+    cmp currentLevel                    ; [UNUSED]
+    bne unused4                         ; [UNUSED]
+    jsr incrementLevelDataPointer       ; [UNUSED]
+    jsr unused2                         ; [UNUSED]
+    sta keyType                         ; [UNUSED]
+    lda keyType                         ; [UNUSED]
+    and #$3f                            ; [UNUSED]
+    sta singleItemSpriteOffset          ; [UNUSED]
+    lda keyType                         ; [UNUSED]
+    and #$c0                            ; [UNUSED]
+    clc                                 ; [UNUSED]
+    rol                                 ; [UNUSED]
+    rol                                 ; [UNUSED]
+    rol                                 ; [UNUSED]
+    sta keyType                         ; [UNUSED]
+    inc keyType                         ; [UNUSED]
+    lda #$f0                            ; [UNUSED]
+    sta singleItemSprite                ; [UNUSED]
+    jsr setSingleItemOffset5            ; [UNUSED]
+    ldx #0                              ; [UNUSED]
+    jmp decodeNextSingleItem            ; [UNUSED]
 }
 
     ;$2D00
@@ -6224,7 +6247,7 @@ loadMiner4
 ; ***************************************************************************************
 afterLoads
     lda #$8c                            ;
-    jsr OSWRCH                           ; VDU 140 - why?
+    jsr OSWRCH                          ; VDU 140 - why?
 
     ; copy ($0500-$05ff) to ($0d00-$0dff)
     ldx #0                              ;

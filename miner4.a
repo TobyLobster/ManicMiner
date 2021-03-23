@@ -1014,11 +1014,11 @@ cycleKeyLoop
 
     cpx #$90                        ;
     beq animateKey                  ; if (key present) then branch (animate key)
-L2eb1
+postAnimateKey
     ldx tempKeyIndex                ;
     txa                             ;
     cmp keyPositionCounter          ;
-    bcs L2ecd                       ;
+    bcs return12                    ;
     lda keyPositionCounter          ;
     lsr                             ;
     and #1                          ;
@@ -1030,7 +1030,7 @@ L2eb1
     inc keyColourCounter            ;
     jmp cycleKeyLoop                ;
 
-L2ecd
+return12
     rts                             ;
 
 animateKey
@@ -1044,7 +1044,7 @@ setKeyColour
     jsr OSWRCH                      ;
     lda #$90                        ; draw key
     jsr OSWRCH                      ;
-    jmp L2eb1                       ;
+    jmp postAnimateKey              ;
 
 handleColour0
     lda #3                          ; COLOUR 3
@@ -1221,11 +1221,11 @@ readOrWriteAddrHigh = readOrWriteByte + 2
     lda $ffff,x                     ;
     rts                             ;
 
-    ; [UNUSED]
-    !byte $00, $46, $58, $00, $00
-    !byte $0d, $00, $0a, $00, $00, $00, $00, $00
-    !byte $00, $00, $00, $00, $00, $00, $00, $00
-    !byte $00, $00, $00, $00, $00, $00, $00, $00
+
+    !byte $00, $46, $58, $00, $00                   ; [UNUSED]
+    !byte $0d, $00, $0a, $00, $00, $00, $00, $00    ; [UNUSED]
+    !byte $00, $00, $00, $00, $00, $00, $00, $00    ; [UNUSED]
+    !byte $00, $00, $00, $00, $00, $00, $00, $00    ; [UNUSED]
 }
 
 initialize
@@ -1750,7 +1750,7 @@ showLevel
     jsr initLevel                           ;
     jsr copyGuardianSprites                 ;
     jsr resetLevel19Meteors                 ;
-    jmp L6391                               ;
+    jmp initializeLevelSprites              ;
 
 resumeMusic
     lda #$ee                                ; opcode for 'INC abs'
@@ -1868,7 +1868,7 @@ copyTenPagesStoreAddressHigh = * + 2
     bne -                           ;
     jmp zeroScoreJumper             ;
 
-L6391
+initializeLevelSprites
     ldx #0                          ;
 -
     lda softCharacterDefinitions,x  ;
@@ -2017,12 +2017,13 @@ checkExit
     sta doWeMoveEugene              ;
 
     jsr toggleEugeneColour          ;
+
 +
     lda newPlayerPixelX             ;
     lsr                             ;
     lsr                             ;
     cmp exitPositionX               ;
-    bne L64be                       ;
+    bne notAtExit                   ;
     lda newPlayerPixelY             ;
     sec                             ;
     sbc #0                          ;
@@ -2032,33 +2033,33 @@ checkExit
     clc                             ;
     adc #2                          ;
     cmp exitPositionY               ;
-    bne L64be                       ;
-    jmp L651f                       ;
+    bne notAtExit                   ;
+    jmp reachedExit                 ;
 
-L64be
+notAtExit
     lda currentLevel                ;
     cmp #6                          ;
     bne updateFlashingExit          ;
 
     ; special code to handle level 6 flashing exit
     lda playerPixelX                ;
-    cmp #$82                        ;
+    cmp #130                        ;
     bne updateFlashingExit          ;
 
     lda playerPixelY                ;
     cmp #13                         ;
     bne updateFlashingExit          ;
-    jmp L651f                       ;
+    jmp reachedExit                 ;
 
 updateFlashingExit
     inc flashingExitCounter         ;
     lda flashingExitCounter         ;
     and #3                          ;
     cmp #0                          ;
-    beq L64e2                       ;
+    beq flashExit                   ;
     rts                             ;
 
-L64e2
+flashExit
     lda #17                         ;
     jsr OSWRCH                      ; VDU 17 (COLOUR)
     lda flashingExitCounter         ;
@@ -2069,14 +2070,14 @@ L64e2
 setColourAndShowExit
     jsr OSWRCH                      ;
 
-    lda #31                         ;
-    jsr OSWRCH                      ; VDU 31 (TAB)
-    lda exitPositionX               ;
-    jsr OSWRCH                      ;
-    lda exitPositionY               ;
-    sec                             ;
-    sbc #2                          ;
-    jsr OSWRCH                      ;
+    lda #31                         ; }
+    jsr OSWRCH                      ; }
+    lda exitPositionX               ; }
+    jsr OSWRCH                      ; }
+    lda exitPositionY               ; }
+    sec                             ; } TAB(exitX, exitY-2)
+    sbc #2                          ; }
+    jsr OSWRCH                      ; }
 
     ; print 2x2 block of characters for the flashing exit:
     ;   VDU $91, $92
@@ -2104,16 +2105,16 @@ tempScreenAddressHigh
     !byte $05                       ;
 
 ; ***************************************************************************************
-L651f
+reachedExit
     lda #$4c                        ;
     sta opcodeForJsrPlot            ; set opcode 'JMP abs'
     jsr updatePlayerWithAnimation   ;
     lda #$20                        ;
-    sta opcodeForJsrPlot            ; restore opcode for 'JSR abs'
+    sta opcodeForJsrPlot            ; set opcode 'JSR abs'
     jsr pauseMusic                  ;
     lda #0                          ;
     sta keyCounter                  ;
-L6534
+drainAirRemaining
     lda airRemaining                ;
     lsr                             ;
     clc                             ;
@@ -2125,23 +2126,25 @@ L6534
     lda keyCounter                  ;
     and #3                          ;
     cmp #0                          ;
-    beq L655c                       ;
-L654f
+    beq addScoreAsAirDrains         ;
+continueDrainingAir
     lda airRemaining                ;
     cmp #0                          ;
-    bne L6534                       ;
+    bne drainAirRemaining           ;
     jsr updateMusicState            ;
     jmp gotoNextLevel               ;
 
-L655c
+addScoreAsAirDrains
     lda #5                          ;
-    jsr addToScore                  ; add 6 to score?
-    jmp L654f                       ;
+    jsr addToScore                  ; add 6 to score
+    jmp continueDrainingAir         ;
 
+; ***************************************************************************************
 flashingExit
     !byte $91, $92, $0a, $08, $08, $93, $94
 flashingExitEnd
 
+; ***************************************************************************************
 airMessage
     !byte $11, 2                    ; COLOUR 2
     !byte $1f, 2, 15                ; TAB(2,15)
@@ -2150,6 +2153,7 @@ airMessage
     !byte 'R'                       ; VDU $52
 airMessageEnd
 
+; ***************************************************************************************
 drawInitialAirMeter
     lda #$67                        ;
     sta airRemaining                ; ?
@@ -2244,18 +2248,22 @@ drawAir
     sta storeByte + 1               ;
     rts                             ;
 
+; ***************************************************************************************
 switchValueToStore
     lda #$fc                        ;
     jmp backToLoop                  ;
 
+; ***************************************************************************************
 changeValueToStore2
     lda #$cf                        ;
     jmp backToAirLoop2              ;
 
+; ***************************************************************************************
 storeByte
     sta $ffff,x                     ;
     rts                             ;
 
+; ***************************************************************************************
 gotoNextRow
     lda storeByte + 1               ;
     clc                             ;
@@ -2266,13 +2274,16 @@ gotoNextRow
     sta storeByte + 2               ;
     rts                             ;
 
+; ***************************************************************************************
 tempScreenByte
     !byte $ea                       ;
 
+; ***************************************************************************************
 kongTriggered
     jsr updateKongFalling           ;
     jmp loseAirCheck                ;
 
+; ***************************************************************************************
 updateAir
     lda kongBeastSwitchTriggered    ;
     cmp #1                          ;
@@ -2285,6 +2296,7 @@ loseAirCheck
     beq loseAir                     ;
     rts                             ;
 
+; ***************************************************************************************
 loseAir
     dec airRemaining                    ;
     inc airRemainingOffsetWithinCell    ;
@@ -2528,7 +2540,9 @@ printBCDNumber
 ; ***************************************************************************************
 score
     !byte $00, $00, $00             ;
-    !byte $00                       ;
+
+    !byte $00                       ; [UNUSED]
+
 lives
     !byte $ea                       ;
 
@@ -6664,9 +6678,8 @@ energyFieldString
     !byte $1f, 24, 9                    ; TAB(24, 9)
     !byte $2a                           ;
 
-    ; [unused]
-    !byte $10                           ;
-    !byte $c0                           ;
+    !byte $10                           ; [UNUSED]
+    !byte $c0                           ; [UNUSED]
 
     !byte %....#.#.             ; ....#.#...#.....
     !byte %...#.##.             ; ...#.##..##.#...
