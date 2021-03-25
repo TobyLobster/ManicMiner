@@ -120,8 +120,8 @@ Then there is a sequence of commands:
 
     command         description
         $ff         end of level
-        $fe         all X coordinates have 15 added to them from now on until the next change of type
-        $fd         increment current type by the sprite increment amount
+        $fe         all X coordinates have 15 added from now on until the next change of type.
+        $fd         increment current type by the sprite increment amount. All X coordinates have 5 added.
         else        top nybble is X coordinate, bottom nybble is Y coordinate. Plot the item.
 
 At plot time, the current type determines the outcome:
