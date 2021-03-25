@@ -3,53 +3,57 @@
 This is a disassembly/reassembly of Manic Miner for the BBC Micro.
 I thought I would write up some thoughts on it while I'm here.
 
-# Copy Protection
-
 I should mention that this is the version from http://bbcmicro.co.uk/game.php?id=188 so it differs slightly from the original in that it has instructions before the game loads, and the copy protection has been circumvented.
+
+# Copy Protection
 
 The original asks for a four digit code from a random grid location found on a physical sheet of paper that was supplied with the game. The paper has groups of four colours laid out in a grid, each colour corresponding to a number 1-4 that must be entered correctly to continue. This system has previously been circumvented, but the original code to handle this is still present.
 
 # Loading
-After the instructions, there three more title screens! The first shows the large dancing letters of MANIC MINER and a scrolling message. The cassette version of the game animated this screen while loading, which I think was a fairly uncommon feature at the time.
+After the instructions, there three more title screens!
+
+The first shows the large dancing letters of MANIC MINER and a scrolling message. The cassette version of the game animated this screen while loading, which I think was fairly uncommon.
 
 The second was used for the entry code, but here is displayed for a brief time before the third title screen with a 'Penrose triangle' (the triangular 3d optical illusion) drawn via OSWRCH PLOT commands. At this point the game is fully loaded, and RETURN starts a new game.
 
 # Obfuscation
 *FX 200,3 is sprinkled a few times while loading / initialising to ensure memory is cleared on BREAK.
 
-Code and data are split between files, and moved around in memory, sometimes EOR'd with &55 (code) or &AA (data).
+Code and data are split between files MINER1 through MINER4, and moved around in memory, sometimes EOR'd with $55 (code) or $AA (data).
 
-A couple of short routines are stashed in zero page, perhaps to make them harder to find, to avoid cheating. The first is the code that triggers a switch, and the second is the code that resets your score at the end of the game.
+A couple of short routines are stashed in zero page, perhaps to make them harder to find, to hinder cheating. The first is the code that triggers a switch, and the second is the code that resets your score at the end of the game.
 
-A single byte of the level data is changed (a key position on level 20) during initialisation. Perhaps to make it harder to make a completely perfect copy of the game, or perhaps it's just a last minute 'fix'. I don't think it makes a significant difference to the difficulty of the last level.
+A single byte of the level data is changed (a key position on level 20) during initialisation. Perhaps to make it harder to make a completely perfect copy of the game, or perhaps it's just a last minute 'fix'. It doesn't make a significant difference to the difficulty of the last level.
 
 # Implementation issues
 
 ## Slow
-The games runs slowly compared to the Spectrum original. This is partly down to the method of plotting. Horizontal guardians are drawn using OSWRCH to write user defined characters to the screen. The keys are animated using the same method. The second major reason for being slow is that there is no collision map. When the game needs to know what is on the screen (e.g. the squares surrounding the player) it reads the character from the screen using OSBYTE 135. The OS has to read the 8x8 pixels off the screen and then compare them against each character 32-255 in the current character set until if finds a match. This is understandably not efficient.
+The games runs slowly compared to the Spectrum original. This is partly down to the method of plotting. Horizontal guardians are drawn using OSWRCH to write user defined characters to the screen. The keys are animated using the same method. The second major reason for being slow is that there is no collision map. When the game needs to know what is on the screen (e.g. the squares surrounding the player) it reads the character from the screen using OSBYTE 135. The OS has to read the 8x8 pixels off the screen and then compare them against each character 32-255 in the current character set in turn until if finds a match. None of this is efficient!
 
-For example, each key is animated (one at a time round robin style) by moving the text cursor to the X,Y position of a key (3 calls to OSWRCH), reading the character from the screen (OSBYTE 135) and if it's still a key (not taken) then plot the key in a new colour (three more calls to OSWRCH).
+A further example: each key is animated (one at a time round robin style) by moving the text cursor to the X,Y position of a key (3 calls to OSWRCH), reading the character from the screen (OSBYTE 135) and if it's still a key (not taken) then plot the key in a new colour (three more calls to OSWRCH).
 
 The player and vertical guardians are drawing using a custom plot routine (which is also not greatly efficient).
 
-In several places in the code, a multiplication is required but is often implemented with a loop of repeated addition. This is sub-optimal.
+In several places in the code (including the plot routine), multiplication is required but this is often implemented with a loop of repeated addition. This is sub-optimal.
 
 There is also an explicit short delay loop in the main loop, but this is a negligible factor in the speed. This was probably used more in early development when (with fewer features implemented) the speed would otherwise be too fast.
 
 ## Flicker
-The player in particular is flickery when moving. The game copies bytes at and around the player position on screen to a cache while the player is not shown. These bytes are copied over a drawn player to erase the player.
+The player in particular is flickery when moving. The game copies bytes at the player position on screen to a cache (in a non-visible area of the screen) while the player is not shown. This cache is used for collision detection and is later copied back to the visible screen to erase the player.
 
 ## Collision detection
 There is only box collision here, not pixel perfect collision. The boxes around the guardians are adjusted to give a little leeway.
 
 # Variations from the Spectrum version
+* The BBC version does not occupy the full screen
+
 * Only four colours are available in this MODE 1 style screen, instead of the Spectrum's 16.
 
-* The BBC version only occupies a fraction of the full screen
+* The BBC cannot control the 'border colour' as the Spectrum can
 
 * The title screen is rudimentary on the BBC. The Spectrum version has a visual scene, a piano keyboard and The Blue Danube playing.
 
-* The layout on screen is different, with the Air bar at the side rather than below the play area, and the Spectrum version shows the lives visually as player sprites walking, but it's just a number on the BBC.
+* The layout of the main game on screen is different, with the Air bar at the side rather than below the play area, and the Spectrum version shows the lives visually as player sprites walking, but it's just a number on the BBC.
 
 * The individual graphics are close but sometimes not perfectly identical to the Spectrum.
 
@@ -60,8 +64,10 @@ Type 'A SECRET' on the pause screen. After resuming play, the fn keys teleport y
 
 # Level format
 
+All bytes relating to the level data are EOR'd with $55.
+
 ## Strips
-The strips of level data are stored at 'levelDefinitions', which is memory address $6c00, or offset $1680 into MINER4 binary file (all bytes EORd with $55 in the file).
+The strips of level data are stored at 'levelDefinitions' (memory address $6c00, or offset $1680 into MINER4 binary file).
 
 The separator between each level is $ff, $ff which occurs before and after every level.
 This is followed by header information:
@@ -90,7 +96,7 @@ This is followed by header information:
                         <x_min> <y_min> <width>
 
 ## Single Items
-Individual items are stored at 'levelSingleItemDefinitions', which is memory address $7170, or offset $1bf0 into MINER4 binary file (all bytes EORd with $55 in the file)
+Individual items are stored at 'levelSingleItemDefinitions' (memory address $7170, or offset $1bf0 into MINER4 binary file)
 
 The separator between each level is $ff which occurs before and after every level.
 
@@ -109,7 +115,7 @@ At plot time, the current type determines the outcome:
 
 ## Standard Sprites
 
-    Sprite numbers start at $80 and repeat. $80 is the same as $a0 $c0 and $e0.
+    Sprite numbers start at $80 and repeat after 32, so $80 is the same as $a0 $c0 and $e0.
     Alternative sprite pages are swapped in and out as needed e.g. to draw horizontal guardians.
 
       sprite        description
@@ -146,33 +152,34 @@ At plot time, the current type determines the outcome:
         $9e         thread
         $9f         (empty)
 
-## Vertical guardian sprites
-Which sprites to use (available on the later levels) are in the 'verticalGuardiansSpritesArray' array.
+## Vertical Guardians
+Level 11 upwards can change the sprites used for vertical guardians.
+This is stored in the 'verticalGuardiansSpritesArray' array (memory address $1da2, or offset $14a2 into MINER2 binary file).
 One byte each from level 11 onwards.
 
-Later levels (9 and 11 upwards) can have up to four vertical guardians.
-This is stored at 'verticalGuardians' as eight bytes per level (two bytes per guardian).
-The array holds data from level 8 upwards, but level 8 and 10 are not used.
+Levels 9 and 11 upwards can have up to four vertical guardians.
+This is stored at 'verticalGuardians' (memory address $2478, or offset $1B78 into MINER2 binary file) as eight bytes per level (two bytes per guardian. Use $ff, $ff for unused guardian slots).
+The array holds data from level 8 upwards, but levels 8 and 10 are not used.
 
 Each guardian is stored in two bytes:
     <x coordinate>    x position in cells, top bit specifies initial direction, (clear = up, set = down)
     <y coordinates>   top nybble is the initial Y and also the second Y extent, bottom nybble is the first Y extent
 
 ## Horizontal Guardians
-Stored at 'guardianLevelData'. Level separator before and after each level is '$ff', followed by three bytes per guardian specifying initial position and direction.
+Stored at 'guardianLevelData' (memory address $2300, or offset $1A00 in MINER2 binary file). Level separator before and after each level is '$ff', followed by three bytes per guardian specifying initial position and direction.
        X1, Y + top bit, X2
        'top bit' indicates initial direction (set = moving left), then bouncing between X1 and X2
 
-The array 'guardianSetForEachLevel' holds the index into the horizontal guardians (00-0f) for the level.
+The array 'guardianSetForEachLevel' (memory address $20e6, or offset $17e6 in MINER2 binary file) holds the index into the horizontal guardians sprites (00-0f) for the level.
 
 ## Conveyor directions
-The direction of the conveyor on each level is stored in the top bit of the 20 bytes at 'fixedText'. The bottom 7 bits must remain unchanged.
+The direction of the conveyor on each level is stored in the top bit of the 20 bytes at 'fixedText' (memory address $25a8, or offset $1ca8 into MINER2 binary file). The bottom 7 bits must remain unchanged.
 
 ## Player start positions
-The X pixel coordinate of the start position is stored in the array 'playerStartPositions', one byte per level.
+The X pixel coordinate of the start position is stored in the array 'playerStartPositions' (memory address $6b88, or offset $1608 into MINER4 binary file), one byte per level.
 
-## Hardcoded features
-Many of the level specific features are not data driven, and are hard-coded. Eugene's and Kong's plummets into the exit for example. Level 14's Skylab plummeting to earth. Level 19's Meteors. The energy fields on levels 19 and 20. Level 10 having no conveyor. Level 16 not having any vertical guardians. Switches are at fixed positions on level 8 and 12 only (also the two nearby spikes are hardcoded). A byte in the level 20 data is poked at initialisation time 'pokeSingleItem'. Level 6's exit must remain in the same position, since the code to exit the level is hardcoded to this position. Palette colours are not easily accessible.
+## Limitations (Hardcoded features)
+Many of the level specific features are not data driven, and are hard-coded. Eugene's and Kong's plummets into the exit for example. Level 14's Skylab plummeting to earth. Level 19's Meteors. The energy fields on levels 19 and 20. Level 10 having no conveyor. Level 16 not having any vertical guardians. Switches are at fixed positions on level 8 and 12 only (also the two nearby spikes are hardcoded). A byte in the level 20 data is poked at initialisation time 'pokeSingleItem'. Level 6's exit must remain in the same position, since the code to exit the level is hardcoded to this position. Palette colours are not flexible.
 
 
 # Issues
