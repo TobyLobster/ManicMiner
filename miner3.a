@@ -1,6 +1,7 @@
 ;
 ; miner3.a ($3c00)
 ;
+; Execution starts at 'miner3EntryPoint'
 
 !src "constants.a"
 
@@ -149,8 +150,8 @@ attractLoop
     sta attractModeTimer            ;
 showALevelLoop
     jsr drawConveyors                   ;
-    jsr animateKeysAndUpdateGuardians   ;
-    jsr drawSpecialVerticalSprites      ;
+    jsr animateKeysUpdateHorizontalGuardiansAndLevel19EnergyFields   ;
+    jsr updateVerticalGuardians         ;
 
     ; pointless delay loop
     ldx #0                          ; 0
@@ -241,7 +242,8 @@ cheatCodeCounter
     !byte $00
 cheatCode
     ; code: A <space> S,   E,   C,   R,   E,   T
-    ; key codes as stored in memory address $ec (by the OS) when pressed with top bit set:
+    ;
+    ; key codes as stored in memory address $ec (by the OS) when pressed, all with top bit set:
     ;     $C1, $E2, $D1, $A2, $D2, $B3, $A2, $A3
     ; stored here without top bit set:
     !byte $41, $62, $51, $22, $52, $33, $22, $23
@@ -251,9 +253,9 @@ cheatCodeEnd
     !byte $60, $60                  ; [UNUSED]
 
 ; ***************************************************************************************
-updateJumpAndFallSounds
-    jsr drawSpecialVerticalSprites  ;
-    lda isInAir                     ;
+updateVerticalGuardiansAndJumpAndFallSounds
+    jsr updateVerticalGuardians     ;
+    lda isJumping                   ;
     cmp #1                          ;
     bne notInAir                    ; if (not in air) then branch
     lda jumpPhase                   ;
@@ -266,7 +268,7 @@ updateJumpAndFallSounds
     jmp playSoundAXY                ; }
 
 notInAir
-    lda isInAir                     ;
+    lda isJumping                   ;
     cmp #1                          ;
     beq return5                     ;
     lda willyIsOnGround             ;
@@ -291,9 +293,9 @@ notInAir
 return5
     rts                             ;
 
-    ; unused?
-    !text "8:JSR"
+    !text "8:JSR"                   ; [UNUSED]
 
+; ***************************************************************************************
 miner3EntryPoint
     jsr clearScreen                 ;
     lda #17                         ; VDU 17,3 (COLOUR 3)

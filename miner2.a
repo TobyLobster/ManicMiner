@@ -1,6 +1,7 @@
 ;
 ; MINER2.a ($4c00)
 ;
+; Execution starts at 'miner2EntryPoint'
 
 !src "constants.a"
 
@@ -222,7 +223,7 @@ getSourceByte
     beq add24ToSourceAddress            ;
 
 plotContinues
-    inc plotYOffset
+    inc plotYOffset                     ;
 
     lda plotScreenAddressLow            ; }
     clc                                 ; }
@@ -373,13 +374,13 @@ updatePlayer
     lda #0                              ;
     sta willyDeltaX                     ;
     sta willyJustLandedOnConveyor       ;
-    lda isInAir                         ;
+    lda isJumping                       ;
     cmp #0                              ;
-    beq handleOnGround                  ;
-    jmp handleInAir                     ;
+    beq handleNotJumping                ;
+    jmp handleJumping                   ;
 
 ; ***************************************************************************************
-handleOnGround
+handleNotJumping
     ldx #0                                  ; loop counter
 -
     lda willySpriteAddressLow,x             ; }
@@ -1327,7 +1328,7 @@ allOtherSpikes
     !byte %........
     !byte %........
 
-    !byte %########                 ; char 128 ($80)
+    !byte %########                 ; char 128 ($80, $A0, $C0, $E0)
     !byte %########
     !byte %##.##.##
     !byte %..#.###.
@@ -1336,7 +1337,7 @@ allOtherSpikes
     !byte %........
     !byte %........
 
-    !byte %########                 ; char 129 ($81)
+    !byte %########                 ; char 129 ($81, $A1, $C1, $E1)
     !byte %########
     !byte %.##..##.
     !byte %#..##..#
@@ -1345,7 +1346,7 @@ allOtherSpikes
     !byte %########
     !byte %........
 
-    !byte %########                 ; char 130 ($82)
+    !byte %########                 ; char 130 ($82, $A2, $C2, $E2)
     !byte %#...#...
     !byte %..#...#.
     !byte %#...#...
@@ -1354,7 +1355,7 @@ allOtherSpikes
     !byte %..#...#.
     !byte %#...#...
 
-    !byte %........                 ; char 131 ($83)
+    !byte %........                 ; char 131 ($83, $A3, $C3, $E3)
     !byte %########
     !byte %#...#...
     !byte %..#...#.
@@ -1363,7 +1364,7 @@ allOtherSpikes
     !byte %#...#...
     !byte %..#...#.
 
-    !byte %........                 ; char 132 ($84)
+    !byte %........                 ; char 132 ($84, $A4, $C4, $E4)
     !byte %........
     !byte %########
     !byte %#...#...
@@ -1372,7 +1373,7 @@ allOtherSpikes
     !byte %..#...#.
     !byte %#...#...
 
-    !byte %........                 ; char 133 ($85)
+    !byte %........                 ; char 133 ($85, $A5, $C5, $E5)
     !byte %........
     !byte %........
     !byte %########
@@ -1381,7 +1382,7 @@ allOtherSpikes
     !byte %#...#...
     !byte %..#...#.
 
-    !byte %........                 ; char 134 ($86)
+    !byte %........                 ; char 134 ($86, $A6, $C6, $E6)
     !byte %........
     !byte %........
     !byte %........
@@ -1390,7 +1391,7 @@ allOtherSpikes
     !byte %..#...#.
     !byte %#...#...
 
-    !byte %........                 ; char 135 ($87)
+    !byte %........                 ; char 135 ($87, $A7, $C7, $E7)
     !byte %........
     !byte %........
     !byte %........
@@ -1399,7 +1400,7 @@ allOtherSpikes
     !byte %#...#...
     !byte %..#...#.
 
-    !byte %........                 ; char 136 ($88)
+    !byte %........                 ; char 136 ($88, $A8, $C8, $E8)
     !byte %........
     !byte %........
     !byte %........
@@ -1408,7 +1409,7 @@ allOtherSpikes
     !byte %########
     !byte %#...#...
 
-    !byte %........                 ; char 137 ($89)
+    !byte %........                 ; char 137 ($89, $A9, $C9, $E9)
     !byte %........
     !byte %........
     !byte %........
@@ -1417,7 +1418,7 @@ allOtherSpikes
     !byte %........
     !byte %########
 
-    !byte %........                 ; char 138 ($8A)
+    !byte %........                 ; char 138 ($8A, $AA, $CA, $EA)
     !byte %........
     !byte %........
     !byte %........
@@ -1426,7 +1427,7 @@ allOtherSpikes
     !byte %........
     !byte %........
 
-    !byte %##....##                 ; char 139 ($8B)
+    !byte %##....##                 ; char 139 ($8B, $AB, $CB, $EB)
     !byte %.##..##.
     !byte %...##...
     !byte %.##..##.
@@ -1435,7 +1436,7 @@ allOtherSpikes
     !byte %........
     !byte %........
 
-    !byte %....####                 ; char 140 ($8C)
+    !byte %....####                 ; char 140 ($8C, $AC, $CC, $EC)
     !byte %.##..##.
     !byte %....####
     !byte %.##..##.
@@ -1444,7 +1445,7 @@ allOtherSpikes
     !byte %........
     !byte %........
 
-    !byte %..####..                 ; char 141 ($8D)
+    !byte %..####..                 ; char 141 ($8D, $AD, $CD, $ED)
     !byte %.##..##.
     !byte %#......#
     !byte %.##..##.
@@ -1453,7 +1454,7 @@ allOtherSpikes
     !byte %........
     !byte %........
 
-    !byte %####....                 ; char 142 ($8E)
+    !byte %####....                 ; char 142 ($8E, $AE, $CE, $EE)
     !byte %.##..##.
     !byte %####....
     !byte %.##..##.
@@ -1462,7 +1463,7 @@ allOtherSpikes
     !byte %........
     !byte %........
 
-    !byte %..#...#.                 ; char 143 ($8F)
+    !byte %..#...#.                 ; char 143 ($8F, $AF, $CF, $EF)
     !byte %########
     !byte %#...#...
     !byte %########
@@ -1471,7 +1472,7 @@ allOtherSpikes
     !byte %#...#...
     !byte %########
 
-    !byte %..##....                 ; char 144 ($90)
+    !byte %..##....                 ; char 144 ($90, $B0, $D0, $F0)
     !byte %.#..#...
     !byte %#...#...
     !byte %#..#....
@@ -1480,7 +1481,7 @@ allOtherSpikes
     !byte %....#.#.
     !byte %.....#..
 
-    !byte %########                 ; char 145 ($91)
+    !byte %########                 ; char 145 ($91, $B1, $D1, $F1)
     !byte %#......#
     !byte %#......#
     !byte %#......#
@@ -1489,7 +1490,7 @@ allOtherSpikes
     !byte %#......#
     !byte %########
 
-    !byte %########                 ; char 146 ($92)
+    !byte %########                 ; char 146 ($92, $B2, $D2, $F2)
     !byte %#......#
     !byte %#......#
     !byte %#......#
@@ -1498,7 +1499,7 @@ allOtherSpikes
     !byte %#......#
     !byte %########
 
-    !byte %########                 ; char 147 ($93)
+    !byte %########                 ; char 147 ($93, $B3, $D3, $F3)
     !byte %#......#
     !byte %#......#
     !byte %#......#
@@ -1507,7 +1508,7 @@ allOtherSpikes
     !byte %#......#
     !byte %########
 
-    !byte %########                 ; char 148 ($94)
+    !byte %########                 ; char 148 ($94, $B4, $D4, $F4)
     !byte %#......#
     !byte %#......#
     !byte %#......#
@@ -1516,7 +1517,7 @@ allOtherSpikes
     !byte %#......#
     !byte %########
 
-    !byte %########                 ; char 149 ($95)
+    !byte %########                 ; char 149 ($95, $B5, $D5, $F5)
     !byte %#......#
     !byte %#......#
     !byte %#......#
@@ -1525,7 +1526,7 @@ allOtherSpikes
     !byte %#......#
     !byte %#......#
 
-    !byte %########                 ; char 150 ($96)
+    !byte %########                 ; char 150 ($96, $B6, $D6, $F6)
     !byte %########
     !byte %...##...
     !byte %...##...
@@ -1534,7 +1535,7 @@ allOtherSpikes
     !byte %...##...
     !byte %...##...
 
-    !byte %........                 ; char 151 ($97)
+    !byte %........                 ; char 151 ($97, $B7, $D7, $F7)
     !byte %........
     !byte %........
     !byte %........
@@ -1543,7 +1544,7 @@ allOtherSpikes
     !byte %........
     !byte %........
 
-    !byte %#######.                 ; char 152 ($98)
+    !byte %#######.                 ; char 152 ($98, $B8, $D8, $F8)
     !byte %#.....#.
     !byte %#.....#.
     !byte %.#...#..
@@ -1552,7 +1553,7 @@ allOtherSpikes
     !byte %##......
     !byte %##......
 
-    !byte %#######.                 ; char 153 ($99)
+    !byte %#######.                 ; char 153 ($99, $B9, $D9, $F9)
     !byte %#.....#.
     !byte %#.....#.
     !byte %.#...#..
@@ -1561,7 +1562,7 @@ allOtherSpikes
     !byte %.....##.
     !byte %.....##.
 
-    !byte %........                 ; char 154 ($9A)
+    !byte %........                 ; char 154 ($9A, $BA, $DA, $FA)
     !byte %........
     !byte %........
     !byte %........
@@ -1570,7 +1571,7 @@ allOtherSpikes
     !byte %........
     !byte %........
 
-    !byte %........                 ; char 155 ($9B)
+    !byte %........                 ; char 155 ($9B, $BB, $DB, $FB)
     !byte %........
     !byte %........
     !byte %........
@@ -1579,7 +1580,7 @@ allOtherSpikes
     !byte %........
     !byte %........
 
-    !byte %........                 ; char 156 ($9C)
+    !byte %........                 ; char 156 ($9C, $BC, $DC, $FC)
     !byte %........
     !byte %........
     !byte %........
@@ -1588,7 +1589,7 @@ allOtherSpikes
     !byte %........
     !byte %........
 
-    !byte %........                 ; char 157 ($9D)
+    !byte %........                 ; char 157 ($9D, $BD, $DD, $FD)
     !byte %........
     !byte %........
     !byte %........
@@ -1597,7 +1598,7 @@ allOtherSpikes
     !byte %........
     !byte %........
 
-    !byte %....#...                 ; char 158 ($9E)
+    !byte %....#...                 ; char 158 ($9E, $BE, $DE, $FE)
     !byte %....#...
     !byte %....#...
     !byte %....#...
@@ -1606,7 +1607,7 @@ allOtherSpikes
     !byte %....#...
     !byte %....#...
 
-    !byte %........                 ; char 159 ($9F)
+    !byte %........                 ; char 159 ($9F, $BF, $DF, $FF)
     !byte %........
     !byte %........
     !byte %........
@@ -1634,7 +1635,7 @@ spriteEnd
     ; crumble the right hand crumble bar (in the background cache)
     ldx #7                              ; loop counter
 -
-    ; $50 is to get to the characters underneath the players feet
+    ; +$50 is to get to the characters underneath the players feet
     lda backgroundCache + $50 - 1,x     ;
     sta backgroundCache + $50 + 0,x     ; copy one pixel row to the next
     lda backgroundCache + $50 + 7,x     ;
@@ -1953,12 +1954,12 @@ checkForWallOnJump
 
     ; start jump
     lda #1                          ;
-    sta isInAir                     ;
+    sta isJumping                   ;
     lda playerPixelY                ;
     sta playerHeightOnTakeOff       ;
     lda #0                          ;
     sta jumpPhase                   ;
-    jmp handleInAir                 ;
+    jmp handleJumping               ;
 
 ; ***************************************************************************************
 foundWallSoCancelJump
@@ -2103,7 +2104,7 @@ drawPlayerAndCheckForSingleItems
     ldy newPlayerPixelY                 ;
     lda #0                              ;
 opcodeForJsrPlot
-    jsr plot                            ; draw player
+    jsr plot                            ; draw player (mode 0)
     jsr checkForLandingOnSpike          ;
 
     lda #31                             ;
@@ -2117,6 +2118,7 @@ opcodeForJsrPlot
     lda #9                              ; forward space
     jsr OSWRCH                          ;
     jsr checkSpikeKeySwitch             ;
+
     lda newPlayerPixelY                 ;
     and #7                              ;
     cmp #0                              ;
@@ -2142,28 +2144,28 @@ opcodeForJsrPlot
 
 ; ***************************************************************************************
 readTwoCharactersFromScreen
-    lda #$87                ;
+    lda #135                ;
     jsr OSBYTE              ; read character at cursor position
     stx screenCharacterA    ; store result
 
     lda #9                  ;
     jsr OSWRCH              ; move forward one space
 
-    lda #$87                ;
+    lda #135                ;
     jsr OSBYTE              ; read character at cursor position
     stx screenCharacterB    ; store result
     rts
 
 ; ***************************************************************************************
 readTwoCharactersVertically
-    lda #$87                ;
+    lda #135                ;
     jsr OSBYTE              ; read character at text cursor position
     stx screenCharacterA    ; store result
 
     lda #$0a                ;
     jsr OSWRCH              ; move text cursor down one cell
 
-    lda #$87                ;
+    lda #135                ;
     jsr OSBYTE              ; read character at text cursor position
     stx screenCharacterB    ; store result
     rts                     ;
@@ -2193,7 +2195,10 @@ checkForSpikeKeySwitchCollisions
     rts
 
 ; ***************************************************************************************
-; is this checking an 'offscreen cache' for spikes?
+;
+; checking an 'offscreen' background cache for spikes
+;
+; ***************************************************************************************
 checkForLandingOnSpike
     lda #31                     ;
     jsr OSWRCH                  ;
@@ -2203,7 +2208,7 @@ checkForLandingOnSpike
     jsr OSWRCH                  ;
 
 -
-    lda #$87                    ;
+    lda #135                    ;
     jsr OSBYTE                  ; read character at cursor position
     cpx #0                      ;
     beq drawSpaces              ;
@@ -2217,7 +2222,7 @@ backIntoSpaceLoop
     jsr OSWRCH                  ;
     lda vduTextCursorXPosition  ; read text cursor X position
     cmp #0                      ;
-    bne -                       ;
+    bne -                       ; loop until we reach the end of the row (end of the cache)
     rts                         ;
 
 ; ***************************************************************************************
@@ -2291,8 +2296,10 @@ twiceLoop
     dey                                                             ;
     bne twiceLoop                                                   ;
 
+    ; don't draw regular kong any more
     lda #$60                        ; store opcode $60 'RTS'
-    sta drawKong                    ;
+    sta drawRegularKong             ;
+
 tabToOldCursorPositionAndReturn
     lda #31                         ;
     jsr OSWRCH                      ;
@@ -2341,9 +2348,9 @@ notCrumbleBar
 
 ; ***************************************************************************************
 isConveyor
-    cmp #$8b                        ; }
+    cmp #$8b                        ; } (first conveyor character)
     bcc notConveyor                 ; }
-    cmp #$8f                        ; }
+    cmp #$8f                        ; } (last conveyor character + 1)
     bcs notConveyor                 ; } if (conveyor belt) then A=1 else A=0
     lda #1                          ; }
     rts                             ; }
@@ -2399,11 +2406,11 @@ foundConveyor
     jmp checkForUpdatePlayerOnConveyor  ;
 
 ; ***************************************************************************************
-handleInAir
+handleJumping
     lda jumpPhase                   ;
-    cmp #$11                        ;
-    bcc updatePlayerWhenJumping     ;
-    jmp updatePlayerWhenSupported   ;
+    cmp #17                         ;
+    bcc updatePlayerWhenJumping     ; if (jumping) then branch
+    jmp updatePlayerWhenSupported   ; falling
 
 ; ***************************************************************************************
 updatePlayerWhenJumping
@@ -2509,7 +2516,7 @@ updateJump
 ; ***************************************************************************************
 updatePlayerWhenSupported
     lda #0                          ;
-    sta isInAir                     ;
+    sta isJumping                   ;
     sta jumpPhase                   ;
     jsr updatePlayerAirAndDrawConveyor  ;
     jsr checkUpdateConveyor         ;
@@ -2745,7 +2752,7 @@ screenCharacterB
     !byte $ea                       ;
 
     ; $184b
-isInAir
+isJumping
     !byte $ea                       ;
 playerHeightOnTakeOff
     !byte $ea                       ;
@@ -2981,14 +2988,14 @@ kongBeastSwitchTriggered
     !byte $00                           ;
 
 ; ***************************************************************************************
-drawSpecialVerticalSprites
+updateVerticalGuardians
     lda currentLevel                    ;
     cmp #5                              ;
     beq drawEugene                      ;
     cmp #8                              ;
-    beq drawKong                        ;
+    beq drawRegularKong                 ;
     cmp #12                             ;
-    beq drawKong                        ; if (level 8 or 12) then branch (draw Kong)
+    beq drawRegularKong                 ; if (level 8 or 12) then branch (draw Kong)
     cmp #9                              ;
     beq drawVerticalGuardiansJumper     ;
     cmp #16                             ;
@@ -3033,7 +3040,7 @@ moveEugeneDown
     tay                                 ;
     jsr setEugineSprite                 ;
     lda #3                              ;
-    jmp plot                            ; plot Eugene
+    jmp plot                            ; plot Eugene (mode 3)
 
 ; ***************************************************************************************
 setEugineSprite
@@ -3057,7 +3064,7 @@ doWeMoveEugene
     jmp moveEugene                      ;
 
 ; ***************************************************************************************
-drawKong
+drawRegularKong
     lda #$f0                            ;
     sta spriteColourMask                ; colour 2
 
@@ -3079,10 +3086,10 @@ showKongAnimationState1
     lda #>verticalGuardianMODE1Address1 ; }
     sta plotSourceSpriteAddressHigh     ; }
 +
-    ldx #$4e                            ;
-    ldy #$08                            ;
+    ldx #78                             ;
+    ldy #8                              ;
     lda #3                              ;
-    jmp plot                            ;
+    jmp plot                            ; draw Kong (mode 3)
 
 ; ***************************************************************************************
 return7
@@ -3110,14 +3117,14 @@ drawRegularVerticalGuardians
     inc verticalAnimationCounter        ;
     lda verticalAnimationCounter        ;
     and #3                              ;
-    sta eugenePositionY                 ;
+    sta eugenePositionY                 ; animation state: here 'eugenePositionY' used as temporary storage
     ldx #0                              ;
     lda #<verticalGuardianMODE1Address  ; }
     sta tempGuardianSpriteAddrLow       ; } address of vertical guardian sprite
     lda #>verticalGuardianMODE1Address  ; }
     sta tempGuardianSpriteAddrHigh      ; }
 -
-    cpx eugenePositionY                 ;
+    cpx eugenePositionY                 ; animation state: here 'eugenePositionY' used as temporary storage
     beq gotSpriteAddress                ; multiplication by repeated addition
     inx                                 ;
     lda tempGuardianSpriteAddrLow       ; }
@@ -3204,7 +3211,7 @@ updateGuardian
     tay                         ;
 verticalGuardiansPlotType = * + 1
     lda #5                      ;
-    jsr plot                    ; plot (type 5)
+    jsr plot                    ; plot vertical guardian (mode 5)
     lda currentGuardianX        ; }
     and #$80                    ; } check current direction
     cmp #$80                    ; }
@@ -3215,7 +3222,7 @@ verticalGuardiansPlotType = * + 1
     sec                         ;
     sbc currentGuardianSpeed    ;
     sta currentGuardianY        ;
-    jmp drawGuardian            ;
+    jmp drawVerticalGuardian    ;
 
 ; ***************************************************************************************
 moveGuardianDown
@@ -3224,7 +3231,7 @@ moveGuardianDown
     adc currentGuardianSpeed    ;
     sta currentGuardianY        ;
 
-drawGuardian
+drawVerticalGuardian
     lda currentGuardianX        ;
     and #$3f                    ;
     asl                         ;
@@ -3242,7 +3249,7 @@ drawGuardian
     sta plotSourceSpriteAddressHigh ;
 drawGuardianPlotType = * + 1
     lda #4                      ;
-    jsr plot                    ; draw guardian
+    jsr plot                    ; draw vertical guardian (mode 4)
 
     lda currentGuardianY        ;
     cmp currentGuardianExtent1  ;
@@ -3329,7 +3336,7 @@ drawSkylabCrashing
     adc #8                          ;
     tay                             ;
     lda #3                          ;
-    jsr plot                        ;
+    jsr plot                        ; draw Skylab crashing (mode 3)
     ldy tempGuardianSpriteOffset    ;
     lda guardianSpriteOffsets,y     ;
     cmp #6                          ;
@@ -3751,11 +3758,11 @@ readGuardianByte
 
 ; ***************************************************************************************
 updateLevel19Guardians
-    jsr drawGuardians               ;
+    jsr updateHorizontalGuardians   ;
     jmp updateLevel19Special        ;
 
 ; ***************************************************************************************
-animateKeysAndUpdateGuardians
+animateKeysUpdateHorizontalGuardiansAndLevel19EnergyFields
     nop                             ;
     nop                             ;
     nop                             ;
@@ -3769,13 +3776,13 @@ animateKeysAndUpdateGuardians
 
     lda currentLevel                ;
     cmp #19                         ;
-    beq updateLevel19Guardians      ; if (level 19) then branch
-    jmp drawGuardians               ; [redundant]
+    beq updateLevel19Guardians      ; if (level 19) then branch (update guardians and energy fields)
+    jmp updateHorizontalGuardians   ; [redundant]
 
 
 ; ***************************************************************************************
-drawGuardians
-    jsr swapPagesC00andE00          ; swap in monster definitions
+updateHorizontalGuardians
+    jsr swapPagesC00andE00          ; swap in guardian definitions
     lda #0                          ;
     sta drawGuardianLoopCounter     ;
     tay                             ;
@@ -5151,7 +5158,7 @@ level10Init
     sta levelColourArray + 3        ;
     jmp levelInitContinued          ;
 
-drawSwitchAt10Comma1
+drawSwitches
     lda #31                         ; }
     jsr OSWRCH                      ; }
     lda #10                         ; }
@@ -5207,7 +5214,7 @@ setPalette
     rts                             ;
 
 readByteOffsetX
-    lda $2c00,x                     ; read byte [address overwritten before use]
+    lda $2c00,x                     ; read byte [high byte of address overwritten before use]
     rts                             ;
 
     sta currentLevel                ; [UNUSED]
@@ -5223,9 +5230,9 @@ initLevel
     cmp #10                         ;
     beq level10Init                 ;
     cmp #8                          ; }
-    beq drawSwitchAt10Comma1        ; } if (level 8 or 12) then branch (show switch)
+    beq drawSwitches                ; } if (level 8 or 12) then branch (show switches)
     cmp #12                         ; }
-    beq drawSwitchAt10Comma1        ; }
+    beq drawSwitches                ; }
 
 nonLevel10Init
     lda #$eb                        ; }
@@ -5690,7 +5697,7 @@ setRoomColours
     jmp swapPagesC00andE00          ; use different character set
 
 ; ***************************************************************************************
-command255
+command255IncrementFeatureIndex
     stx levelDataOffset             ;
     lda levelFeatureIndex           ;
     cmp #5                          ;
@@ -5698,14 +5705,16 @@ command255
     inc levelFeatureIndex           ;
     jmp decodeLevelData             ;
 
-command253
+; ***************************************************************************************
+command253SetType
     inx                             ;
     jsr readLevelDataByte           ; read next byte
     sta levelFeatureIndex           ; store next byte
     stx $70                         ; record incremented index
     jmp decodeLevelData             ;
 
-command254
+; ***************************************************************************************
+command254Rectangle
     inx                             ;
     ldy #0                          ; loop counter
 -
@@ -5719,17 +5728,19 @@ command254
     dex                             ;
     stx levelDataOffset             ;
 
-    jsr drawFeature                 ;
+    jsr drawRectangularFeature      ;
     jmp decodeLevelData             ;
 
-drawFeature
-    jsr commandPlatform                 ;
+; ***************************************************************************************
+drawRectangularFeature
+    jsr commandDrawHorizontalStrip      ;
     inc $72                             ;
     lda $72                             ;
     cmp $74                             ;
-    bne drawFeature                     ;
+    bne drawRectangularFeature          ;
     rts                                 ;
 
+; ***************************************************************************************
 drawLevel
     jsr drawSideWallsAndFloor           ;
     lda #8                              ;
@@ -5742,11 +5753,11 @@ decodeLevelData
     ldx levelDataOffset                 ;
     jsr readLevelDataByte               ; read next byte of data
     cmp #$ff                            ;
-    beq command255                      ; if (255) then branch
+    beq command255IncrementFeatureIndex ; if (255) then branch
     cmp #$fe                            ;
-    beq command254                      ; if (254) then branch
+    beq command254Rectangle             ; if (254) then branch
     cmp #$fd                            ;
-    beq command253                      ; if (253) then branch
+    beq command253SetType               ; if (253) then branch
 
     ldy #0                              ;
     ldx levelDataOffset                 ;
@@ -5755,14 +5766,15 @@ decodeLevelData
     sta $0071,y                         ;
     iny                                 ; store next three bytes of level data into $71, $72, $73
     inx                                 ; these are X, Y, Length of a feature
-    cpy #3                              ;
+    cpy #3                              ; (y_max value is unchanged)
     bne -                               ;
     dex                                 ;
     stx levelDataOffset                 ; remember incremented level data offset
 
-    jsr commandPlatform                 ;
+    jsr commandDrawHorizontalStrip      ;
     jmp decodeLevelData                 ;
 
+; ***************************************************************************************
 setColourAndDrawLevel7Platform
     lda levelFeatureIndex               ;
     cmp #1                              ;
@@ -5773,6 +5785,7 @@ setColourAndDrawLevel7Platform
     jsr OSWRCH                          ; }
     jmp drawPlatform                    ;
 
+; ***************************************************************************************
 setColourAndDrawLevel14Platform
     lda levelFeatureIndex               ;
     cmp #0                              ;
@@ -5801,7 +5814,8 @@ setColourAndDrawLevel14Platform
 
     rts                                 ;
 
-commandPlatform
+; ***************************************************************************************
+commandDrawHorizontalStrip
     lda currentLevel                    ;
     cmp #7                              ;
     beq setColourAndDrawLevel7Platform  ;
@@ -5813,7 +5827,7 @@ setColourAndDrawPlatform
     jsr OSWRCH                          ;
     ldx levelFeatureIndex               ;
     lda levelColourArray,x              ;
-    jsr OSWRCH                          ;
+    jsr OSWRCH                          ; set colour
 
 drawPlatform
     lda #31                             ;
@@ -5850,7 +5864,8 @@ drawPlatform
 +
     jmp drawFooterTextOrReturn          ;
 
-    ; sprite numbers to draw (level specific)
+; ***************************************************************************************
+; sprite numbers to draw (level specific)
 levelFeatureArray
 levelFeature0
     !byte $e0                           ;
@@ -5864,8 +5879,11 @@ levelFeature4
     !byte $ea                           ;
 
     ; $2c54
+; ***************************************************************************************
 levelColourArray
-    !byte $01, $01, $03, $02, $03, $00, $00, $00
+    !byte $01, $01, $03, $02, $03
+
+    !byte $00, $00, $00                 ; [UNUSED]
 
     ; $2c5c
 drawSideWallsAndFloor
@@ -5873,28 +5891,27 @@ drawSideWallsAndFloor
     ; draw left edge wall
     lda #$ff                            ; }
     sta $71                             ; }
-    lda #0                              ; } at (-1, 0)
+    lda #0                              ; } from (-1, 0)
     sta $72                             ; }
 
     lda #1                              ; }
-    sta $73                             ; } type 1
-
-    lda #16                             ; }
-    sta $74                             ; } end coordinate 16
+    sta $73                             ; } width 1
+    lda #16                             ; } to (-1, 16)
+    sta $74                             ; }
 
     lda #2                              ;
     sta levelFeatureIndex               ;
-    jsr drawFeature                     ; draw feature
+    jsr drawRectangularFeature          ; draw
 
     ; draw right edge wall
     lda #30                             ; }
     sta $71                             ; }
-    lda #0                              ; } at (30,0)
+    lda #0                              ; } from (30,0)
     sta $72                             ; }
-
+                                        ; } (width 1 still)
     lda #16                             ; }
-    sta $74                             ; } end coordinate 16
-    jsr drawFeature                     ; draw feature
+    sta $74                             ; } to (30, 16)
+    jsr drawRectangularFeature          ; draw
 
     ; draw floor
     lda #0                              ;
@@ -5905,8 +5922,8 @@ drawSideWallsAndFloor
     sta $72                             ; }
 
     lda #30                             ; }
-    sta $73                             ; } length 30
-    jsr commandPlatform                 ; [use JMP commandPlatform to avoid needing the next RTS]
+    sta $73                             ; } 30 is end X coordinate
+    jsr commandDrawHorizontalStrip      ; [use JMP commandDrawHorizontalStrip to avoid needing the next RTS]
     rts                                 ;
 
     !byte $0d, $03                      ; [UNUSED]
@@ -5964,7 +5981,7 @@ unused4
     inc keyType                         ; [UNUSED]
     lda #$f0                            ; [UNUSED]
     sta singleItemSprite                ; [UNUSED]
-    jsr setSingleItemOffset5            ; [UNUSED]
+    jsr setSingleItemNextType           ; [UNUSED]
     ldx #0                              ; [UNUSED]
     jmp decodeNextSingleItem            ; [UNUSED]
 }
@@ -6005,7 +6022,7 @@ outputMessageLoop
     lda #3                              ;
     jsr OSWRCH                          ;
 
-    ; VDU 128,129,130,...,143 (TAB and show user defined characters)
+    ; VDU 128,129,130,...,143 (TAB and show user defined characters for 'MANIC MINER' lettering)
     ldx #$80                            ; loop counter
 vduLoop
     txa                                 ;
@@ -6014,7 +6031,7 @@ vduLoop
     cpx #$90                            ;
     bne vduLoop                         ;
 
-    ; copy 256 bytes of screen memory 8 bytes back
+    ; copy 256 bytes of screen memory 8 bytes back (centring the text)
     ldx #0                              ;
 -
     lda $3840,x                         ;
@@ -6022,8 +6039,7 @@ vduLoop
     inx                                 ;
     bne -                               ;
 
-    ; store zero byte on screen
-    stx $393e                           ;
+    stx $393e                           ; store zero byte on screen
     jsr swapManicMinerGraphicWithC00    ; swap back character definitions
 
     ; fill in the background with RED
@@ -6151,7 +6167,7 @@ loadMiner4
 ; ***************************************************************************************
 afterLoads
     lda #$8c                            ;
-    jsr OSWRCH                          ; VDU 140 - why?
+    jsr OSWRCH                          ; VDU 140 [why?]
 
     ; copy ($0500-$05ff) to ($0d00-$0dff)
     ldx #0                              ;
@@ -6175,7 +6191,7 @@ mode1Message
     !byte 22, 1                         ; MODE 1
     !byte 23, 0, 6, 0, $ff              ; hide display
     !byte 31, 17, 5                     ; TAB(17,5)
-    !byte $90                           ; VDU 144 (user defined character - copyright?)
+    !byte $90                           ; VDU 144 (user defined character - copyright)
     !text "1984"                        ;
 
     !byte 31, 12, 7                     ; TAB(12,7)
@@ -6241,7 +6257,7 @@ keysLeft
 }
 
 ; ***************************************************************************************
-miner2Entry
+miner2EntryPoint
     lda #0                          ;
     sta $70                         ; reset timer counter for animating logo
     lda #0                          ;
@@ -6262,10 +6278,10 @@ setModeStringLoop
     cpx #setModeStringEnd - setModeString   ;
     bne setModeStringLoop           ;
 
-    ldx #0
+    ldx #0                          ;
 copyToScreen3
     lda whiteBackgroundString,x     ;
-    sta $7f23,x                     ;
+    sta $7f23,x                     ; screen address
     inx                             ;
     cpx #whiteBackgroundStringEnd - whiteBackgroundString   ;
     bne copyToScreen3               ;

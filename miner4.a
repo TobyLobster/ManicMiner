@@ -1,6 +1,7 @@
 ;
 ; miner4.a ($5580)
 ;
+; Execution starts at 'miner4EntryPoint'
 
 !src "constants.a"
 
@@ -32,7 +33,7 @@ startUp
     jsr OSBYTE                                  ;
     jmp continue                                ;
 
-    ; [copy protection, four digit code entry - unused]
+    ; [the code that follow is the four digit code entry - now unused, code continues at 'initialize']
 
     !byte $60                                   ; RTS [UNUSED]
 
@@ -609,14 +610,17 @@ trianglesLogo
 
 !pseudopc $2c98 {
 
+; ***************************************************************************************
 getLevelDataByte
     lda $2a28                           ; [address is overwritten before use]
     rts                                 ;
 
+; ***************************************************************************************
 level18Thing
     jsr drawFooterTextOrReturn          ;
     jmp afterLevel18Thing               ;
 
+; ***************************************************************************************
 decodeSingleItemData
     lda #0                                  ;
     sta keyPositionCounter                  ;
@@ -659,11 +663,12 @@ skipToTerminator
     inc singleItemType                  ; singleItemType = (top two bits / 64) + 1
     lda #$f0                            ;
     sta singleItemSprite                ; singleItemSprite = $f0
-    jsr setSingleItemOffset5            ; singleItemOffsetX = 5
+    jsr setSingleOffsetX5               ; singleItemOffsetX = 5, type++
     ldx #0                              ;
     jmp decodeNextSingleItem            ;
 
     ; $2d00
+; ***************************************************************************************
 drawExtraSpikes
     lda currentLevel                    ;
     cmp #8                              ; }
@@ -673,6 +678,7 @@ drawExtraSpikes
     ldx #0                              ; swap characters back
     jmp swapPagesC00andA00              ;
 
+; ***************************************************************************************
 drawSpecialSpikes
     lda #17                             ; }
     jsr OSWRCH                          ; }
@@ -709,17 +715,17 @@ setSingleItemOffset15Command
     jmp decodeNextSingleItem            ;
 
 ; ***************************************************************************************
-setSingleItemOffset5Command
-    jsr setSingleItemOffset5            ;
+setSingleItemNextTypeCommand
+    jsr setSingleOffsetX5               ;
     lda singleItemSprite                ;
     sec                                 ;
-    adc singleItemSpriteOffset          ;
+    adc singleItemSpriteOffset          ; add 1 + sprite offset to current sprite
     sta singleItemSprite                ;
     jmp decodeNextSingleItem            ;
 
 ; ***************************************************************************************
 toggleAlternativeSingleItemSprite
-    jsr setSingleItemOffset5            ; X offset 5
+    jsr setSingleOffsetX5               ; X offset 5, type++
     ldx #0                              ;
     jsr swapPagesC00andA00              ; swap pages
     lda #$eb                            ; regular single item character code
@@ -738,7 +744,7 @@ decodeNextSingleItem
     cmp #$fe                            ;
     beq setSingleItemOffset15Command    ; if (command 254) then set X offset to 15
     cmp #$fd                            ;
-    beq setSingleItemOffset5Command     ; if (command 253) then set X offset to 5
+    beq setSingleItemNextTypeCommand    ; if (command 253) then type += offset; set X offset to 5
 
     dec singleItemType                  ;
 
@@ -810,7 +816,7 @@ setSingleItemOffset15
     rts                             ;
 
 ; ***************************************************************************************
-setSingleItemOffset5
+setSingleOffsetX5
     lda #5                          ;
     sta singleItemOffsetX           ;
     rts                             ;
@@ -1169,7 +1175,7 @@ initialize
     ldx #0                          ; loop counter
 -
     lda minerWilly,x                ;
-    sta $0500,x                     ;
+    sta willyRight0,x               ;
     inx                             ;
     bne -                           ;
 
@@ -1177,11 +1183,11 @@ initialize
     ldx #0                          ; loop counter
 -
     lda minerWilly + $0100,x        ;
-    sta $0600,x                     ;
+    sta willyLeft0,x                ;
     inx                             ;
     bne -                           ;
 
-    ; copy ($5b00-$5bff) to ($0700-$07ff) (flowery title graphics)
+    ; copy ($5b00-$5bff) to ($0700-$07ff) (flowery MANIC MINER lettering graphics)
     ldx #0                          ; loop counter
 -
     lda titleStart,x                ;
@@ -1311,7 +1317,7 @@ backFrom8Zeros
     ldy #0                          ;
     jsr OSBYTE                      ;
 
-    ; fix up single item
+    ; fix up a key's position on level 20 [a last minute bug fix?]
     lda #$41                        ;
     sta pokeSingleItem              ;
 
@@ -1378,6 +1384,7 @@ setPaletteMessageEnd
     ; points into some obfuscated code, for no good reason, all just part of the obfuscation
 otherData = $627F
 
+; ***************************************************************************************
 continue
     ldy #0                          ;
 -
@@ -1445,7 +1452,7 @@ add18loop
     sta $71                         ; }
     ldy #0                          ;
     lda ($70),y                     ; read from ($70,$71) i.e. memory location $2ADE value is $24
-    jmp codeEnteredCorrectly        ; jump straight to success [hack?]
+    jmp codeEnteredCorrectly        ; jump straight to success [HACK!]
 
 checkResultOfCodeEntry
     beq codeEnteredCorrectly        ;
@@ -1467,7 +1474,7 @@ checkResultOfCodeEntry
 
     ; lock up!
 -
-    jsr OSWRCH                      ; lock up outputting an infinite stream of VDU 0's
+    jsr OSWRCH                      ; lock up [outputting an infinite stream of VDU 0's - why?]
     jmp -                           ;
 
 tryCodeEntryAgain
@@ -1547,23 +1554,24 @@ pressReturnToStopMessageEnd
 startGame
     lda #1                                  ; set level 1
     jsr showLevel                           ;
-    jsr updateMusicState                    ;
+    jsr updateMusicState                    ; pause / resume music
+
 playCurrentLevel
-    lda tempScreenAddressLow                ;
-    sta $75                                 ;
-    lda tempScreenAddressHigh               ;
-    sta $76                                 ;
+    lda tempScreenAddressLow                ; }
+    sta plotScreenAddressLow                ; } restore screen plotting address
+    lda tempScreenAddressHigh               ; } [not needed?]
+    sta plotScreenAddressHigh               ; }
 
     jsr updatePlayer                        ;
 
-    lda $75                                 ;
-    sta tempScreenAddressLow                ;
-    lda $76                                 ;
-    sta tempScreenAddressHigh               ;
+    lda plotScreenAddressLow                ; }
+    sta tempScreenAddressLow                ; } save screen plotting address
+    lda plotScreenAddressHigh               ; } [not needed?]
+    sta tempScreenAddressHigh               ; }
 
-    jsr animateKeysAndUpdateGuardians       ;
-    jsr collideWithGuardians                ;
-    jsr updateJumpAndFallSounds             ;
+    jsr animateKeysUpdateHorizontalGuardiansAndLevel19EnergyFields  ;
+    jsr drawPlayerAndCheckForCollisions                             ;
+    jsr updateVerticalGuardiansAndJumpAndFallSounds                 ;
 
     ; pointless delay loop
     ldx #0                                  ; 0
@@ -1574,6 +1582,7 @@ playCurrentLevel
     iny                                     ;
     bne -                                   ;
 
+    ; read special keys (for sound on/off, pause, quit)
     ldy #$ff                                ;
     ldx #$a6                                ; DELETE
     lda #$81                                ;
@@ -1602,10 +1611,11 @@ playCurrentLevel
     cpy #$ff                                ;
     beq musicOff                            ;
 
+    ; check for cheat mode enabled
 checkForFunctionKeys
     lda cheatModeEnabled                    ;
     cmp #0                                  ;
-    beq +                                   ;
+    beq +                                   ; if (cheat mode not enabled) then branch
 
     ; read function keys
     lda #0                                  ;
@@ -1826,12 +1836,13 @@ initializeLevelSprites
     lda #16                         ;
     sta kongYCoordinate             ;
 
+    ; draw regular Kong
     lda #$a9                        ; opcode for 'LDA #'
-    sta drawKong                    ;
+    sta drawRegularKong             ;
 
     lda #0                          ;
     sta kongBeastSwitchTriggered    ;
-    sta isInAir                     ;
+    sta isJumping                   ;
 
     lda #$27                        ;
     sta willySpriteAddressLow       ;
@@ -2341,7 +2352,7 @@ kongIsNotLow
     ldx #78                         ;
     ldy kongYCoordinate             ;
     lda #10                         ;
-    jmp plot                        ;
+    jmp plot                        ; draw Kong falling (mode 10)
 
 kongIsLow
     lda #$69                        ;
@@ -2349,7 +2360,7 @@ kongIsLow
     ldx #78                         ;
     ldy kongYCoordinate             ;
     lda #2                          ;
-    jmp plot                        ;
+    jmp plot                        ; erase Kong falling (mode 2)
 
 setColour2AndShowExit
     lda #17                         ; VDU 17 (COLOUR)
@@ -2553,7 +2564,7 @@ clearScreenLoop
     ldx #78                         ;
     ldy #104                        ;
     lda #3                          ;
-    jsr plot                        ; plot willy (on the pedestal)
+    jsr plot                        ; plot willy (on the pedestal) (mode 3)
 
     lda #8                          ;
     sta footPositionY               ;
@@ -2565,7 +2576,7 @@ footDescendingLoop
     ldx #$4e                        ;
     ldy footPositionY               ;
     lda #3                          ;
-    jsr plot                        ; draw foot
+    jsr plot                        ; draw foot (mode 3)
 
     ldx #$ff                        ;
     ldy #$40                        ; loop counter
@@ -2644,7 +2655,7 @@ playSoundAXY
     jmp OSWORD                      ;
 
 ; ***************************************************************************************
-collideWithGuardians
+drawPlayerAndCheckForCollisions
     lda plotSourceSpriteAddressLow      ; }
     sec                                 ; }
     sbc #39                             ; }
@@ -2656,7 +2667,7 @@ collideWithGuardians
     ldx newPlayerPixelX                 ;
     ldy newPlayerPixelY                 ;
     lda #6                              ;
-    jsr plot                            ;
+    jsr plot                            ; draw player (mode 6)
     jsr checkForDeath                   ;
     jsr checkForSwitchFlipped           ;
     jsr collideWithVerticalGuardians    ;
@@ -2891,7 +2902,7 @@ toggleEugeneColour
     eor #$0f                            ;
     sta eugeneColourMask                ;
 
-    jsr drawSpecialVerticalSprites      ;
+    jsr updateVerticalGuardians         ;
 
     lda #$ff                            ;
     sta spriteColourMask                ;
@@ -3118,6 +3129,7 @@ playerStartPositions
     ;level  1,   2,   3,   4,   5,   6,   7,   8,   9,  10,  11,  12,  13,  14,  15,  16,  17,  18,  19,  20
     !byte $0e, $0e, $0e, $de, $04, $74, $0e, $0e, $0e, $05, $12, $0e, $ee, $8e, $0e, $4e, $04, $de, $0e, $0e
 
+    ; [UNUSED]
     !byte $de, $0e, $0e, $00
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
@@ -3125,128 +3137,1143 @@ playerStartPositions
     !byte $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00, $00
 
     ; $dbe0
+    ; [UNUSED]
     !byte $0f, $0f, $0d, $02, $0c, $02, $00, $ff, $0f, $0f, $0b, $0e, $05, $00, $00, $ff
     !byte $0f, $0f, $0d, $02, $0c, $02, $00, $ff, $0f, $0f, $0b, $0e, $05, $00, $00, $ff
+
+    ; ***********************************************************************************
+!macro levelStrip .x, .y, .width {
+    !byte .x, .y, .width
+    }
+
+!macro levelRect .x, .y, .width, .y_max {
+    !byte $fe, .x, .y, .width, .y_max
+}
+
+!macro levelSetType .type {
+    !byte $fd, .type
+}
+
+!macro levelIncrementType {
+    !byte $ff
+}
 
     ; $6c00
 levelDefinitions
-    !byte $ff, $ff, $10, $02, $00, $01, $00, $00, $01, $21, $10, $04, $0d, $0f, $1b, $0c
-    !byte $03, $1c, $0a, $02, $00, $09, $04, $00, $07, $03, $00, $05, $0e, $11, $05, $01
-    !byte $16, $05, $08, $ff, $16, $0c, $05, $0d, $05, $04, $12, $05, $04, $ff, $13, $0c
-    !byte $03, $10, $08, $03, $ff, $07, $09, $14, $ff, $ff, $54, $07, $00, $01, $01, $80
-    !byte $02, $21, $10, $0d, $0c, $04, $08, $09, $07, $00, $07, $01, $00, $05, $13, $14
-    !byte $06, $04, $17, $03, $01, $ff, $07, $0d, $04, $12, $0a, $04, $14, $03, $03, $01
-    !byte $07, $05, $19, $06, $02, $fe, $19, $08, $02, $0d, $ff, $12, $00, $0c, $fe, $18
-    !byte $06, $01, $0d, $fe, $1b, $05, $01, $0d, $ff, $02, $0b, $04, $ff, $ff, $64, $07
-    !byte $11, $02, $10, $42, $00, $21, $0e, $04, $0c, $06, $14, $0d, $0a, $0d, $0b, $05
-    !byte $18, $0a, $06, $1a, $07, $04, $00, $07, $06, $00, $05, $04, $ff, $04, $05, $1a
-    !byte $ff, $1e, $00, $01, $ff, $05, $09, $06, $ff, $ff, $20, $05, $00, $01, $00, $01
-    !byte $00, $21, $04, $05, $0c, $02, $06, $08, $02, $00, $05, $01, $06, $05, $01, $0b
-    !byte $0b, $03, $0b, $06, $02, $10, $05, $01, $11, $0d, $02, $11, $09, $03, $12, $03
-    !byte $06, $14, $06, $03, $15, $0b, $03, $19, $08, $03, $1b, $0c, $03, $1d, $0a, $01
-    !byte $1a, $04, $04, $ff, $00, $07, $03, $ff, $0e, $00, $10, $ff, $00, $0a, $03, $ff
-    !byte $ff, $24, $07, $00, $01, $02, $80, $00, $13, $10, $00, $0d, $02, $02, $0b, $0b
-    !byte $03, $09, $0a, $00, $05, $0d, $11, $0b, $07, $1d, $0b, $01, $15, $05, $06, $1c
-    !byte $06, $02, $ff, $00, $0b, $02, $11, $05, $04, $ff, $07, $0f, $10, $0d, $0e, $0a
-    !byte $0d, $0d, $04, $fe, $07, $0c, $01, $10, $ff, $11, $08, $0a, $ff, $ff, $20, $06
-    !byte $20, $01, $00, $81, $00, $21, $03, $00, $09, $02, $02, $06, $02, $07, $05, $03
-    !byte $0e, $05, $02, $06, $0a, $13, $14, $05, $05, $1b, $0c, $03, $15, $0d, $02, $1b
-    !byte $06, $03, $16, $08, $05, $ff, $1d, $00, $01, $ff, $fe, $0f, $06, $01, $08, $fe
-    !byte $0f, $0a, $01, $0d, $ff, $02, $0d, $04, $ff, $ff, $10, $02, $03, $02, $00, $02
-    !byte $00, $13, $10, $08, $0d, $03, $00, $0a, $0b, $0d, $09, $03, $00, $08, $01, $00
-    !byte $06, $03, $0d, $05, $03, $0e, $03, $02, $ff, $fe, $11, $03, $0d, $0d, $ff, $fe
-    !byte $10, $03, $01, $0d, $0d, $0c, $04, $fe, $0d, $0d, $01, $10, $0d, $0f, $11, $0d
-    !byte $00, $11, $ff, $06, $05, $05, $ff, $ff, $10, $02, $00, $02, $03, $82, $00, $13
-    !byte $10, $03, $0c, $02, $03, $0c, $02, $00, $0a, $01, $01, $07, $03, $00, $05, $03
-    !byte $08, $05, $06, $0e, $02, $02, $08, $0b, $02, $0b, $0a, $03, $07, $08, $03, $11
-    !byte $05, $02, $14, $06, $04, $11, $09, $05, $11, $0d, $02, $15, $0c, $05, $1a, $0a
-    !byte $04, $1a, $07, $01, $1d, $06, $01, $1c, $02, $02, $ff, $10, $0e, $01, $ff, $fe
-    !byte $10, $00, $01, $0f, $fe, $13, $00, $01, $02, $fe, $0d, $0d, $01, $0f, $ff, $0a
-    !byte $0d, $03, $ff, $ff, $10, $02, $00, $02, $00, $83, $00, $05, $03, $02, $0c, $1a
-    !byte $02, $08, $08, $00, $05, $1c, $00, $0a, $02, $1c, $0d, $02, $1c, $07, $02, $15
-    !byte $09, $07, $ff, $02, $00, $01, $ff, $fe, $02, $00, $01, $01, $ff, $0c, $08, $07
-    !byte $fd, $04, $fe, $04, $04, $02, $0e, $fe, $0a, $04, $02, $0e, $fe, $13, $04, $02
-    !byte $0e, $fe, $18, $04, $02, $0e, $fd, $03, $ff, $ff, $20, $01, $32, $01, $34, $43
-    !byte $00, $11, $10, $00, $0d, $03, $00, $0a, $04, $00, $08, $05, $00, $06, $04, $00
-    !byte $02, $06, $0c, $00, $03, $07, $05, $01, $08, $09, $07, $10, $0a, $07, $10, $07
-    !byte $07, $10, $04, $04, $14, $00, $0a, $1a, $02, $04, $16, $05, $08, $1c, $09, $02
-    !byte $1b, $0d, $03, $ff, $04, $0a, $02, $08, $05, $07, $17, $07, $03, $17, $0b, $03
-    !byte $ff, $fe, $0f, $00, $01, $0c, $ff, $00, $0f, $1e, $07, $0c, $0a, $ff, $ff, $64
-    !byte $07, $00, $00, $76, $80, $00, $05, $04, $00, $03, $04, $04, $05, $06, $00, $08
-    !byte $02, $00, $0d, $02, $1b, $0c, $03, $16, $0d, $03, $1b, $0a, $01, $1c, $08, $02
-    !byte $1c, $06, $02, $0a, $09, $09, $0e, $05, $0a, $08, $0b, $01, $ff, $05, $0b, $03
-    !byte $ff, $00, $00, $05, $ff, $04, $08, $02, $ff, $ff, $50, $06, $00, $02, $03, $84
-    !byte $00, $13, $10, $0a, $0d, $03, $00, $0c, $06, $05, $0a, $01, $05, $07, $02, $02
-    !byte $08, $01, $00, $05, $03, $09, $09, $04, $11, $0a, $03, $18, $0b, $02, $18, $08
-    !byte $06, $1d, $06, $01, $17, $05, $02, $ff, $11, $05, $06, $08, $05, $05, $0e, $02
-    !byte $02, $ff, $10, $00, $01, $14, $00, $01, $fe, $10, $05, $01, $0f, $fe, $0d, $05
-    !byte $01, $0a, $fe, $0d, $0d, $01, $0f, $0d, $0f, $04, $ff, $11, $0d, $0b, $ff, $ff
-    !byte $20, $07, $50, $02, $05, $40, $00, $05, $10, $00, $0f, $1e, $06, $03, $18, $06
-    !byte $06, $18, $06, $0c, $18, $06, $09, $18, $ff, $fe, $02, $01, $01, $0f, $ff, $00
-    !byte $00, $1e, $ff, $02, $0f, $1a, $fd, $04, $08, $06, $02, $09, $0c, $02, $15, $06
-    !byte $02, $14, $0c, $02, $0e, $06, $02, $0e, $0c, $02, $10, $09, $02, $1b, $06, $02
-    !byte $1a, $0c, $02, $0b, $09, $02, $18, $09, $02, $18, $03, $02, $fd, $04, $ff, $ff
-    !byte $24, $05, $60, $02, $27, $85, $00, $13, $03, $00, $0b, $00, $02, $06, $00, $04
-    !byte $09, $00, $06, $0d, $00, $06, $07, $00, $08, $0b, $00, $0c, $09, $00, $0a, $06
-    !byte $00, $0e, $05, $00, $12, $06, $00, $16, $07, $00, $14, $09, $00, $1a, $06, $00
-    !byte $1c, $09, $00, $18, $0b, $00, $fd, $02, $00, $0f, $1e, $ff, $0e, $0b, $06, $ff
-    !byte $ff, $20, $06, $00, $00, $78, $41, $00, $05, $06, $00, $0a, $02, $02, $08, $02
-    !byte $00, $05, $05, $04, $0c, $03, $0b, $0d, $02, $0b, $0a, $02, $0b, $07, $02, $11
-    !byte $0b, $02, $11, $08, $02, $17, $06, $02, $18, $09, $02, $16, $0c, $02, $17, $03
-    !byte $05, $ff, $06, $07, $01, $ff, $05, $00, $19, $ff, $07, $03, $10, $fe, $1c, $01
-    !byte $02, $0f, $07, $03, $10, $ff, $ff, $10, $06, $00, $02, $09, $86, $00, $10, $08
-    !byte $00, $0c, $09, $0b, $0b, $02, $00, $05, $01, $05, $05, $01, $03, $07, $01, $14
-    !byte $0d, $01, $1a, $0d, $01, $1a, $0b, $01, $19, $07, $05, $16, $05, $03, $ff, $00
-    !byte $09, $02, $ff, $09, $0b, $02, $fe, $0a, $05, $01, $09, $0d, $05, $01, $0d, $06
-    !byte $02, $0d, $07, $03, $0d, $08, $04, $ff, $02, $09, $19, $ff, $ff, $20, $06, $03
-    !byte $01, $50, $87, $00, $21, $04, $1a, $0e, $04, $1c, $05, $02, $00, $05, $02, $00
-    !byte $0f, $1e, $ff, $02, $05, $1a, $fe, $00, $06, $1e, $0d, $ff, $1c, $00, $02, $ff
-    !byte $0d, $08, $05, $fd, $04, $fe, $02, $08, $02, $0d, $fe, $09, $05, $02, $0d, $fe
-    !byte $12, $05, $02, $0a, $fe, $1a, $05, $02, $0d, $fd, $04, $ff, $ff, $10, $06, $00
-    !byte $00, $40, $88, $00, $21, $03, $00, $0f, $1e, $00, $0d, $02, $02, $0c, $1a, $02
-    !byte $09, $07, $00, $07, $02, $02, $05, $1c, $0a, $08, $12, $1c, $0a, $02, $fd, $02
-    !byte $1b, $00, $01, $fd, $04, $fe, $04, $05, $02, $0d, $fe, $09, $05, $02, $0d, $fe
-    !byte $13, $05, $02, $0d, $fe, $18, $05, $02, $0d, $fd, $04, $ff, $ff, $24, $07, $00
-    !byte $01, $00, $89, $00, $13, $07, $00, $05, $02, $02, $08, $03, $08, $0d, $0e, $05
-    !byte $06, $03, $07, $0a, $04, $17, $0b, $02, $16, $07, $02, $1a, $05, $04, $1b, $09
-    !byte $03, $ff, $fd, $02, $fe, $0a, $03, $0a, $0b, $ff, $02, $0c, $03, $ff, $fe, $0a
-
-    ; $7100
-    !byte $04, $0a, $06, $fe, $0a, $08, $0a, $0a, $fd, $03, $ff, $ff, $20, $06, $00, $01
-    !byte $00, $8a, $01, $21, $04, $07, $05, $07, $0d, $03, $07, $00, $08, $02, $08, $07
-    !byte $07, $1b, $07, $03, $10, $07, $04, $13, $0d, $01, $10, $0c, $01, $16, $0d, $01
-    !byte $18, $09, $01, $ff, $00, $09, $01, $14, $03, $03, $14, $0a, $01, $17, $0d, $02
-    !byte $ff, $0c, $00, $12, $17, $03, $05, $03, $07, $05, $00, $0b, $02, $00, $0c, $0b
-    !byte $0d, $0e, $03, $0e, $0d, $02, $0f, $0c, $01, $fe, $0f, $07, $01, $0a, $0a, $0b
-    !byte $01, $ff, $02, $0b, $08, $fe, $1c, $03, $02, $07, $02, $0b, $08, $ff, $ff, $ff
-
-levelSingleItemDefinitions
+    ; ***********************************************************************************
     ; level 1
-    ; $ff   separator
-    ; $fe
-    !byte $ff, $c1, $80, $f1, $fe, $74, $c0, $d6, $bc, $fe, $48, $64, $a4, $fd, $a0, $f0
+    !byte $ff, $ff, 16, 2, 0, 1, 0, 0, 1, 33, 16                ; header
 
-    ; $7180
-    !byte $ff, $c1, $29, $61, $fe, $71, $97, $2c, $fd, $fe, $d1, $ff, $c2, $50, $e0, $fe
-    !byte $60, $d6, $46, $fd, $08, $03, $90, $00, $fe, $10, $01, $a0, $00, $ff, $c2, $00
-    !byte $b1, $f6, $fe, $81, $d6, $fd, $60, $00, $fe, $6c, $00, $ff, $c0, $6c, $8c, $96
-    !byte $fe, $d1, $c7, $4e, $fe, $7e, $8e, $47, $74, $fd, $fe, $30, $ff, $c4, $0a, $cb
-    !byte $e6, $fe, $06, $d7, $2c, $fd, $fe, $0b, $44, $ff, $c5, $fe, $2a, $36, $a7, $d3
-    !byte $db, $fd, $fe, $6c, $68, $ba, $b5, $ff, $80, $18, $d6, $b2, $fe, $cd, $fe, $6e
-    !byte $ff, $00, $f1, $f1, $fe, $ff, $c6, $d1, $b6, $fe, $18, $42, $d1, $fd, $23, $09
-    !byte $90, $fe, $10, $30, $41, $6b, $da, $ff, $c2, $04, $fe, $26, $70, $d1, $dd, $fd
+    ; floors
+    +levelStrip 4, 13, 15
+    +levelStrip 27, 12, 3
+    +levelStrip 28, 10, 2
+    +levelStrip 0, 9, 4
+    +levelStrip 0, 7, 3
+    +levelStrip 0, 5, 14
+    +levelStrip 17, 5, 1
+    +levelStrip 22, 5, 8
 
-    ; $7200
-    !byte $ba, $02, $fe, $20, $01, $2a, $01, $76, $03, $ff, $c0, $16, $e3, $f7, $fe, $95
-    !byte $cd, $fe, $6c, $bc, $ff, $c0, $ac, $96, $fe, $93, $99, $29, $fe, $ff, $80, $28
-    !byte $f7, $fe, $62, $a7, $fe, $ff, $42, $b6, $fe, $82, $9e, $fd, $74, $01, $fe, $b4
-    !byte $06, $ff, $87, $00, $c7, $fe, $0a, $d2, $fd, $fe, $6e, $7e, $8e, $ff, $c8, $09
-    !byte $e7, $fe, $2a, $75, $9b, $54, $84, $c4, $f4, $fe, $54, $74, $fd, $26, $8b, $fe
-    !byte $5a, $97, $ff, $00, $e1, $e1, $fe, $ff, $c1, $02, $c8, $fe, $d1, $dc, $18, $fe
-    !byte $ff, $c2, $88, $fe, $0d, $28
+    +levelIncrementType
+
+    ; crumble floors
+    +levelStrip 22, 12, 5
+    +levelStrip 13, 5, 4
+    +levelStrip 18, 5, 4
+
+    +levelIncrementType
+
+    ; walls
+    +levelStrip 19, 12, 3
+    +levelStrip 16, 8, 3
+
+    +levelIncrementType
+
+    ; conveyor
+    +levelStrip 7, 9, 20
+
+    ; ***********************************************************************************
+    ; level 2
+    !byte $ff, $ff, 84, 7, 0, 1, 1, 128, 2, 33, 16              ; header
+
+    ; floors
+    +levelStrip 13, 12, 4
+    +levelStrip 8, 9, 7
+    +levelStrip 0, 7, 1
+    +levelStrip 0, 5, 19
+    +levelStrip 20, 6, 4
+    +levelStrip 23, 3, 1
+
+    +levelIncrementType
+
+    ; crumble floors
+    +levelStrip 7, 13, 4
+    +levelStrip 18, 10, 4
+    +levelStrip 20, 3, 3
+    +levelStrip 1, 7, 5
+    +levelStrip 25, 6, 2
+    +levelRect 25, 8, 2, 13
+
+    +levelIncrementType
+
+    ; walls
+    +levelStrip 18, 0, 12
+    +levelRect 24, 6, 1, 13
+    +levelRect 27, 5, 1, 13
+
+    +levelIncrementType
+
+    ; conveyor
+    +levelStrip 2, 11, 4
+
+    ; ***********************************************************************************
+    ; level 3
+    !byte $ff, $ff, 100, 7, 17, 2, 16, 66, 0, 33, 14            ; header
+
+    ; floors
+    +levelStrip  4, 12,  6
+    +levelStrip 20, 13, 10
+    +levelStrip 13, 11,  5
+    +levelStrip 24, 10,  6
+    +levelStrip 26,  7,  4
+    +levelStrip  0,  7,  6
+    +levelStrip  0,  5,  4
+
+    +levelIncrementType
+
+    ; crumble floors
+    +levelStrip  4,  5, 26
+
+    +levelIncrementType
+
+    ; walls
+    +levelStrip 30, 0, 1
+
+    +levelIncrementType
+
+    ; conveyor
+    +levelStrip 5, 9, 6
+
+    ; ***********************************************************************************
+    ; level 4
+    !byte $ff, $ff, 32, 5, 0, 1, 0, 1, 0, 33, 4                 ; header
+
+    ; floors
+    +levelStrip  5, 12,  2
+    +levelStrip  6,  8,  2
+    +levelStrip  0,  5,  1
+    +levelStrip  6,  5,  1
+    +levelStrip 11, 11,  3
+    +levelStrip 11,  6,  2
+    +levelStrip 16,  5,  1
+    +levelStrip 17, 13,  2
+    +levelStrip 17,  9,  3
+    +levelStrip 18,  3,  6
+    +levelStrip 20,  6,  3
+    +levelStrip 21, 11,  3
+    +levelStrip 25,  8,  3
+    +levelStrip 27, 12,  3
+    +levelStrip 29, 10,  1
+    +levelStrip 26,  4,  4
+
+    +levelIncrementType
+
+    ; crumble floors
+    +levelStrip 0, 7, 3
+
+    +levelIncrementType
+
+    ; walls
+    +levelStrip 14, 0, 16
+
+    +levelIncrementType
+
+    ; conveyor
+    +levelStrip 0, 10, 3
+
+    ; ***********************************************************************************
+    ; level 5
+    !byte $ff, $ff, 36, 7, 0, 1, 2, 128, 0, 19, 16              ; header
+
+    ; floors
+    +levelStrip 0, 13, 2
+    +levelStrip 2, 11, 11
+    +levelStrip 3, 9, 10
+    +levelStrip 0, 5, 13
+    +levelStrip 17, 11, 7
+    +levelStrip 29, 11, 1
+    +levelStrip 21, 5, 6
+    +levelStrip 28, 6, 2
+
+    +levelIncrementType
+
+    ; crumble floors
+    +levelStrip 0, 11, 2
+    +levelStrip 17, 5, 4
+
+    +levelIncrementType
+
+    ; walls
+    +levelStrip 7, 15, 16
+    +levelStrip 13, 14, 10
+    +levelStrip 13, 13, 4
+    +levelRect 7, 12, 1, 16
+
+    +levelIncrementType
+
+    ; conveyor
+    +levelStrip 17, 8, 10
+
+    ; ***********************************************************************************
+    ; level 6
+    !byte $ff, $ff, 32, 6, 32, 1, 0, 129, 0, 33, 3              ; header
+
+    ; floors
+    +levelStrip 0, 9, 2
+    +levelStrip 2, 6, 2
+    +levelStrip 7, 5, 3
+    +levelStrip 14, 5, 2
+    +levelStrip 6, 10, 19
+    +levelStrip 20, 5, 5
+    +levelStrip 27, 12, 3
+    +levelStrip 21, 13, 2
+    +levelStrip 27, 6, 3
+    +levelStrip 22, 8, 5
+
+    +levelIncrementType
+
+    ; crumble floors
+    +levelStrip 29, 0, 1
+
+    +levelIncrementType
+
+    ; walls
+    +levelRect 15, 6, 1, 8
+    +levelRect 15, 10, 1, 13
+
+    +levelIncrementType
+
+    ; conveyor
+    +levelStrip 2, 13, 4
+
+    ; ***********************************************************************************
+    ; level 7
+    !byte $ff, $ff, 16, 2, 3, 2, 0, 2, 0, 19, 16                ; header
+
+    ; floors
+    +levelStrip 8, 13, 3
+    +levelStrip 0, 10, 11
+    +levelStrip 13, 9, 3
+    +levelStrip 0, 8, 1
+    +levelStrip 0, 6, 3
+    +levelStrip 13, 5, 3
+    +levelStrip 14, 3, 2
+
+    +levelIncrementType
+
+    ; crumble floors
+    +levelRect 17, 3, 13, 13
+
+    +levelIncrementType
+
+    ; walls
+    +levelRect 16, 3, 1, 13
+    +levelStrip 13, 12, 4
+    +levelRect 13, 13, 1, 16
+    +levelStrip 13, 15, 17
+    +levelStrip 13, 0, 17
+
+    +levelIncrementType
+
+    ; conveyor
+    +levelStrip 6, 5, 5
+
+    ; ***********************************************************************************
+    ; level 8
+    !byte $ff, $ff, 16, 2, 0, 2, 3, 130, 0, 19, 16              ; header
+
+    ; floors
+    +levelStrip 3, 12, 2
+    +levelStrip 3, 12, 2                                        ; [redundant]
+    +levelStrip 0, 10, 1
+    +levelStrip 1, 7, 3
+    +levelStrip 0, 5, 3
+    +levelStrip 8, 5, 6
+    +levelStrip 14, 2, 2
+    +levelStrip 8, 11, 2
+    +levelStrip 11, 10, 3
+    +levelStrip 7, 8, 3
+    +levelStrip 17, 5, 2
+    +levelStrip 20, 6, 4
+    +levelStrip 17, 9, 5
+    +levelStrip 17, 13, 2
+    +levelStrip 21, 12, 5
+    +levelStrip 26, 10, 4
+    +levelStrip 26, 7, 1
+    +levelStrip 29, 6, 1
+    +levelStrip 28, 2, 2
+
+    +levelIncrementType
+
+    ; crumble floors
+    +levelStrip 16, 14, 1
+
+    +levelIncrementType
+
+    ; walls
+    +levelRect 16, 0, 1, 15
+    +levelRect 19, 0, 1, 2
+    +levelRect 13, 13, 1, 15
+
+    +levelIncrementType
+
+    ; conveyor
+    +levelStrip 10, 13, 3
+
+    ; ***********************************************************************************
+    ; level 9
+    !byte $ff, $ff, 16, 2, 0, 2, 0, 131, 0, 5, 3                ; header
+
+    ; floors
+    +levelStrip 2, 12, 26
+    +levelStrip 2, 8, 8
+    +levelStrip 0, 5, 28
+    +levelStrip 0, 10, 2
+    +levelStrip 28, 13, 2
+    +levelStrip 28, 7, 2
+    +levelStrip 21, 9, 7
+
+    +levelIncrementType
+
+    ; crumble floors
+    +levelStrip 2, 0, 1
+
+    +levelIncrementType
+
+    ; walls
+    +levelRect 2, 0, 1, 1
+
+    +levelIncrementType
+
+    ; conveyor
+    +levelStrip 12, 8, 7
+
+    +levelSetType 4
+
+    ; clear
+    +levelRect 4, 4, 2, 14
+    +levelRect 10, 4, 2, 14
+    +levelRect 19, 4, 2, 14
+    +levelRect 24, 4, 2, 14
+
+    +levelSetType 3                 ; back to conveyor [needed to terminate properly?]
+
+    ; ***********************************************************************************
+    ; level 10
+    !byte $ff, $ff, 32, 1, 50, 1, 52, 67, 0, 17, 16             ; header
+
+    ; floors
+    +levelStrip 0, 13, 3
+    +levelStrip 0, 10, 4
+    +levelStrip 0, 8, 5
+    +levelStrip 0, 6, 4
+    +levelStrip 0, 2, 6
+    +levelStrip 12, 0, 3
+    +levelStrip 7, 5, 1
+    +levelStrip 8, 9, 7
+    +levelStrip 16, 10, 7
+    +levelStrip 16, 7, 7
+    +levelStrip 16, 4, 4
+    +levelStrip 20, 0, 10
+    +levelStrip 26, 2, 4
+    +levelStrip 22, 5, 8
+    +levelStrip 28, 9, 2
+    +levelStrip 27, 13, 3
+
+    +levelIncrementType
+
+    ; crumble floors
+    +levelStrip 4, 10, 2
+    +levelStrip 8, 5, 7
+    +levelStrip 23, 7, 3
+    +levelStrip 23, 11, 3
+
+    +levelIncrementType
+
+    ; walls
+    +levelRect 15, 0, 1, 12
+
+    +levelIncrementType
+
+    ; conveyor
+    +levelStrip 0, 15, 30
+    +levelStrip 7, 12, 10
+
+    ; ***********************************************************************************
+    ; level 11
+    !byte $ff, $ff, 100, 7, 0, 0, 118, 128, 0, 5, 4             ; header
+
+    ; floors
+    +levelStrip 0, 3, 4
+    +levelStrip 4, 5, 6
+    +levelStrip 0, 8, 2
+    +levelStrip 0, 13, 2
+    +levelStrip 27, 12, 3
+    +levelStrip 22, 13, 3
+    +levelStrip 27, 10, 1
+    +levelStrip 28, 8, 2
+    +levelStrip 28, 6, 2
+    +levelStrip 10, 9, 9
+    +levelStrip 14, 5, 10
+    +levelStrip 8, 11, 1
+
+    +levelIncrementType
+
+    ; crumble floors
+    +levelStrip 5, 11, 3
+
+    +levelIncrementType
+
+    ; walls
+    +levelStrip 0, 0, 5
+
+    +levelIncrementType
+
+    ; conveyor
+    +levelStrip 4, 8, 2
+
+    ; ***********************************************************************************
+    ; level 12
+    !byte $ff, $ff, 80, 6, 0, 2, 3, 132, 0, 19, 16              ; header
+
+    ; floors
+    +levelStrip 10, 13, 3
+    +levelStrip 0, 12, 6
+    +levelStrip 5, 10, 1
+    +levelStrip 5, 7, 2
+    +levelStrip 2, 8, 1
+    +levelStrip 0, 5, 3
+    +levelStrip 9, 9, 4
+    +levelStrip 17, 10, 3
+    +levelStrip 24, 11, 2
+    +levelStrip 24, 8, 6
+    +levelStrip 29, 6, 1
+    +levelStrip 23, 5, 2
+
+    +levelIncrementType
+
+    ; crumble floors
+    +levelStrip 17, 5, 6
+    +levelStrip 8, 5, 5
+    +levelStrip 14, 2, 2
+
+    +levelIncrementType
+
+    ; walls
+    +levelStrip 16, 0, 1
+    +levelStrip 20, 0, 1
+    +levelRect 16, 5, 1, 15
+    +levelRect 13, 5, 1, 10
+    +levelRect 13, 13, 1, 15
+    +levelStrip 13, 15, 4
+
+    +levelIncrementType
+
+    ; conveyor
+    +levelStrip 17, 13, 11
+
+    ; ***********************************************************************************
+    ; level 13
+    !byte $ff, $ff, 32, 7, 80, 2, 5, 64, 0, 5, 16               ; header
+
+    ; floors
+    +levelStrip 0, 15, 30
+    +levelStrip 6, 3, 24
+    +levelStrip 6, 6, 24
+    +levelStrip 6, 12, 24
+    +levelStrip 6, 9, 24
+
+    +levelIncrementType
+
+    ; crumble floors
+    +levelRect 2, 1, 1, 15
+
+    +levelIncrementType
+
+    ; walls
+    +levelStrip 0, 0, 30
+
+    +levelIncrementType
+
+    ; conveyor
+    +levelStrip 2, 15, 26
+
+    +levelSetType 4
+
+    +levelStrip 8, 6, 2
+    +levelStrip 9, 12, 2
+    +levelStrip 21, 6, 2
+    +levelStrip 20, 12, 2
+    +levelStrip 14, 6, 2
+    +levelStrip 14, 12, 2
+    +levelStrip 16, 9, 2
+    +levelStrip 27, 6, 2
+    +levelStrip 26, 12, 2
+    +levelStrip 11, 9, 2
+    +levelStrip 24, 9, 2
+    +levelStrip 24, 3, 2
+
+    +levelSetType 4
+
+    ; ***********************************************************************************
+    ; level 14
+    !byte $ff, $ff, 36, 5, 96, 2, 39, 133, 0, 19, 3             ; header
+
+    ; floors
+    +levelStrip 0, 11, 0
+    +levelStrip 2, 6, 0
+    +levelStrip 4, 9, 0
+    +levelStrip 6, 13, 0
+    +levelStrip 6, 7, 0
+    +levelStrip 8, 11, 0
+    +levelStrip 12, 9, 0
+    +levelStrip 10, 6, 0
+    +levelStrip 14, 5, 0
+    +levelStrip 18, 6, 0
+    +levelStrip 22, 7, 0
+    +levelStrip 20, 9, 0
+    +levelStrip 26, 6, 0
+    +levelStrip 28, 9, 0
+    +levelStrip 24, 11, 0
+
+    +levelSetType 2
+
+    ; wall
+    +levelStrip 0, 15, 30
+
+    +levelIncrementType
+
+    ; conveyor
+    +levelStrip 14, 11, 6
+
+    ; ***********************************************************************************
+    ; level 15
+    !byte $ff, $ff, 32, 6, 0, 0, 120, 65, 0, 5, 6               ; header
+
+    ; floors
+    +levelStrip 0, 10, 2
+    +levelStrip 2, 8, 2
+    +levelStrip 0, 5, 5
+    +levelStrip 4, 12, 3
+    +levelStrip 11, 13, 2
+    +levelStrip 11, 10, 2
+    +levelStrip 11, 7, 2
+    +levelStrip 17, 11, 2
+    +levelStrip 17, 8, 2
+    +levelStrip 23, 6, 2
+    +levelStrip 24, 9, 2
+    +levelStrip 22, 12, 2
+    +levelStrip 23, 3, 5
+
+    +levelIncrementType
+
+    ; crumble floors
+    +levelStrip 6, 7, 1
+
+    +levelIncrementType
+
+    ; wall
+    +levelStrip 5, 0, 25
+
+    +levelIncrementType
+
+    ; conveyor
+    +levelStrip 7, 3, 16
+
+    +levelRect 28, 1, 2, 15
+    +levelStrip 7, 3, 16
+
+    ; ***********************************************************************************
+    ; level 16
+    !byte $ff, $ff, 16, 6, 0, 2, 9, 134, 0, 16, 8               ; header
+
+    ; floors
+    +levelStrip  0, 12, 9
+    +levelStrip 11, 11, 2
+    +levelStrip 0, 5, 1
+    +levelStrip 5, 5, 1
+    +levelStrip 3, 7, 1
+    +levelStrip 20, 13, 1
+    +levelStrip 26, 13, 1
+    +levelStrip 26, 11, 1
+    +levelStrip 25, 7, 5
+    +levelStrip 22, 5, 3
+
+    +levelIncrementType
+
+    ; crumble floors
+    +levelStrip 0, 9, 2
+
+    +levelIncrementType
+
+    ; wall
+    +levelStrip 9, 11, 2
+    +levelRect 10, 5, 1, 9
+    +levelStrip 13, 5, 1
+    +levelStrip 13, 6, 2
+    +levelStrip 13, 7, 3
+    +levelStrip 13, 8, 4
+
+    +levelIncrementType
+
+    ; conveyor
+    +levelStrip 2, 9, 25
+
+    ; ***********************************************************************************
+    ; level 17
+    !byte $ff, $ff, 32, 6, 3, 1, 80, 135, 0, 33, 4              ; header
+
+    ; floors
+    +levelStrip 26, 14, 4
+    +levelStrip 28, 5, 2
+    +levelStrip 0, 5, 2
+    +levelStrip 0, 15, 30
+
+    +levelIncrementType
+
+    ; crumble floors
+    +levelStrip 2, 5, 26
+    +levelRect 0, 6, 30, 13
+
+    +levelIncrementType
+
+    ; wall
+    +levelStrip 28, 0, 2
+
+    +levelIncrementType
+
+    ; conveyor
+    !byte 13, 8, 5
+
+    +levelSetType 4
+
+    ; empty
+    +levelRect 2, 8, 2, 13
+    +levelRect 9, 5, 2, 13
+    +levelRect 18, 5, 2, 10
+    +levelRect 26, 5, 2, 13
+
+    +levelSetType 4
+
+    ; ***********************************************************************************
+    ; level 18
+    !byte $ff, $ff, 16, 6, 0, 0, 64, 136, 0, 33, 3              ; header
+
+    ;  floors
+    +levelStrip 0, 15, 30
+    +levelStrip 0, 13, 2
+    +levelStrip 2, 12, 26
+    +levelStrip 2, 9, 7
+    +levelStrip 0, 7, 2
+    +levelStrip 2, 5, 28
+    +levelStrip 10, 8, 18
+    +levelStrip 28, 10, 2
+
+    +levelSetType 2
+
+    ; wall
+    +levelStrip 27, 0, 1
+
+    +levelSetType 4
+
+    ; empty
+    +levelRect 4, 5, 2, 13
+    +levelRect 9, 5, 2, 13
+    +levelRect 19, 5, 2, 13
+    +levelRect 24, 5, 2, 13
+
+    +levelSetType 4
+
+    ; ***********************************************************************************
+    ; level 19
+    !byte $ff, $ff, 36, 7, 0, 1, 0, 137, 0, 19, 7               ; header
+
+    ; floors
+    +levelStrip 0, 5, 2
+    +levelStrip 2, 8, 3
+    +levelStrip 8, 13, 14
+    +levelStrip 5, 6, 3
+    +levelStrip 7, 10, 4
+    +levelStrip 23, 11, 2
+    +levelStrip 22, 7, 2
+    +levelStrip 26, 5, 4
+    +levelStrip 27, 9, 3
+
+    +levelIncrementType
+
+    +levelSetType 2
+
+    ; wall
+    +levelRect 10, 3, 10, 11
+
+    +levelIncrementType
+
+    ; conveyor
+    +levelStrip 2, 12, 3
+
+    +levelIncrementType
+
+    ; empty
+    +levelRect 10, 4, 10, 6
+    +levelRect 10, 8, 10, 10
+
+    +levelSetType 3
+
+    ; ***********************************************************************************
+    ; level 20
+    !byte $ff, $ff, 32, 6, 0, 1, 0, 138, 1, 33, 4               ; header
+
+    ; floors
+    +levelStrip 7, 5, 7
+    +levelStrip 13, 3, 7
+    +levelStrip 0, 8, 2
+    +levelStrip 8, 7, 7
+    +levelStrip 27, 7, 3
+    +levelStrip 16, 7, 4
+    +levelStrip 19, 13, 1
+    +levelStrip 16, 12, 1
+    +levelStrip 22, 13, 1
+    +levelStrip 24, 9, 1
+
+    +levelIncrementType
+
+    ; crumble floors
+    +levelStrip 0, 9, 1
+    +levelStrip 20, 3, 3
+    +levelStrip 20, 10, 1
+    +levelStrip 23, 13, 2
+
+    +levelIncrementType
+
+    ; wall
+    +levelStrip 12, 0, 18
+    +levelStrip 23, 3, 5
+    +levelStrip 3, 7, 5
+    +levelStrip 0, 11, 2
+    +levelStrip 0, 12, 11
+    +levelStrip 13, 14, 3
+    +levelStrip 14, 13, 2
+    +levelStrip 15, 12, 1
+    +levelRect 15, 7, 1, 10
+    +levelStrip 10, 11, 1
+
+    +levelIncrementType
+
+    ; conveyor
+    +levelStrip 2, 11, 8
+    +levelRect 28, 3, 2, 7
+    +levelStrip 2, 11, 8
+
+    ; ***********************************************************************************
+    ; terminator
+    !byte $ff, $ff
+
+    ; ***********************************************************************************
+    !byte $ff                           ; [UNUSED]
+
+    ; ***********************************************************************************
+    !macro singleType .count, .spriteOffset {
+        !if (.count < 2) {
+            !error "Cannot encode less than two keys. If one key is needed, define the second key in the same position as the first"
+        }
+        !byte ((.count-2) * 64) + (.spriteOffset - 1)
+    }
+
+    !macro singlePos .x, .y {
+        !if (.x = 15) {
+            !if (.y = 15) {
+                !error "Cannot encode position at 15, 15 as that code is reserved"
+            }
+            !if (.y = 14) {
+                !error "Cannot encode position at 15, 14 as that code is reserved"
+            }
+            !if (.y = 13) {
+                !error "Cannot encode position at 15, 13 as that code is reserved"
+            }
+        }
+        !byte (.x * 16) + .y
+    }
+
+    !macro singleOffsetX15 {
+        !byte $fe
+    }
+
+    !macro singleNextType {
+        !byte $fd
+    }
+
+    !macro singleSpider .x, .y, .threadLength {
+        !byte (.x * 16) + .y
+        !byte .threadLength
+    }
+
+    ; $7170
+    ; ***********************************************************************************
+levelSingleItemDefinitions
+
+    ; ***********************************************************************************
+    ; level 1 - Central Cavern
+    !byte $ff
+
+    +singleType 5, 2        ; 5 keys, sprite offset 2
+    +singlePos 8, 0         ; key
+    +singlePos 15, 1        ; key
+    +singleOffsetX15
+    +singlePos 7, 4         ; key
+    +singlePos 12, 0        ; key
+    +singlePos 13, 6        ; key
+
+    +singlePos 11,12        ; thorn
+
+    +singleOffsetX15
+    +singlePos 4, 8         ; thorn
+    +singlePos 6, 4         ; thorn
+    +singlePos 10, 4        ; thorn
+
+    +singleNextType
+    +singlePos 10, 0        ; spike
+    +singlePos 15, 0        ; spike
+
+    ; ***********************************************************************************
+    ; level 2 - The Cold Room
+    !byte $ff
+
+    +singleType 5, 2        ; 5 keys, sprite offset 2
+    +singlePos 2, 9         ; key
+    +singlePos 6, 1         ; key
+    +singleOffsetX15
+    +singlePos 7, 1         ; key
+    +singlePos 9, 7         ; key
+    +singlePos 2, 12        ; key
+
+    +singleNextType
+    +singleOffsetX15
+    +singlePos 13, 1        ; spike
+
+    ; ***********************************************************************************
+    ; level 3 - The Menagerie
+    !byte $ff
+
+    +singleType 5, 3        ; 5 keys, sprite offset 3
+    +singlePos 5, 0         ; key
+    +singlePos 14, 0        ; key
+
+    +singleOffsetX15
+    +singlePos 6, 0         ; key
+    +singlePos 13, 6        ; key
+    +singlePos 4, 6         ; key
+
+    +singleNextType
+    +singleSpider 0, 8, 3   ; spider
+    +singleSpider 9, 0, 0   ; spider
+
+    +singleOffsetX15
+    +singleSpider 1, 0, 1   ; spider
+    +singleSpider 10, 0, 0  ; spider
+
+    ; ***********************************************************************************
+    ; level 4 - Abandoned Uranium Workings
+    !byte $ff
+
+    +singleType 5, 3        ; 5 keys, sprite offset 3
+    +singlePos 0, 0         ; key
+    +singlePos 11, 1        ; key
+    +singlePos 15, 6        ; key
+
+    +singleOffsetX15
+    +singlePos 8, 1         ; key
+    +singlePos 13, 6        ; key
+
+    +singleNextType
+    +singleSpider 6, 0, 0   ; spider
+    +singleOffsetX15
+    +singleSpider 6, 12, 0  ; spider
+
+    ; ***********************************************************************************
+    ; level 5 - Eugene's Lair
+    !byte $ff
+
+    +singleType 5, 1        ; 5 keys, sprite offset 1
+    +singlePos 6, 12        ; key
+    +singlePos 8, 12        ; key
+    +singlePos 9, 6         ; key
+    +singleOffsetX15
+    +singlePos 13, 1        ; key
+    +singlePos 12, 7        ; key
+
+    +singlePos 4, 14        ; spike
+    +singleOffsetX15
+    +singlePos 7, 14        ; spike
+    +singlePos 8, 14        ; spike
+    +singlePos 4, 7         ; spike
+    +singlePos 7, 4         ; spike
+
+    +singleNextType
+    +singleOffsetX15
+    +singlePos 3, 0         ; alt spike
+
+    ; ***********************************************************************************
+    ; level 6 - Processing Plant
+    !byte $ff
+
+    +singleType 5, 5        ; 5 keys, sprite offset 5
+    +singlePos 0, 10        ; key
+    +singlePos 12, 11       ; key
+    +singlePos 14, 6        ; key
+    +singleOffsetX15
+    +singlePos 0, 6         ; key
+    +singlePos 13, 7        ; key
+
+    +singlePos 2, 12        ; thorn
+
+    +singleNextType
+    +singleOffsetX15
+    +singlePos 0, 11        ; cross spike
+    +singlePos 4, 4         ; cross spike
+
+    ; ***********************************************************************************
+    ; level 7 - The Vat
+    !byte $ff
+
+    +singleType 5, 6        ; 5 keys, sprite offset 6
+    +singleOffsetX15
+    +singlePos 2, 10        ; key
+    +singlePos 3, 6         ; key
+    +singlePos 10, 7        ; key
+    +singlePos 13, 3        ; key
+    +singlePos 13, 11       ; key
+
+    +singleNextType
+    +singleOffsetX15
+    +singlePos 6, 12        ; spider (no thread)
+    +singlePos 6, 8         ; spider (no thread)
+    +singlePos 11, 10       ; spider (no thread)
+    +singlePos 11, 5        ; spider (no thread)
+
+    ; ***********************************************************************************
+    ; level 8 - Miner Willy meets the Kong Beast
+    !byte $ff
+
+    +singleType 4, 1        ; 4 keys, sprite offset 1
+    +singlePos 1, 8         ; key
+    +singlePos 13, 6        ; key
+    +singlePos 11, 2        ; key
+    +singleOffsetX15
+    +singlePos 12, 13       ; key
+
+    +singleOffsetX15
+    +singlePos 6, 14        ; thorn
+
+    ; ***********************************************************************************
+    ; level 9 - Wacky Amoebatrons
+    !byte $ff
+
+    +singleType 2, 1        ; 2 keys [we only want one, but need at least two keys defined]
+    +singlePos 15, 1        ; key
+    +singlePos 15, 1        ; key [this key just overwrites the first]
+
+    +singleOffsetX15        ; [redundant]
+
+    ; ***********************************************************************************
+    ; level 10 - The Endorian Forest
+    !byte $ff
+
+    +singleType 5, 7        ; 5 keys, sprite offset 7
+    +singlePos 13, 1        ; key
+    +singlePos 11, 6        ; key
+    +singleOffsetX15
+    +singlePos 1, 8         ; key
+    +singlePos 4, 2         ; key
+    +singlePos 13, 1        ; key
+
+    +singleNextType
+    +singlePos 2, 3         ; flower spike
+    +singlePos 0, 9         ; flower spike
+    +singlePos 9, 0         ; flower spike
+    +singleOffsetX15
+    +singlePos 1, 0         ; flower spike
+    +singlePos 3, 0         ; flower spike
+    +singlePos 4, 1         ; flower spike
+    +singlePos 6, 11        ; flower spike
+    +singlePos 13, 10       ; flower spike
+
+    ; ***********************************************************************************
+    ; level 11 - Attack of the Mutant Telephones
+    !byte $ff
+    +singleType 5, 3        ; 5 keys, sprite offset 3
+    +singlePos 0, 4         ; key
+    +singleOffsetX15
+    +singlePos 2, 6         ; key
+    +singlePos 7, 0         ; key
+    +singlePos 13, 1        ; key
+    +singlePos 13, 13       ; key
+
+    +singleNextType
+    +singleSpider 11, 10, 2 ; spider, thread length 2
+    +singleOffsetX15
+    +singleSpider 2, 0, 1   ; spider, thread length 1
+    +singleSpider 2, 10, 1  ; spider, thread length 1
+    +singleSpider 7, 6, 3   ; spider, thread length 3
+
+    ; ***********************************************************************************
+    ; level 12 - Return of the Alien Kong Beast
+    !byte $ff
+
+    +singleType 5, 1        ; 5 keys, sprite offset 1
+    +singlePos 1, 6         ; key
+    +singlePos 14, 3        ; key
+    +singlePos 15, 7        ; key
+
+    +singleOffsetX15
+    +singlePos 9, 5         ; key
+    +singlePos 12, 13       ; key
+
+    +singleOffsetX15
+    +singlePos 6, 12        ; thorn
+    +singlePos 11, 12       ; thorn
+
+    ; ***********************************************************************************
+    ; level 13 - Ore Refinery
+    !byte $ff
+
+    +singleType 5, 1        ; 5 keys, sprite offset 1
+    +singlePos 10, 12       ; keys
+    +singlePos 9, 6         ; keys
+    +singleOffsetX15
+    +singlePos 9, 3         ; keys
+    +singlePos 9, 9         ; keys
+    +singlePos 2, 9         ; keys
+    +singleOffsetX15
+
+    ; ***********************************************************************************
+    ; level 14 - Skylab Landing Bay
+    !byte $ff
+    +singleType 4, 1        ; 4 keys, sprite offset 1
+
+    +singlePos 2, 8         ; key
+    +singlePos 15, 7        ; key
+    +singleOffsetX15        ;
+    +singlePos 6, 2         ; key
+    +singlePos 10, 7        ; key
+    +singleOffsetX15        ;
+
+    ; ***********************************************************************************
+    ; level 15 - The Bank
+    !byte $ff
+    +singleType 3, 3        ; 3 keys, sprite offset 3
+
+    +singlePos 11, 6        ; key
+    +singleOffsetX15        ;
+    +singlePos 8, 2         ; key
+    +singlePos 9, 14        ; key
+
+    +singleNextType         ;
+    +singleSpider 7, 4, 1   ; spider, length 1
+    +singleOffsetX15        ;
+    +singleSpider 11, 4, 6  ; spider, length 6
+
+    ; ***********************************************************************************
+    ; level 16 - The Sixteenth Cavern
+    !byte $ff
+    +singleType 4, 8        ; 4 keys, sprite offset 8
+
+    +singlePos 0, 0         ; key
+    +singlePos 12, 7        ; key
+    +singleOffsetX15
+    +singlePos 0, 10        ; key
+    +singlePos 13, 2        ; key
+
+    +singleNextType
+    +singleOffsetX15        ;
+    +singlePos 6, 14        ; floor spike
+    +singlePos 7, 14        ; floor spike
+    +singlePos 8, 14        ; floor spike
+
+    ; ***********************************************************************************
+    ; level 17 - The Warehouse
+    !byte $ff
+    +singleType 5, 9        ; 5 keys, sprite offset 9
+
+    +singlePos 0, 9         ; key
+    +singlePos 14, 7        ; key
+    +singleOffsetX15
+    +singlePos 2, 10        ; key
+    +singlePos 7, 5         ; key
+    +singlePos 9, 11        ; key
+
+    +singlePos 5, 4         ; thorn
+    +singlePos 8, 4         ; thorn
+    +singlePos 12, 4        ; thorn
+    +singlePos 15, 4        ; thorn
+    +singleOffsetX15
+    +singlePos 5, 4         ; thorn
+    +singlePos 7, 4         ; thorn
+
+    +singleNextType
+    +singlePos 2, 6         ; X spike
+    +singlePos 8, 11        ; X spike
+    +singleOffsetX15
+    +singlePos 5, 10        ; X spike
+    +singlePos 9, 7         ; X spike
+
+    ; ***********************************************************************************
+    ; level 18 Amoebatrons' Revenge
+    !byte $ff
+    +singleType 2, 1        ; 2 keys [only one wanted really, but we must have at least two encoded]
+    +singlePos 14, 1        ; key
+    +singlePos 14, 1        ; key [overwrites the first key]
+    +singleOffsetX15        ;
+
+    ; ***********************************************************************************
+    ; level 19 - The Meteor Storm
+    !byte $ff
+    +singleType 5, 2        ; 5 keys, sprite offset 2
+    +singlePos 0, 2         ; key
+    +singlePos 12, 8        ; key
+    +singleOffsetX15
+    +singlePos 13, 1        ; key
+    +singlePos 13, 12       ; key
+    +singlePos 1, 8         ; key
+    +singleOffsetX15        ;
+
+    ; ***********************************************************************************
+    ; level 20
+    !byte $ff
+    +singleType 5, 3        ; 5 keys, sprite offset 3
+    +singlePos 8, 8         ; key
+    +singleOffsetX15
+    +singlePos 0, 13        ; key
+    +singlePos 2, 8         ; key
 pokeSingleItem
-    !byte $61, $db, $66, $fe, $06, $2e, $4e, $fd, $40, $02
-    !byte $fe, $b8, $03, $ff, $f0, $07, $c9, $ff, $f0, $09, $00, $00, $00, $00, $00, $00
+    +singlePos 6, 1         ; key
+    +singlePos 13, 11       ; key
+
+    +singlePos 6, 6         ; thorn
+    +singleOffsetX15
+    +singlePos 0, 6         ; thorn
+    +singlePos 2, 14        ; thorn
+    +singlePos 4, 14        ; thorn
+
+    +singleNextType
+    +singleSpider 4, 0, 2   ; spider, length 2
+    +singleOffsetX15        ;
+    +singleSpider 11, 8, 3  ; spider, length 3
+    !byte $ff               ; terminator
+
+    ; ***********************************************************************************
+    ; [UNUSED]
+    !byte $f0, $07, $c9
+    !byte $ff, $f0, $09, $00, $00, $00, $00, $00, $00
 
     ; $7280
 guardianGraphics
