@@ -1,6 +1,7 @@
 # Manic Miner (BBC)
 
 This is a disassembly/reassembly of Manic Miner for the BBC Micro.
+I thought I would write up some thoughts on it while I'm here.
 
     constants.a
     MINER1.a
@@ -8,7 +9,7 @@ This is a disassembly/reassembly of Manic Miner for the BBC Micro.
     MINER3.a
     MINER4.a
 
-I thought I would write up some thoughts on it while I'm here.
+This code assembles (using the ACME assembler) to create a byte for byte identical copy of the original game.
 
 I should mention that this is the version from http://bbcmicro.co.uk/game.php?id=188 so it differs slightly from the original in that it has instructions before the game loads, and the copy protection has been circumvented.
 
