@@ -51,6 +51,12 @@ The player in particular is flickery when moving. While the player is not shown,
 ## Collision detection
 Sadly there is only box collision here, not pixel perfect collision. The boxes around the guardians are adjusted to give a little leeway.
 
+## Music
+Music is basic (similar to the Spectrum) and a note can be missed when overridden by playing a sound effect.
+
+## Compatibility
+Doesn't work on the either the Master or Electron.
+
 ## Other variations from the Spectrum version
 * The BBC version does not occupy the full screen.
 
@@ -71,10 +77,10 @@ Type 'A SECRET' on the pause screen. After resuming play, the fn keys teleport y
 
 # Level format
 
-All bytes relating to the level data are EOR'd with $55.
+All bytes relating to the level data are EOR'd with $55 in the binary files on disk.
 
 ## Strips
-The strips of level data are stored at 'levelDefinitions' (memory address $6c00, or offset $1680 into MINER4 binary file).
+Levels are constructed from horizontal strips and rectangles, stored at 'levelDefinitions' (memory address $6c00, or offset $1680 into MINER4 binary file).
 
 The separator between each level is $ff, $ff which occurs before and after every level.
 This is followed by header information:
@@ -92,7 +98,7 @@ This is followed by header information:
            01 = }
            11 = } 16x16 exit sprite (lower 6 bits are the sprite number)
 
-    Then the level data starts:
+    Then the level data itself starts, consisting of a sequence of commands:
 
     command         description
         $ff         Increments the levelFeatureIndex. Once it reaches 5, the level is done.
@@ -103,15 +109,19 @@ This is followed by header information:
                         <x_min> <y_min> <width>
 
 ## Single Items
-Individual items are stored at 'levelSingleItemDefinitions' (memory address $7170, or offset $1bf0 into MINER4 binary file)
+Items that typically occupy a single cell are stored at 'levelSingleItemDefinitions' (memory address $7170, or offset $1bf0 into MINER4 binary file)
 
 The separator between each level is $ff which occurs before and after every level.
+
+A single byte header holds the 'number of keys - 2' in the top two bits, and the sprite increment amount in the remaining lower bits.
+
+Then there is a sequence of commands:
 
     command         description
         $ff         end of level
         $fe         all X coordinates have 15 added to them from now on until the next change of type
-        $fd         increment type
-        else        top nybble is X coordinate, bottom nybble is Y coordinate. Plot.
+        $fd         increment current type by the sprite increment amount
+        else        top nybble is X coordinate, bottom nybble is Y coordinate. Plot the item.
 
 At plot time, the current type determines the outcome:
 
@@ -187,9 +197,3 @@ The X pixel coordinate of the start position is stored in the array 'playerStart
 
 ## Limitations (Hardcoded features)
 Many of the level specific features are not data driven, and are hard-coded. Eugene's and Kong's plummets into the exit for example. Level 14's Skylab plummeting to earth. Level 19's Meteors. The energy fields on levels 19 and 20. Level 10 having no conveyor. Level 16 not having any vertical guardians. Switches are at fixed positions on level 8 and 12 only (also the two nearby spikes are hardcoded). A byte in the level 20 data is poked at initialisation time 'pokeSingleItem'. Level 6's exit must remain in the same position, since the code to exit the level is hardcoded to this position. Palette colours are not flexible.
-
-
-# Issues
-* Collision detection is poor, not pixel based
-* Music is basic (similar to the Spectrum) and a note can be missed when overridden by playing a sound effect
-* Doesn't work on the either the Master or Electron
