@@ -64,7 +64,8 @@ guardianPositionsCopy
 ;
 ;       X = x pixel coordinate
 ;       Y = y pixel coordinate
-
+;
+; ***************************************************************************************
 plot
     sta plotMode                        ;
     stx plotX                           ;
@@ -3211,7 +3212,7 @@ updateGuardian
     tay                         ;
 verticalGuardiansPlotType = * + 1
     lda #5                      ;
-    jsr plot                    ; plot vertical guardian (mode 5)
+    jsr plot                    ; draw vertical guardian (mode 5)
     lda currentGuardianX        ; }
     and #$80                    ; } check current direction
     cmp #$80                    ; }

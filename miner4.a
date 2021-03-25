@@ -2503,7 +2503,7 @@ death
     jsr playSoundAXY                ; }
 
     ldx #$fd                        ;
-    txs                             ; fix the stack pointer!
+    txs                             ; fix the stack pointer!!
 
     lda lives                       ;
     cmp #0                          ; [redundant]
