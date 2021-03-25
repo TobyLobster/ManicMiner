@@ -1,6 +1,13 @@
 # Manic Miner (BBC)
 
 This is a disassembly/reassembly of Manic Miner for the BBC Micro.
+
+    constants.a
+    MINER1.a
+    MINER2.a
+    MINER3.a
+    MINER4.a
+
 I thought I would write up some thoughts on it while I'm here.
 
 I should mention that this is the version from http://bbcmicro.co.uk/game.php?id=188 so it differs slightly from the original in that it has instructions before the game loads, and the copy protection has been circumvented.
@@ -10,7 +17,7 @@ I should mention that this is the version from http://bbcmicro.co.uk/game.php?id
 The original asks for a four digit code from a random grid location found on a physical sheet of paper that was supplied with the game. The paper has groups of four colours laid out in a grid, each colour corresponding to a number 1-4 that must be entered correctly to continue. This system has previously been circumvented, but the original code to handle this is still present.
 
 # Loading
-After the instructions, there three more title screens!
+After the instructions, there are three more title screens!
 
 The first shows the large dancing letters of MANIC MINER and a scrolling message. The cassette version of the game animated this screen while loading, which I think was fairly uncommon.
 
@@ -28,7 +35,7 @@ A single byte of the level data is changed (a key position on level 20) during i
 # Implementation issues
 
 ## Slow
-The games runs slowly compared to the Spectrum original. This is partly down to the method of plotting. Horizontal guardians are drawn using OSWRCH to write user defined characters to the screen. The keys are animated using the same method. The second major reason for being slow is that there is no collision map. When the game needs to know what is on the screen (e.g. the squares surrounding the player) it reads the character from the screen using OSBYTE 135. The OS has to read the 8x8 pixels off the screen and then compare them against each character 32-255 in the current character set in turn until if finds a match. None of this is efficient!
+The games runs slowly compared to the Spectrum original. This is partly down to the method of plotting. Horizontal guardians are drawn using OSWRCH to write user defined characters to the screen. The keys are animated using the same method. The second major reason for being slow is that there is no collision map. When the game needs to know what is on the screen (e.g. the squares surrounding the player) it reads the character from the screen using OSBYTE 135. The OS has to read the 8x8 pixels from the screen and then compare them against each character 32-255 in the current character set in turn until if finds a match. None of this is efficient!
 
 A further example: each key is animated (one at a time round robin style) by moving the text cursor to the X,Y position of a key (3 calls to OSWRCH), reading the character from the screen (OSBYTE 135) and if it's still a key (not taken) then plot the key in a new colour (three more calls to OSWRCH).
 
@@ -39,17 +46,17 @@ In several places in the code (including the plot routine), multiplication is re
 There is also an explicit short delay loop in the main loop, but this is a negligible factor in the speed. This was probably used more in early development when (with fewer features implemented) the speed would otherwise be too fast.
 
 ## Flicker
-The player in particular is flickery when moving. The game copies bytes at the player position on screen to a cache (in a non-visible area of the screen) while the player is not shown. This cache is used for collision detection and is later copied back to the visible screen to erase the player.
+The player in particular is flickery when moving. While the player is not shown, the game copies bytes at the player position on screen to a cache (in a non-visible area of the screen). This cache just has the background graphics around the player and is used for collision detection. It is later copied back to the visible screen to erase the player.
 
 ## Collision detection
-There is only box collision here, not pixel perfect collision. The boxes around the guardians are adjusted to give a little leeway.
+Sadly there is only box collision here, not pixel perfect collision. The boxes around the guardians are adjusted to give a little leeway.
 
-# Variations from the Spectrum version
-* The BBC version does not occupy the full screen
+## Other variations from the Spectrum version
+* The BBC version does not occupy the full screen.
 
-* Only four colours are available in this MODE 1 style screen, instead of the Spectrum's 16.
+* Only four colours are available in this MODE 1 screen, instead of the Spectrum's 15.
 
-* The BBC cannot control the 'border colour' as the Spectrum can
+* The BBC cannot control the 'border colour' as the Spectrum does.
 
 * The title screen is rudimentary on the BBC. The Spectrum version has a visual scene, a piano keyboard and The Blue Danube playing.
 
