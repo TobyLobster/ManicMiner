@@ -75,6 +75,8 @@ Doesn't work on the either the Master or Electron.
 
 * The final two levels are different. The Spectrum's "Solar Power Generator" has been replaced with a new design "The Meteor Storm", and the final level is a different design too (but still called "The Final Barrier"). They both include a new feature that I am calling 'energy fields', barriers that turn on / off at regular intervals and are deadly when on.
 
+* A few vertical guardians move at four pixels per frame on the Spectrum, but not on the BBC version: One of the Skylabs, a guardian in The Warehouse, and a guardian in Amoebatrons' Revenge.
+
 # The level teleport cheat
 Type 'A SECRET' on the pause screen. After resuming play, the fn keys teleport you to the different levels, and SHIFT+fn keys go to later levels. The code is a little hidden since it doesn't use one of the regular methods of reading keys. It doesn't call the OS, nor does it read the keyboard directly. Instead it reads memory location $ec, which the OS uses to hold the code of the key currently pressed. I wonder if this was deliberate obfuscation.
 
