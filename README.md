@@ -36,13 +36,15 @@ A single byte of the level data is changed (the position of a key on level 20) d
 # Implementation issues
 
 ## Slow
-The games runs slowly compared to the Spectrum original. This is partly down to the method of plotting. Horizontal guardians are drawn using OSWRCH to write user defined characters to the screen. The keys are animated using the same method. The second major reason for being slow is that there is no collision map. When the game needs to know what is on the screen (e.g. the squares surrounding the player) it reads the character from the screen using OSBYTE 135. The OS has to read the 8x8 pixels from the screen and then compare them against each character 32-255 in the current character set in turn until if finds a match. None of this is efficient!
+The games runs slowly compared to the Spectrum original. This is partly down to the method of plotting. Horizontal guardians are drawn using OSWRCH to write user defined characters to the screen. The conveyors and keys are animated using the same method.
+
+The second major reason for being slow is that there is no collision map. When the game needs to know what is on the screen (e.g. the squares surrounding the player) it reads the character from the screen using OSBYTE 135. The OS has to read the 8x8 pixels from the screen and then compare them against each character 32-255 in the current character set in turn until if finds a match. None of this is efficient!
 
 A further example: each key is animated (one at a time round robin style) by moving the text cursor to the X,Y position of a key (3 calls to OSWRCH), reading the character from the screen (OSBYTE 135) and if it's still a key (not taken) then plot the key in a new colour (three more calls to OSWRCH).
 
 The player and vertical guardians are drawing using a custom plot routine (which is also not greatly efficient).
 
-In several places in the code (including the plot routine), multiplication is required but this is often implemented with a loop of repeated addition. This is sub-optimal.
+In several places in the code (including the plot routine), multiplication is required but this is implemented with a loop of repeated addition. This is sub-optimal.
 
 There is also an explicit short delay loop in the main loop, but this is a negligible factor in the speed. This was probably used more in early development when (with fewer features implemented) the speed would otherwise be too fast.
 
