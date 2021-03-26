@@ -20,7 +20,7 @@ The original asks for a four digit code from a random grid location found on a p
 # Loading
 After the instructions, there are three more title screens!
 
-The first shows the large dancing letters of MANIC MINER and a scrolling message. The cassette version of the game animated this screen while loading, which I think was fairly uncommon.
+The first shows the large dancing letters of MANIC MINER and a scrolling message. The cassette version of the game animates this screen while loading, which I think is fairly unusual.
 
 The second was used for the entry code, but here is displayed for a brief time before the third title screen with a 'Penrose triangle' (the triangular 3d optical illusion) drawn via OSWRCH PLOT commands. At this point the game is fully loaded, and RETURN starts a new game.
 
@@ -31,7 +31,7 @@ Code and data are split between files MINER1 through MINER4, and moved around in
 
 A couple of short routines are stashed in zero page, perhaps to make them harder to find, to hinder cheating. The first is the code that triggers a switch, and the second is the code that resets your score at the end of the game.
 
-A single byte of the level data is changed (a key position on level 20) during initialisation. Perhaps to make it harder to make a completely perfect copy of the game, or perhaps it's just a last minute 'fix'. It doesn't make a significant difference to the difficulty of the last level.
+A single byte of the level data is changed (the position of a key on level 20) during initialisation. Perhaps to make it harder to make a completely perfect copy of the game, or perhaps it's just a last minute 'fix'. It doesn't make a significant difference to the difficulty of the last level.
 
 # Implementation issues
 
