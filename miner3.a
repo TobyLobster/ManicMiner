@@ -432,7 +432,7 @@ gcol
 
 getNextByte
     inx                             ;
-    lda $0790,x                     ;
+    lda penroseTriangle,x           ;
     rts                             ;
 
 swapPages700andC00

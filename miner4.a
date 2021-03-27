@@ -563,8 +563,9 @@ titleStart
     !byte $3c, $42, $99, $a1, $a1, $99, $42, $3c, $00, $00, $00, $00, $00, $00, $00, $00
 titleEnd
 
+!pseudopc $0790 {
     ; A Penrose triangle as encoded PLOT statements
-trianglesLogo
+penroseTriangle
     !byte $fe, $01                      ; GCOL 0,1
     !byte $04, $19, $a0                 ; MOVE  25, 160
     !byte $05, $7d, $75                 ; DRAW 125, 117 [could be a MOVE]
@@ -601,6 +602,7 @@ trianglesLogo
     !byte $05, $70, $87                 ; DRAW 112, 135
     !byte $05, $19, $ad                 ; DRAW  25, 173
     !byte $ff                           ; TERMINATOR
+}
 
     lda #$ff                            ; [UNUSED]
     sta willyIsOnGround                 ; [UNUSED]
@@ -982,9 +984,9 @@ readRoomNameCharacter
     rts                             ;
 
 drawRoomName
-    lda #<numbers                   ;
+    lda #<levelTitles               ;
     sta readRoomNameCharacter + 1   ;
-    lda #>numbers                   ;
+    lda #>levelTitles               ;
     sta readRoomNameCharacter + 2   ;
     lda #0                          ;
     sta roomNumberReached           ;

@@ -122,7 +122,7 @@ conveyorX                       = $25a4     ;
 showScoreLivesAndLevel          = $25c8     ;
 exitPositionX                   = $25fe     ;
 exitPositionY                   = $25ff     ;
-numbers                         = $2680     ;
+levelTitles                     = $2680     ;
 clearScreen                     = $2821     ;
 
 initLevel                       = $28b8     ;
@@ -159,6 +159,8 @@ miner3EntryPoint                = $3190     ; See MINER3.a
 screenStartAddress              = $3280     ; start of visible screen
 blankAreaOfScreen               = $34d0     ; empty screen area to the right of the play area
 screenEndAddress                = $6000     ; end of visible screen
+
+penroseTriangle                 = $0790
 
 startGame                       = $6200     ;
 showLevel                       = $62c3     ;
